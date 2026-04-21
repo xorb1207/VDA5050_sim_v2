@@ -1109,6 +1109,36 @@ def test_type_d_section_capacity_higher_than_c():
     assert_eq("Type D section capacity", agv_d._critical_section_capacity(edge_d), 2)
 
 
+def test_motion_model_acceleration():
+    print("\n[T42] Motion model acceleration")
+    from src.domain.agv.motion import MotionModel
+
+    motion = MotionModel(max_speed_mps=1.5, acceleration_mps2=0.5, deceleration_mps2=0.8)
+    moved_1, arrived_1 = motion.update(1.0, 10.0, 0.0)
+    moved_2, arrived_2 = motion.update(1.0, 10.0, 0.0)
+
+    assert_true("첫 틱 즉시 최고속 아님", 0.0 < motion.state.speed < 1.5)
+    assert_true("가속 중 이동거리 양수", moved_1 > 0.0)
+    assert_true("두 번째 이동거리 증가", moved_2 > moved_1)
+    assert_eq("아직 도착 전", arrived_1 or arrived_2, False)
+
+
+def test_restart_delay_accounting():
+    print("\n[T43] Restart delay accounting")
+
+    graph = make_graph()
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv._restart_delay_remaining = 1.0
+    agv._motion.state.speed = 1.0
+
+    consumed = agv._tick_restart_delay(0.4)
+
+    assert_eq("restart delay consumed", consumed, True)
+    assert_eq("restart delay remaining", round(agv._restart_delay_remaining, 2), 0.6)
+    assert_eq("restart delay KPI time", round(agv._restart_delay_time_s, 2), 0.4)
+    assert_eq("restart sets speed zero", agv._motion.state.speed, 0.0)
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -1157,6 +1187,8 @@ if __name__ == "__main__":
         test_critical_section_key_generation,
         test_critical_section_capacity_allows_overlap_until_limit,
         test_type_d_section_capacity_higher_than_c,
+        test_motion_model_acceleration,
+        test_restart_delay_accounting,
     ]
     passed = failed = 0
     for t in tests:

@@ -19,8 +19,15 @@ class MotionModel:
     나중에 곡선 주행, 가감속 모델로 교체 가능.
     """
 
-    def __init__(self, max_speed_mps: float = 1.5) -> None:
+    def __init__(
+        self,
+        max_speed_mps: float = 1.5,
+        acceleration_mps2: float = 0.6,
+        deceleration_mps2: float = 0.8,
+    ) -> None:
         self.max_speed = max_speed_mps
+        self.acceleration = acceleration_mps2
+        self.deceleration = deceleration_mps2
         self.state = MotionState()
 
     def update(
@@ -41,11 +48,24 @@ class MotionModel:
             self.state.speed = 0.0
             return 0.0, True
 
-        move = min(self.max_speed * dt, dist)
+        target_speed = self._target_speed_for_distance(dist)
+        if self.state.speed < target_speed:
+            next_speed = min(
+                target_speed,
+                self.state.speed + self.acceleration * dt,
+            )
+        else:
+            next_speed = max(
+                target_speed,
+                self.state.speed - self.deceleration * dt,
+            )
+
+        avg_speed = (self.state.speed + next_speed) / 2.0
+        move = min(avg_speed * dt, dist)
         self.state.x += dx / dist * move
         self.state.y += dy / dist * move
         self.state.heading = math.atan2(dy, dx)
-        self.state.speed = move / dt if dt > 0 else 0.0
+        self.state.speed = next_speed if dt > 0 else 0.0
 
         arrived = dist <= move + 1e-6
         if arrived:
@@ -54,6 +74,10 @@ class MotionModel:
             self.state.speed = 0.0
 
         return move, arrived
+
+    def _target_speed_for_distance(self, distance_m: float) -> float:
+        braking_speed = math.sqrt(max(0.0, 2.0 * self.deceleration * distance_m))
+        return min(self.max_speed, braking_speed)
 
     def snap_to(self, x: float, y: float) -> None:
         """노드 좌표에 정확히 스냅."""

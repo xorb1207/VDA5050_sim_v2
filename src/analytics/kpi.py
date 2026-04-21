@@ -42,6 +42,7 @@ class KPICalculator:
 
         total_wait   = sum(a._wait_time_s for a in agvs.values())
         avg_wait     = round(total_wait / n_agv, 2)
+        total_restart_delay = sum(a._restart_delay_time_s for a in agvs.values())
 
         # ── 3. Traffic Efficiency ──────────────────────────────────
         total_attempts = scheduler._reserve_success + scheduler._reserve_failure
@@ -119,6 +120,7 @@ class KPICalculator:
             "avg_task_completion_time_s":  avg_task_completion,
             "avg_wait_time_s":             avg_wait,
             "total_wait_time_s":           round(total_wait, 2),
+            "total_restart_delay_s":       round(total_restart_delay, 2),
 
             # 3. Traffic Efficiency
             "reservation_failure_rate":    reservation_failure_rate,

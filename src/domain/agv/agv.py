@@ -33,6 +33,7 @@ PROTECTIVE_ZONE_M = 0.2
 WARNING_ZONE_M = 0.5
 BASE_FOLLOWING_DISTANCE_M = ROBOT_LENGTH_M + PROTECTIVE_ZONE_M + WARNING_ZONE_M
 MIN_FOLLOW_ON_HEADWAY_S = 0.5
+RESTART_DELAY_S = 1.0
 
 # ── Conflict Resolution 파라미터 ──────────────────────────────
 EDGE_RETRY_INTERVAL_S  = 0.1   # 1~3회 기본 재시도 간격
@@ -92,6 +93,8 @@ class AGV:
         self._pending_edge_dst:  Optional[str] = None
         self._pre_reserved_edges: set[tuple[str, str]] = set()
         self._pre_reserved_edge_starts: dict[tuple[str, str], float] = {}
+        self._restart_delay_remaining: float = 0.0
+        self._restart_delay_time_s: float = 0.0
 
         # 통계
         self._wait_time_s:       float = 0.0
@@ -160,8 +163,15 @@ class AGV:
             await self._tick_navigating(dt, sim_time)
 
         elif s == AGVState.WAITING_RESERVATION:
+            if self._tick_restart_delay(dt):
+                await self._publish_state()
+                return
             self._wait_time_s      += dt
             self._edge_wait_elapsed += dt
+            self._motion.state.speed = max(
+                0.0,
+                self._motion.state.speed - self._motion.deceleration * dt,
+            )
 
             # 타임아웃 먼저 체크 — reroute 후 retry 실행 방지
             if self._wait_time_s >= WAIT_TIMEOUT_S:
@@ -187,6 +197,7 @@ class AGV:
                     await self._publish_demand_completed(sim_time)
                     self._clear_demand_context()
                 self._processing_node_id = None
+                self._restart_delay_remaining = RESTART_DELAY_S
                 self._fsm.force(AGVState.IDLE)
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
 
@@ -298,6 +309,9 @@ class AGV:
         self._pending_edge_src  = self.current_node_id
         self._pending_edge_dst  = next_id
         self._edge_wait_elapsed = 0.0
+        if self._restart_delay_remaining > 0.0:
+            self._fsm.force(AGVState.WAITING_RESERVATION)
+            return
         await self._try_reserve_edge_and_move(sim_time)
 
     async def _try_reserve_edge_and_move(self, sim_time: float) -> None:
@@ -333,6 +347,9 @@ class AGV:
             )
 
         if ok:
+            if self._restart_delay_remaining > 0.0:
+                self._fsm.force(AGVState.WAITING_RESERVATION)
+                return
             self._pending_edge_src  = None
             self._pending_edge_dst  = None
             self._sched.clear_waiting(self.agv_id)
@@ -366,6 +383,16 @@ class AGV:
                 return  # ← 같은 틱에서 WAITING 재진입 방지
             else:
                 self._fsm.force(AGVState.WAITING_RESERVATION)
+
+    def _tick_restart_delay(self, dt: float) -> bool:
+        if self._restart_delay_remaining <= 0.0:
+            return False
+        elapsed = min(dt, self._restart_delay_remaining)
+        self._restart_delay_remaining -= elapsed
+        self._restart_delay_time_s += elapsed
+        self._wait_time_s += elapsed
+        self._motion.state.speed = 0.0
+        return True
 
     def _find_siding_candidate(self, near_node: str, sim_time: float) -> Optional[str]:
         """

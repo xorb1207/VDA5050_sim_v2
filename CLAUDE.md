@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T41
+│   └── test_simulation.py     T1~T43
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -176,7 +176,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T41)
+## 테스트 구조 (T1~T43)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -207,6 +207,8 @@ T38:     Critical section conflict 검증
 T39:     Critical section key generation 검증
 T40:     Critical section capacity 검증
 T41:     Type D section capacity > Type C 검증
+T42:     Motion model acceleration 검증
+T43:     Restart delay accounting 검증
 ```
 
 실행:
@@ -252,6 +254,7 @@ python -m src.application.usecases.experiment_runner \
 | throughput_tasks_per_hour | 시간당 station processing 완료량 |
 | avg_task_completion_time_s | 평균 AGV order 처리 시간 |
 | avg_wait_time_s | AGV당 평균 대기 시간 |
+| total_restart_delay_s | processing/wait 이후 재출발 지연 누적 시간 |
 | reservation_failure_rate | 예약 실패율 |
 | agv_utilization | AGV 가동률 (NAVIGATING+PROCESSING / sim_time) |
 | node_occupancy_rate | 노드 점유율 |
@@ -284,6 +287,7 @@ python -m src.application.usecases.experiment_runner \
 - [x] Open-RMF식 itinerary/pre-reservation 1차 API 및 AGV 연결
 - [x] critical section 예약 1차 반영
 - [x] edge capacity / lane width 영향 1차 반영
+- [x] 가감속 / 재출발 지연 1차 반영
 
 ### 중기 (Phase 3 완성)
 - [x] **경로 전체 사전 예약 (pre-reservation) 1차**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약
@@ -291,7 +295,8 @@ python -m src.application.usecases.experiment_runner \
 - [x] **critical section capacity 1차**: lane width 기반 section capacity 반영
 - [ ] **critical section 세분화**: priority/release timing 고도화
 - [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
-- [ ] **물리 모델 고도화**: 가감속 구간, head-on 해소 후 재출발 시간 반영
+- [x] **물리 모델 고도화 1차**: 가감속 구간, processing 이후 재출발 시간 반영
+- [ ] **물리 모델 고도화 2차**: head-on 해소 후 재출발 시간, 회전/곡선 감속 반영
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
 
 ### 장기

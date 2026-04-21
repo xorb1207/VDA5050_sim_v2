@@ -76,6 +76,7 @@ class RunResult:
     avg_task_completion_time_s: float = 0.0
     avg_wait_time_s: float          = 0.0
     total_wait_time_s: float        = 0.0
+    total_restart_delay_s: float    = 0.0
     reservation_failure_rate: float = 0.0
     reroute_count: int              = 0
     node_occupancy_rate: float      = 0.0
@@ -107,6 +108,7 @@ SUMMARY_COLUMNS = [
     "demand_completion_rate", "demand_throughput_per_hour",
     "throughput_tasks_per_hour",
     "avg_task_completion_time_s", "avg_wait_time_s", "total_wait_time_s",
+    "total_restart_delay_s",
     "reservation_failure_rate", "reroute_count",
     "node_occupancy_rate", "edge_occupancy_rate", "agv_utilization",
     "total_travel_distance_m", "max_queue_length",
@@ -197,6 +199,7 @@ async def _run_single(
         result.avg_task_completion_time_s  = kpis.get("avg_task_completion_time_s", 0.0)
         result.avg_wait_time_s             = kpis.get("avg_wait_time_s", 0.0)
         result.total_wait_time_s           = kpis.get("total_wait_time_s", 0.0)
+        result.total_restart_delay_s       = kpis.get("total_restart_delay_s", 0.0)
         result.reservation_failure_rate    = kpis.get("reservation_failure_rate", 0.0)
         result.reroute_count               = kpis.get("reroute_count", 0)
         result.node_occupancy_rate         = kpis.get("node_occupancy_rate", 0.0)
