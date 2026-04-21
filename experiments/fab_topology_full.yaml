@@ -11,6 +11,7 @@ agv_counts: [8, 12, 16, 20, 24]
 duration_s: 1800
 task_interval_s: 3.0
 random_seed: 42
+random_seeds: [42, 43, 44, 45, 46]
 demand_mode: common_demand
 
 output_dir: outputs/experiments

@@ -756,6 +756,83 @@ def test_real_demand_completion_metrics():
     run(_test_real_demand_completion_metrics())
 
 
+def test_topology_ranking_summary():
+    print("\n[T34] Topology ranking summary")
+    from src.application.usecases.experiment_runner import (
+        RunResult,
+        _build_ranking_aggregate,
+        _build_ranking_rows,
+    )
+
+    results = [
+        RunResult(
+            topology_type="A",
+            n_agv=3,
+            random_seed=42,
+            demand_mode="common_demand",
+            demands_completed=8,
+            demand_completion_rate=0.8,
+            demand_throughput_per_hour=80.0,
+            total_wait_time_s=20.0,
+        ),
+        RunResult(
+            topology_type="B",
+            n_agv=3,
+            random_seed=42,
+            demand_mode="common_demand",
+            demands_completed=9,
+            demand_completion_rate=0.9,
+            demand_throughput_per_hour=90.0,
+            total_wait_time_s=30.0,
+        ),
+        RunResult(
+            topology_type="A",
+            n_agv=3,
+            random_seed=43,
+            demand_mode="common_demand",
+            demands_completed=7,
+            demand_completion_rate=0.7,
+            demand_throughput_per_hour=70.0,
+            total_wait_time_s=20.0,
+        ),
+        RunResult(
+            topology_type="B",
+            n_agv=3,
+            random_seed=43,
+            demand_mode="common_demand",
+            demands_completed=6,
+            demand_completion_rate=0.6,
+            demand_throughput_per_hour=60.0,
+            total_wait_time_s=10.0,
+        ),
+    ]
+
+    for result in results:
+        result.diagnostics = {
+            "task_generation": {
+                "tasks_requested": 10,
+                "tasks_dispatched": result.demands_completed,
+                "tasks_rejected_unreachable": 0,
+                "tasks_backlogged": 10 - result.demands_completed,
+                "demands_completed": result.demands_completed,
+            },
+            "station_access": {},
+            "siding_coverage": {},
+        }
+
+    ranking_rows = _build_ranking_rows(results)
+    aggregate = _build_ranking_aggregate(ranking_rows)
+
+    winners = [
+        (row["random_seed"], row["topology_type"])
+        for row in ranking_rows
+        if row["winner"]
+    ]
+    assert_eq("seed별 winner", winners, [(42, "B"), (43, "A")])
+    assert_eq("aggregate row count", len(aggregate), 2)
+    assert_eq("aggregate first row wins", aggregate[0]["first_place_wins"], 1)
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -796,6 +873,7 @@ if __name__ == "__main__":
         test_demand_set_generation,
         test_common_demand_lifecycle_metrics,
         test_real_demand_completion_metrics,
+        test_topology_ranking_summary,
     ]
     passed = failed = 0
     for t in tests:

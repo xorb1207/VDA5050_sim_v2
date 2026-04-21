@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T33
+│   └── test_simulation.py     T1~T34
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -145,6 +145,10 @@ _edge_congestion_counts: 합산 (하위호환)
 - lifecycle KPI: `tasks_requested`, `tasks_dispatched`, `tasks_rejected_unreachable`, `tasks_backlogged`, `demands_completed`, `task_acceptance_rate`, `completion_rate`.
 - `tasks_completed`는 AGV station processing 완료 횟수이며, 실제 물류 수요 완료는 dropoff processing 종료 시 발행되는 `demandCompleted` 이벤트의 `demands_completed`를 기준으로 한다.
 
+### Ranking 기준
+`experiment_runner.py`는 seed/AGV 대수별로 Type A-E를 정렬하고, topology별 승패를 `ranking.csv`, `ranking.json`, `ranking_aggregate.json`으로 저장한다.
+정렬 우선순위는 `completion_rate` desc → `task_acceptance_rate` desc → `demand_throughput_per_hour` desc → `total_wait_time_s` asc → `headon_total` asc → `retry_total` asc.
+
 ---
 
 ## Topology Invariants (불변조건)
@@ -163,7 +167,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T33)
+## 테스트 구조 (T1~T34)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -186,6 +190,7 @@ T30:     Type D width metadata 검증
 T31:     DemandSet common/capability 생성 검증
 T32:     Common demand lifecycle metrics 검증
 T33:     Real demand completion event/KPI 검증
+T34:     Topology ranking summary 검증
 ```
 
 실행:
@@ -198,16 +203,19 @@ python tests/integration/test_simulation.py
 ## 실험 러너
 
 ```bash
-# 빠른 버전 (5타입 × 4대수 = 20회, ~20분)
+# 빠른 버전 (5타입 × 4대수 × 3 seeds = 60회)
 python -m src.application.usecases.experiment_runner \
   --experiment experiments/fab_topology.yaml
 
-# 전체 버전 (5타입 × 5대수 = 25회, ~45분)
+# 전체 버전 (5타입 × 5대수 × 5 seeds = 125회)
 python -m src.application.usecases.experiment_runner \
   --experiment experiments/fab_topology_full.yaml
 ```
 
-결과: `outputs/experiments/{run_id}/summary.csv`
+결과:
+- `outputs/experiments/{run_id}/summary.csv`: seed별 raw KPI
+- `outputs/experiments/{run_id}/ranking.csv`: n_AGV/seed별 Type A-E rank
+- `outputs/experiments/{run_id}/ranking_aggregate.json`: topology별 wins/avg_rank 자동 요약
 
 ### 결과 해석 시 주의사항
 - **Type A 처리량 비선형**: AGV 과밀 시 available 스테이션 부족으로 태스크 생성 안 됨
@@ -250,6 +258,8 @@ python -m src.application.usecases.experiment_runner \
 - [x] DemandSet common/capability 생성 기반
 - [x] common demand lifecycle KPI 1차 연결
 - [x] dropoff 기준 실제 demand 완료 이벤트/KPI 연결
+- [x] multi-seed 반복 실험 설정
+- [x] topology ranking 기준 및 승패 자동 요약
 
 ### 중기 (Phase 3 완성)
 - [ ] **경로 전체 사전 예약 (pre-reservation)**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약. 실제 RMF Trajectory 방식에 가장 가까운 구현

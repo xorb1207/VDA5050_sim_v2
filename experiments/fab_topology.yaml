@@ -13,6 +13,7 @@ agv_counts: [8, 12, 16, 20]   # 24 제외 — 시간 절약
 duration_s: 600        # 10분 (1800 → 600, 벽시계 ~3배 단축)
 task_interval_s: 3.0
 random_seed: 42
+random_seeds: [42, 43, 44]
 demand_mode: common_demand
 
 output_dir: outputs/experiments

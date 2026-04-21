@@ -21,6 +21,7 @@ import csv
 import json
 import random
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,7 @@ class ExperimentConfig:
     duration_s: float         = 600.0
     task_interval_s: float    = 5.0
     random_seed: int          = 42
+    random_seeds: list[int] | None = None
     demand_mode: str          = "generated"
     demand_count: Optional[int] = None
     output_dir: str           = "outputs/experiments"
@@ -52,6 +54,10 @@ class ExperimentConfig:
     def __post_init__(self):
         if self.run_id is None:
             self.run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        if self.random_seeds is None:
+            self.random_seeds = [self.random_seed]
+        elif not self.random_seeds:
+            raise ValueError("random_seeds must not be empty")
 
 
 # ── 단일 실험 결과 ─────────────────────────────────────────────
@@ -59,6 +65,7 @@ class ExperimentConfig:
 class RunResult:
     topology_type: str
     n_agv: int
+    random_seed: int = 42
     demand_mode: str = "generated"
     # KPI
     tasks_completed: int            = 0
@@ -90,7 +97,7 @@ class RunResult:
 
 
 SUMMARY_COLUMNS = [
-    "topology_type", "n_agv",
+    "topology_type", "n_agv", "random_seed",
     "demand_mode",
     "tasks_completed", "demands_completed",
     "demand_completion_rate", "demand_throughput_per_hour",
@@ -125,7 +132,12 @@ async def _run_single(
     demand_mode: str = "generated",
     demand_count: int | None = None,
 ) -> RunResult:
-    result = RunResult(topology_type=topology_type, n_agv=n_agv, demand_mode=demand_mode)
+    result = RunResult(
+        topology_type=topology_type,
+        n_agv=n_agv,
+        random_seed=random_seed,
+        demand_mode=demand_mode,
+    )
     t0 = time.perf_counter()
 
     try:
@@ -394,6 +406,113 @@ def _flatten_summary_row(result: RunResult) -> dict:
     return row
 
 
+def _ranking_sort_key(row: dict) -> tuple:
+    if row.get("error"):
+        return (1, 0.0, 0.0, 0.0, float("inf"), float("inf"), float("inf"))
+    return (
+        0,
+        -float(row.get("completion_rate", 0.0)),
+        -float(row.get("task_acceptance_rate", 0.0)),
+        -float(row.get("demand_throughput_per_hour", 0.0)),
+        float(row.get("total_wait_time_s", 0.0)),
+        float(row.get("headon_total", 0.0)),
+        float(row.get("retry_total", 0.0)),
+    )
+
+
+def _build_ranking_rows(results: list[RunResult]) -> list[dict]:
+    rows = [_flatten_summary_row(r) for r in results]
+    grouped: dict[tuple[int, int, str], list[dict]] = defaultdict(list)
+    for row in rows:
+        grouped[(
+            int(row.get("n_agv", 0)),
+            int(row.get("random_seed", 0)),
+            str(row.get("demand_mode", "")),
+        )].append(row)
+
+    ranking_rows: list[dict] = []
+    for (n_agv, seed, demand_mode), group in sorted(grouped.items()):
+        ranked = sorted(group, key=_ranking_sort_key)
+        previous_key = None
+        current_rank = 0
+        for index, row in enumerate(ranked, start=1):
+            row_key = _ranking_sort_key(row)
+            if row_key != previous_key:
+                current_rank = index
+                previous_key = row_key
+            ranking_rows.append({
+                "n_agv": n_agv,
+                "random_seed": seed,
+                "demand_mode": demand_mode,
+                "rank": current_rank,
+                "winner": current_rank == 1 and not row.get("error"),
+                "topology_type": row.get("topology_type", ""),
+                "completion_rate": row.get("completion_rate", 0.0),
+                "task_acceptance_rate": row.get("task_acceptance_rate", 0.0),
+                "demands_completed": row.get("demands_completed", 0),
+                "demand_throughput_per_hour": row.get("demand_throughput_per_hour", 0.0),
+                "total_wait_time_s": row.get("total_wait_time_s", 0.0),
+                "headon_total": row.get("headon_total", 0),
+                "retry_total": row.get("retry_total", 0),
+                "error": row.get("error", ""),
+            })
+    return ranking_rows
+
+
+def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for row in ranking_rows:
+        grouped[str(row["topology_type"])].append(row)
+
+    aggregate: list[dict] = []
+    for topology_type, rows in sorted(grouped.items()):
+        valid = [r for r in rows if not r.get("error")]
+        if not valid:
+            aggregate.append({
+                "topology_type": topology_type,
+                "evaluated_groups": 0,
+                "first_place_wins": 0,
+                "avg_rank": 0.0,
+                "avg_completion_rate": 0.0,
+                "avg_demand_throughput_per_hour": 0.0,
+                "avg_total_wait_time_s": 0.0,
+                "avg_headon_total": 0.0,
+            })
+            continue
+
+        count = len(valid)
+        aggregate.append({
+            "topology_type": topology_type,
+            "evaluated_groups": count,
+            "first_place_wins": sum(1 for r in valid if r["winner"]),
+            "avg_rank": round(sum(r["rank"] for r in valid) / count, 4),
+            "avg_completion_rate": round(
+                sum(float(r["completion_rate"]) for r in valid) / count, 4
+            ),
+            "avg_demand_throughput_per_hour": round(
+                sum(float(r["demand_throughput_per_hour"]) for r in valid) / count, 3
+            ),
+            "avg_total_wait_time_s": round(
+                sum(float(r["total_wait_time_s"]) for r in valid) / count, 3
+            ),
+            "avg_headon_total": round(
+                sum(float(r["headon_total"]) for r in valid) / count, 3
+            ),
+        })
+
+    return sorted(
+        aggregate,
+        key=lambda r: (
+            -r["first_place_wins"],
+            r["avg_rank"] if r["avg_rank"] else float("inf"),
+            -r["avg_completion_rate"],
+            -r["avg_demand_throughput_per_hour"],
+            r["avg_total_wait_time_s"],
+            r["avg_headon_total"],
+        ),
+    )
+
+
 # ── 배치 실험 러너 ─────────────────────────────────────────────
 class ExperimentRunner:
     def __init__(self, config: ExperimentConfig) -> None:
@@ -403,49 +522,56 @@ class ExperimentRunner:
 
     def run(self) -> list[RunResult]:
         cfg = self.config
-        total = len(cfg.types) * len(cfg.agv_counts)
+        seeds = cfg.random_seeds or [cfg.random_seed]
+        total = len(cfg.types) * len(cfg.agv_counts) * len(seeds)
         print(f"\n{'='*56}")
         print(f"FAB Topology Experiment  run_id={cfg.run_id}")
         print(f"Types: {cfg.types}  AGV counts: {cfg.agv_counts}")
+        print(f"Seeds: {seeds}")
         print(f"Duration: {cfg.duration_s}s  Total runs: {total}")
         print(f"{'='*56}\n")
 
         results: list[RunResult] = []
         idx = 0
-        for t in cfg.types:
-            for n in cfg.agv_counts:
-                idx += 1
-                print(f"[{idx:2d}/{total}] Type-{t}  AGV={n:2d}  ...", end=" ", flush=True)
-                result = asyncio.run(
-                    _run_single(
-                        t,
-                        n,
-                        cfg.duration_s,
-                        cfg.task_interval_s,
-                        cfg.random_seed,
-                        cfg.demand_mode,
-                        cfg.demand_count,
-                    )
-                )
-                results.append(result)
-                if result.error:
-                    print(f"ERROR: {result.error}")
-                else:
+        for seed in seeds:
+            for t in cfg.types:
+                for n in cfg.agv_counts:
+                    idx += 1
                     print(
-                        f"tasks={result.tasks_completed:3d}  "
-                        f"tph={result.throughput_tasks_per_hour:6.1f}  "
-                        f"util={result.agv_utilization:.3f}  "
-                        f"wait={result.total_wait_time_s:6.1f}s  "
-                        f"wall={result.wall_time_s:.1f}s"
+                        f"[{idx:2d}/{total}] seed={seed}  Type-{t}  AGV={n:2d}  ...",
+                        end=" ",
+                        flush=True,
                     )
-                self._save_single(result)
+                    result = asyncio.run(
+                        _run_single(
+                            t,
+                            n,
+                            cfg.duration_s,
+                            cfg.task_interval_s,
+                            seed,
+                            cfg.demand_mode,
+                            cfg.demand_count,
+                        )
+                    )
+                    results.append(result)
+                    if result.error:
+                        print(f"ERROR: {result.error}")
+                    else:
+                        print(
+                            f"demand_done={result.demands_completed:3d}  "
+                            f"demand_tph={result.demand_throughput_per_hour:6.1f}  "
+                            f"completion={result.demand_completion_rate:.3f}  "
+                            f"wait={result.total_wait_time_s:6.1f}s  "
+                            f"wall={result.wall_time_s:.1f}s"
+                        )
+                    self._save_single(result)
 
         self._save_summary(results)
         self._print_matrix(results)
         return results
 
     def _save_single(self, r: RunResult) -> None:
-        d = self.out_dir / f"{r.topology_type}_{r.n_agv:02d}agv"
+        d = self.out_dir / f"{r.topology_type}_{r.n_agv:02d}agv_seed{r.random_seed}"
         d.mkdir(exist_ok=True)
         (d / "kpi_summary.json").write_text(
             json.dumps(asdict(r), ensure_ascii=False, indent=2)
@@ -465,17 +591,52 @@ class ExperimentRunner:
         json_path = self.out_dir / "summary.json"
         json_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2))
 
+        ranking_rows = _build_ranking_rows(results)
+        ranking_path = self.out_dir / "ranking.csv"
+        ranking_columns = [
+            "n_agv", "random_seed", "demand_mode", "rank", "winner",
+            "topology_type", "completion_rate", "task_acceptance_rate",
+            "demands_completed", "demand_throughput_per_hour",
+            "total_wait_time_s", "headon_total", "retry_total", "error",
+        ]
+        with open(ranking_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=ranking_columns, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(ranking_rows)
+
+        ranking_json_path = self.out_dir / "ranking.json"
+        ranking_json_path.write_text(
+            json.dumps(ranking_rows, ensure_ascii=False, indent=2)
+        )
+
+        aggregate = _build_ranking_aggregate(ranking_rows)
+        aggregate_path = self.out_dir / "ranking_aggregate.json"
+        aggregate_path.write_text(json.dumps(aggregate, ensure_ascii=False, indent=2))
+
         print(f"\n결과 저장: {self.out_dir}/")
         print(f"  summary.csv  ({len(results)}행)")
         print(f"  summary.json")
+        print(f"  ranking.csv")
+        print(f"  ranking.json")
+        print(f"  ranking_aggregate.json")
 
     def _print_matrix(self, results: list[RunResult]) -> None:
         """처리량 매트릭스 콘솔 출력."""
         cfg = self.config
         col_w = 10
 
+        def avg_for(topology_type: str, n_agv: int, attr: str) -> float | None:
+            values = [
+                float(getattr(r, attr))
+                for r in results
+                if r.topology_type == topology_type and r.n_agv == n_agv and not r.error
+            ]
+            if not values:
+                return None
+            return sum(values) / len(values)
+
         print(f"\n{'─'*56}")
-        print("처리량 (tasks/hour) 매트릭스")
+        print("실제 demand 처리량 (demands/hour) 매트릭스")
         print(f"{'Type':6s}", end="")
         for n in cfg.agv_counts:
             print(f"{'AGV='+str(n):>{col_w}}", end="")
@@ -485,9 +646,26 @@ class ExperimentRunner:
         for t in cfg.types:
             print(f"{'Type '+t:6s}", end="")
             for n in cfg.agv_counts:
-                r = next((x for x in results if x.topology_type == t and x.n_agv == n), None)
-                if r and not r.error:
-                    print(f"{r.throughput_tasks_per_hour:>{col_w}.1f}", end="")
+                value = avg_for(t, n, "demand_throughput_per_hour")
+                if value is not None:
+                    print(f"{value:>{col_w}.1f}", end="")
+                else:
+                    print(f"{'ERR':>{col_w}}", end="")
+            print()
+
+        print(f"\n실제 demand 완료율 매트릭스")
+        print(f"{'Type':6s}", end="")
+        for n in cfg.agv_counts:
+            print(f"{'AGV='+str(n):>{col_w}}", end="")
+        print()
+        print("─" * (6 + col_w * len(cfg.agv_counts)))
+
+        for t in cfg.types:
+            print(f"{'Type '+t:6s}", end="")
+            for n in cfg.agv_counts:
+                value = avg_for(t, n, "demand_completion_rate")
+                if value is not None:
+                    print(f"{value:>{col_w}.4f}", end="")
                 else:
                     print(f"{'ERR':>{col_w}}", end="")
             print()
@@ -502,9 +680,9 @@ class ExperimentRunner:
         for t in cfg.types:
             print(f"{'Type '+t:6s}", end="")
             for n in cfg.agv_counts:
-                r = next((x for x in results if x.topology_type == t and x.n_agv == n), None)
-                if r and not r.error:
-                    print(f"{r.agv_utilization:>{col_w}.4f}", end="")
+                value = avg_for(t, n, "agv_utilization")
+                if value is not None:
+                    print(f"{value:>{col_w}.4f}", end="")
                 else:
                     print(f"{'ERR':>{col_w}}", end="")
             print()
@@ -519,13 +697,26 @@ class ExperimentRunner:
         for t in cfg.types:
             print(f"{'Type '+t:6s}", end="")
             for n in cfg.agv_counts:
-                r = next((x for x in results if x.topology_type == t and x.n_agv == n), None)
-                if r and not r.error:
-                    print(f"{r.headon_total:>{col_w}}", end="")
+                value = avg_for(t, n, "headon_total")
+                if value is not None:
+                    print(f"{value:>{col_w}.1f}", end="")
                 else:
                     print(f"{'ERR':>{col_w}}", end="")
             print()
         print(f"{'─'*56}\n")
+
+        aggregate = _build_ranking_aggregate(_build_ranking_rows(results))
+        if aggregate:
+            print("Topology ranking summary")
+            for row in aggregate:
+                print(
+                    f"Type {row['topology_type']}: "
+                    f"wins={row['first_place_wins']}/{row['evaluated_groups']}  "
+                    f"avg_rank={row['avg_rank']:.2f}  "
+                    f"avg_completion={row['avg_completion_rate']:.4f}  "
+                    f"avg_demand_tph={row['avg_demand_throughput_per_hour']:.1f}"
+                )
+            print()
 
 
 # ── YAML 기반 실험 설정 ────────────────────────────────────────
@@ -533,12 +724,17 @@ def load_from_yaml(path: str) -> ExperimentConfig:
     import yaml
     with open(path) as f:
         raw = yaml.safe_load(f)
+    random_seeds = raw.get("random_seeds")
     return ExperimentConfig(
         types          = raw.get("types", ["A","B","C","D","E"]),
         agv_counts     = raw.get("agv_counts", [3, 5, 8, 12]),
         duration_s     = float(raw.get("duration_s", 600.0)),
         task_interval_s= float(raw.get("task_interval_s", 5.0)),
         random_seed    = int(raw.get("random_seed", 42)),
+        random_seeds   = (
+            [int(seed) for seed in random_seeds]
+            if random_seeds is not None else None
+        ),
         demand_mode    = raw.get("demand_mode", "generated"),
         demand_count   = (
             int(raw["demand_count"]) if raw.get("demand_count") is not None else None
@@ -562,6 +758,8 @@ def main() -> None:
                         help="태스크 발행 간격 초 (기본: 5)")
     parser.add_argument("--seed",     type=int, default=42,
                         help="난수 시드 (기본: 42)")
+    parser.add_argument("--seeds", nargs="+", type=int, default=None,
+                        help="반복 실험용 난수 시드 목록")
     parser.add_argument("--demand-mode", default="generated",
                         choices=["generated", "common_demand", "capability"],
                         help="태스크 수요 생성 모드")
@@ -580,6 +778,7 @@ def main() -> None:
             duration_s     = args.duration,
             task_interval_s= args.interval,
             random_seed    = args.seed,
+            random_seeds   = args.seeds,
             demand_mode    = args.demand_mode,
             demand_count   = args.demand_count,
             output_dir     = args.output,
