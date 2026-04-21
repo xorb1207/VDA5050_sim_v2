@@ -574,6 +574,8 @@ async def _test_kpi_headon_fields():
         "headon_total",
         "followon_total",
         "retry_total",
+        "itinerary_success",
+        "itinerary_failure",
         "avg_retry_per_headon",
         "top_headon_edges",
     ):
@@ -902,6 +904,60 @@ def test_type_d_follow_on_headway_shorter_than_c():
     assert_true("Type D wider lane reduces headway", headway_d < headway_c)
 
 
+async def _test_itinerary_reservation_atomic_conflict():
+    print("\n[T37] Itinerary reservation atomic conflict")
+    from src.domain.reservation.scheduler import ItinerarySegment
+
+    s = TimeWindowScheduler()
+    first = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="A__B",
+            agv_id="AGV_001",
+            start_time=0.0,
+            end_time=10.0,
+            src_id="A",
+            dst_id="B",
+        ),
+        ItinerarySegment(
+            segment_type="node",
+            key="B",
+            agv_id="AGV_001",
+            start_time=10.0,
+            end_time=12.0,
+        ),
+    ])
+    conflict = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="B__A",
+            agv_id="AGV_002",
+            start_time=2.0,
+            end_time=4.0,
+            src_id="B",
+            dst_id="A",
+        ),
+        ItinerarySegment(
+            segment_type="node",
+            key="A",
+            agv_id="AGV_002",
+            start_time=4.0,
+            end_time=6.0,
+        ),
+    ])
+    summary = s.get_headon_summary()
+
+    assert_eq("첫 itinerary 예약 성공", first, True)
+    assert_eq("충돌 itinerary atomic 거부", conflict, False)
+    assert_eq("실패 itinerary edge 미추가", len(s._edge_reservations["B__A"]), 0)
+    assert_eq("itinerary success", summary["itinerary_success"], 1)
+    assert_eq("itinerary failure", summary["itinerary_failure"], 1)
+
+
+def test_itinerary_reservation_atomic_conflict():
+    run(_test_itinerary_reservation_atomic_conflict())
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -945,6 +1001,7 @@ if __name__ == "__main__":
         test_topology_ranking_summary,
         test_follow_on_headway_blocks_close_entry,
         test_type_d_follow_on_headway_shorter_than_c,
+        test_itinerary_reservation_atomic_conflict,
     ]
     passed = failed = 0
     for t in tests:

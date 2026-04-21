@@ -90,6 +90,8 @@ class AGV:
         self._edge_wait_elapsed:    float = 0.0
         self._pending_edge_src:  Optional[str] = None
         self._pending_edge_dst:  Optional[str] = None
+        self._pre_reserved_edges: set[tuple[str, str]] = set()
+        self._pre_reserved_edge_starts: dict[tuple[str, str], float] = {}
 
         # 통계
         self._wait_time_s:       float = 0.0
@@ -129,15 +131,22 @@ class AGV:
         self._current_pickup_node_id = payload.get("pickupNodeId")
         self._current_dropoff_node_id = payload.get("dropoffNodeId")
         self._processing_node_id = None
+        self._pre_reserved_edges.clear()
+        self._pre_reserved_edge_starts.clear()
         if self._path and self._fsm.state == AGVState.IDLE:
-            await self._navigate_to_next_node(sim_time=0.0)
+            dispatch_time = float(payload.get("dispatchTimeS", 0.0))
+            await self._pre_reserve_itinerary(dispatch_time)
+            await self._navigate_to_next_node(sim_time=dispatch_time)
 
     async def _on_instant_action(self, payload: dict) -> None:
         for action in payload.get("instantActions", []):
             t = action.get("actionType", "")
             if t == "cancelOrder":
                 await self._cancel_current_edge()
+                await self._sched.release_agv_reservations(self.agv_id)
                 self._path.clear()
+                self._pre_reserved_edges.clear()
+                self._pre_reserved_edge_starts.clear()
                 self._fsm.force(AGVState.IDLE)
             elif t == "pauseOrder":
                 if self._fsm.state == AGVState.NAVIGATING:
@@ -308,12 +317,20 @@ class AGV:
         travel_t = dist / speed
         follow_on_headway_s = self._calc_follow_on_headway_s(src, dst, speed)
 
-        ok = await self._sched.reserve_edge(
-            src, dst, self.agv_id,
-            start_time=sim_time,
-            end_time=sim_time + travel_t,
-            same_direction_headway_s=follow_on_headway_s,
-        )
+        pre_reserved_edge = (src, dst)
+        if pre_reserved_edge in self._pre_reserved_edges:
+            reserved_start = self._pre_reserved_edge_starts.get(pre_reserved_edge, sim_time)
+            if sim_time < reserved_start:
+                self._fsm.force(AGVState.WAITING_RESERVATION)
+                return
+            ok = True
+        else:
+            ok = await self._sched.reserve_edge(
+                src, dst, self.agv_id,
+                start_time=sim_time,
+                end_time=sim_time + travel_t,
+                same_direction_headway_s=follow_on_headway_s,
+            )
 
         if ok:
             self._pending_edge_src  = None
@@ -415,6 +432,87 @@ class AGV:
             await self._navigate_to_next_node(sim_time)
         else:
             self._fsm.force(AGVState.IDLE)
+
+    async def _pre_reserve_itinerary(self, start_time: float) -> bool:
+        segments = self._build_itinerary_segments(start_time)
+        if not segments:
+            return False
+        ok = await self._sched.reserve_itinerary(segments)
+        if not ok:
+            return False
+        self._pre_reserved_edges = {
+            (segment.src_id, segment.dst_id)
+            for segment in segments
+            if segment.segment_type == "edge"
+        }
+        self._pre_reserved_edge_starts = {
+            (segment.src_id, segment.dst_id): segment.start_time
+            for segment in segments
+            if segment.segment_type == "edge"
+        }
+        return True
+
+    def _build_itinerary_segments(self, start_time: float) -> list:
+        from src.domain.reservation.scheduler import ItinerarySegment
+
+        if not self.current_node_id or len(self._path) < 2:
+            return []
+
+        path = self._path
+        current = self.current_node_id
+        cursor = start_time
+        speed = max(self._motion.max_speed, 0.01)
+        processing_time = (
+            self._order_processing_time_s
+            if self._order_processing_time_s is not None
+            else 30.0
+        )
+        segments: list[ItinerarySegment] = []
+
+        for dst in path:
+            if dst == current:
+                continue
+            edge = self._find_edge(current, dst)
+            if edge is None:
+                return []
+            edge_speed = max(min(speed, edge.max_speed), 0.01)
+            travel_time = edge.distance / edge_speed
+            edge_start = cursor
+            edge_end = edge_start + travel_time
+            segments.append(
+                ItinerarySegment(
+                    segment_type="edge",
+                    key=f"{current}__{dst}",
+                    agv_id=self.agv_id,
+                    start_time=edge_start,
+                    end_time=edge_end,
+                    src_id=current,
+                    dst_id=dst,
+                    same_direction_headway_s=self._calc_follow_on_headway_s(
+                        current,
+                        dst,
+                        edge_speed,
+                    ),
+                )
+            )
+            cursor = edge_end
+
+            node = self._graph.nodes.get(dst)
+            if node and (node.role.value in ("work", "station") or node.is_parking_spot):
+                dwell_end = cursor + processing_time
+                segments.append(
+                    ItinerarySegment(
+                        segment_type="node",
+                        key=dst,
+                        agv_id=self.agv_id,
+                        start_time=cursor,
+                        end_time=dwell_end,
+                    )
+                )
+                cursor = dwell_end
+            current = dst
+
+        return segments
 
     def _find_blocking_agv(self, src: str, dst: str, sim_time: float) -> Optional[str]:
         reverse_key = f"{dst}__{src}"

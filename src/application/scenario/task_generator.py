@@ -243,6 +243,7 @@ class TaskGenerator:
             task_id=f"task_{self._task_counter:04d}",
             agv_id=agv.agv_id,
             node_ids=full_path,
+            dispatch_time_s=sim_time,
         )
 
         await self._bus.publish(
@@ -274,7 +275,11 @@ class TaskGenerator:
         )
 
         if self._backlogged_demand is not None:
-            dispatched = await self._dispatch_demand(self._backlogged_demand, agvs)
+            dispatched = await self._dispatch_demand(
+                self._backlogged_demand,
+                agvs,
+                sim_time,
+            )
             if not dispatched:
                 return
             self._backlogged_demand = None
@@ -294,7 +299,7 @@ class TaskGenerator:
                 )
                 continue
 
-            dispatched = await self._dispatch_demand(demand, agvs)
+            dispatched = await self._dispatch_demand(demand, agvs, sim_time)
             if not dispatched:
                 self._backlogged_demand = demand
                 return
@@ -303,6 +308,7 @@ class TaskGenerator:
         self,
         demand: TaskDemand,
         agvs: dict[str, AGV],
+        sim_time: float,
     ) -> bool:
         idle_agvs = [
             agv for agv in agvs.values()
@@ -338,6 +344,7 @@ class TaskGenerator:
             agv_id=agv.agv_id,
             node_ids=full_path,
             processing_time_s=demand.processing_time_s,
+            dispatch_time_s=sim_time,
             demand_id=demand.task_id,
             pickup_node_id=demand.pickup_node_id,
             dropoff_node_id=demand.dropoff_node_id,
@@ -362,6 +369,7 @@ class TaskGenerator:
         agv_id: str,
         node_ids: list[str],
         processing_time_s: float | None = None,
+        dispatch_time_s: float | None = None,
         demand_id: str | None = None,
         pickup_node_id: str | None = None,
         dropoff_node_id: str | None = None,
@@ -397,6 +405,8 @@ class TaskGenerator:
         }
         if processing_time_s is not None:
             payload["processingTimeS"] = processing_time_s
+        if dispatch_time_s is not None:
+            payload["dispatchTimeS"] = dispatch_time_s
         if demand_id is not None:
             payload["demandId"] = demand_id
         if pickup_node_id is not None:

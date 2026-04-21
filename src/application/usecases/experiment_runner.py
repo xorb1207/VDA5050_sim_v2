@@ -86,6 +86,8 @@ class RunResult:
     headon_total: int               = 0
     followon_total: int             = 0
     retry_total: int                = 0
+    itinerary_success: int          = 0
+    itinerary_failure: int          = 0
     avg_retry_per_headon: float     = 0.0
     top_bottleneck_node: str        = ""
     top_bottleneck_score: float     = 0.0
@@ -107,7 +109,8 @@ SUMMARY_COLUMNS = [
     "reservation_failure_rate", "reroute_count",
     "node_occupancy_rate", "edge_occupancy_rate", "agv_utilization",
     "total_travel_distance_m", "max_queue_length",
-    "headon_total", "followon_total", "retry_total", "avg_retry_per_headon",
+    "headon_total", "followon_total", "retry_total",
+    "itinerary_success", "itinerary_failure", "avg_retry_per_headon",
     "top_bottleneck_node", "top_bottleneck_score",
     "top_headon_edge", "top_headon_edge_count",
     "tasks_requested", "tasks_dispatched", "tasks_rejected_unreachable",
@@ -211,6 +214,8 @@ async def _run_single(
         result.headon_total          = kpis.get("headon_total", 0)
         result.followon_total        = kpis.get("followon_total", 0)
         result.retry_total           = kpis.get("retry_total", 0)
+        result.itinerary_success     = kpis.get("itinerary_success", 0)
+        result.itinerary_failure     = kpis.get("itinerary_failure", 0)
         result.avg_retry_per_headon  = kpis.get("avg_retry_per_headon", 0.0)
         top_headon_edges = kpis.get("top_headon_edges", [])
         if top_headon_edges:

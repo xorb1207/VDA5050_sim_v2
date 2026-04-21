@@ -128,6 +128,8 @@ class KPICalculator:
             "retry_total":                 headon_summary["retry_total"],
             "avg_retry_per_headon":        headon_summary["avg_retry_per_headon"],
             "top_headon_edges":            headon_summary["top_headon_edges"],
+            "itinerary_success":           headon_summary["itinerary_success"],
+            "itinerary_failure":           headon_summary["itinerary_failure"],
 
             # 4. Resource Utilization
             "node_occupancy_rate":         node_occupancy_rate,

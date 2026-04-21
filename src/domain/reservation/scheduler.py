@@ -24,6 +24,18 @@ class EdgeReservation:
     released: bool = False
 
 
+@dataclass(frozen=True)
+class ItinerarySegment:
+    segment_type: str  # "node" or "edge"
+    key: str
+    agv_id: str
+    start_time: float
+    end_time: float
+    src_id: str = ""
+    dst_id: str = ""
+    same_direction_headway_s: float = 0.0
+
+
 class TimeWindowScheduler:
     """
     노드 + 엣지 Time-window 예약 엔진.
@@ -45,6 +57,8 @@ class TimeWindowScheduler:
         self._edge_followon_counts: dict[str, int] = defaultdict(int)  # 같은 방향 안전거리 차단
         self._edge_retry_counts:  dict[str, int] = defaultdict(int)  # 대기 중 재시도 (병목 강도)
         self._edge_congestion_counts: dict[str, int] = defaultdict(int)  # 합산 (하위호환)
+        self._itinerary_success: int = 0
+        self._itinerary_failure: int = 0
 
         self._lock = asyncio.Lock()
 
@@ -112,6 +126,59 @@ class TimeWindowScheduler:
             await asyncio.sleep(0.02)
 
     # ── 엣지 예약 (신규) ───────────────────────────────────────    
+
+    async def reserve_itinerary(self, segments: list[ItinerarySegment]) -> bool:
+        """
+        전체 path의 node/edge time-window를 atomic하게 예약한다.
+        Open-RMF itinerary 제출의 1차 근사: 하나라도 충돌하면 아무 segment도
+        추가하지 않고 False를 반환한다.
+        """
+        async with self._lock:
+            if self._has_itinerary_conflict(segments):
+                self._itinerary_failure += 1
+                self._reserve_failure += 1
+                return False
+
+            for segment in segments:
+                if segment.segment_type == "node":
+                    self._reservations[segment.key].append(
+                        Reservation(
+                            segment.key,
+                            segment.agv_id,
+                            segment.start_time,
+                            segment.end_time,
+                        )
+                    )
+                    self._node_occupancy_time[segment.key] += (
+                        segment.end_time - segment.start_time
+                    )
+                elif segment.segment_type == "edge":
+                    self._edge_reservations[segment.key].append(
+                        EdgeReservation(
+                            segment.key,
+                            segment.agv_id,
+                            segment.start_time,
+                            segment.end_time,
+                        )
+                    )
+                    self._edge_occupancy_time[segment.key] += (
+                        segment.end_time - segment.start_time
+                    )
+
+            self._itinerary_success += 1
+            self._reserve_success += len(segments)
+            return True
+
+    async def release_agv_reservations(self, agv_id: str) -> None:
+        async with self._lock:
+            for reservations in self._reservations.values():
+                for r in reservations:
+                    if r.agv_id == agv_id and not r.released:
+                        r.released = True
+            for reservations in self._edge_reservations.values():
+                for r in reservations:
+                    if r.agv_id == agv_id and not r.released:
+                        r.released = True
     
     async def reserve_edge(
         self,
@@ -283,6 +350,8 @@ class TimeWindowScheduler:
             "retry_total":           retry_total,
             "avg_retry_per_headon":  avg_retry,
             "top_headon_edges":      [{"edge": e, "count": c} for e, c in top_edges],
+            "itinerary_success":     self._itinerary_success,
+            "itinerary_failure":     self._itinerary_failure,
         }
 
     # ── 내부 헬퍼 ─────────────────────────────────────────────
@@ -315,3 +384,64 @@ class TimeWindowScheduler:
             not r.released and abs(start - r.start_time) < headway_s
             for r in existing
         )
+
+    def _has_itinerary_conflict(self, segments: list[ItinerarySegment]) -> bool:
+        staged_nodes: dict[str, list[Reservation]] = defaultdict(list)
+        staged_edges: dict[str, list[EdgeReservation]] = defaultdict(list)
+
+        for segment in segments:
+            if segment.segment_type == "node":
+                existing = [
+                    r for r in self._reservations[segment.key]
+                    if not r.released and r.agv_id != segment.agv_id
+                ] + staged_nodes[segment.key]
+                if self._has_node_conflict(existing, segment.start_time, segment.end_time):
+                    self._congestion_counts[segment.key] += 1
+                    return True
+                staged_nodes[segment.key].append(
+                    Reservation(
+                        segment.key,
+                        segment.agv_id,
+                        segment.start_time,
+                        segment.end_time,
+                    )
+                )
+                continue
+
+            if segment.segment_type == "edge":
+                reverse_key = f"{segment.dst_id}__{segment.src_id}"
+                reverse_active = [
+                    r for r in self._edge_reservations[reverse_key]
+                    if not r.released and r.agv_id != segment.agv_id
+                ] + staged_edges[reverse_key]
+                if self._has_edge_conflict(
+                    reverse_active,
+                    segment.start_time,
+                    segment.end_time,
+                ):
+                    self._edge_headon_counts[segment.key] += 1
+                    self._edge_congestion_counts[segment.key] += 1
+                    return True
+
+                same_direction_active = [
+                    r for r in self._edge_reservations[segment.key]
+                    if not r.released and r.agv_id != segment.agv_id
+                ] + staged_edges[segment.key]
+                if self._has_followon_conflict(
+                    same_direction_active,
+                    segment.start_time,
+                    segment.same_direction_headway_s,
+                ):
+                    self._edge_followon_counts[segment.key] += 1
+                    self._edge_congestion_counts[segment.key] += 1
+                    return True
+                staged_edges[segment.key].append(
+                    EdgeReservation(
+                        segment.key,
+                        segment.agv_id,
+                        segment.start_time,
+                        segment.end_time,
+                    )
+                )
+
+        return False
