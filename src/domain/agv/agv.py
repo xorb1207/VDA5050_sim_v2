@@ -74,6 +74,10 @@ class AGV:
         self._path_index: int       = 0
         self._process_remaining: float = 0.0
         self._order_processing_time_s: Optional[float] = None
+        self._current_demand_id: Optional[str] = None
+        self._current_pickup_node_id: Optional[str] = None
+        self._current_dropoff_node_id: Optional[str] = None
+        self._processing_node_id: Optional[str] = None
 
         # Conflict Resolution
         self.collision_retry_count: int   = 0
@@ -115,6 +119,10 @@ class AGV:
         self._order_processing_time_s = (
             float(processing_time) if processing_time is not None else None
         )
+        self._current_demand_id = payload.get("demandId")
+        self._current_pickup_node_id = payload.get("pickupNodeId")
+        self._current_dropoff_node_id = payload.get("dropoffNodeId")
+        self._processing_node_id = None
         if self._path and self._fsm.state == AGVState.IDLE:
             await self._navigate_to_next_node(sim_time=0.0)
 
@@ -160,6 +168,10 @@ class AGV:
                 if self._task_start_time > 0:
                     self._task_completion_times.append(sim_time - self._task_start_time)
                     self._task_start_time = 0.0
+                if self._is_current_demand_dropoff_complete():
+                    await self._publish_demand_completed(sim_time)
+                    self._clear_demand_context()
+                self._processing_node_id = None
                 self._fsm.force(AGVState.IDLE)
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
 
@@ -216,9 +228,35 @@ class AGV:
                     self._process_remaining = self._order_processing_time_s
                 else:
                     self._process_remaining = random.uniform(30.0, 120.0)
+                self._processing_node_id = self.current_node_id
                 self._fsm.force(AGVState.PROCESSING)
             else:
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
+
+    def _is_current_demand_dropoff_complete(self) -> bool:
+        return (
+            self._current_demand_id is not None
+            and self._current_dropoff_node_id is not None
+            and self._processing_node_id == self._current_dropoff_node_id
+        )
+
+    async def _publish_demand_completed(self, sim_time: float) -> None:
+        await self._bus.publish(
+            "uagv/v2/NEXT/demand/completed",
+            {
+                "eventType": "demandCompleted",
+                "demandId": self._current_demand_id,
+                "agvId": self.agv_id,
+                "pickupNodeId": self._current_pickup_node_id,
+                "dropoffNodeId": self._current_dropoff_node_id,
+                "simTime": round(sim_time, 4),
+            },
+        )
+
+    def _clear_demand_context(self) -> None:
+        self._current_demand_id = None
+        self._current_pickup_node_id = None
+        self._current_dropoff_node_id = None
 
     async def _navigate_to_next_node(self, sim_time: float) -> None:
         if self._path_index >= len(self._path):

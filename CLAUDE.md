@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T32
+│   └── test_simulation.py     T1~T33
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -142,7 +142,8 @@ _edge_congestion_counts: 합산 (하위호환)
 - `common_demand`: 모든 topology에 같은 pickup/dropoff sequence를 투입한다. 불가능 task는 rejected/backlog KPI로 집계해야 한다.
 - `capability`: 해당 topology에서 routeable한 pickup/dropoff pair만 생성한다. topology 내부 효율 비교용이다.
 - `processing_time_s`는 demand에 고정되어 topology 간 processing randomness를 분리하는 기반이다.
-- 1차 lifecycle KPI: `tasks_requested`, `tasks_dispatched`, `tasks_rejected_unreachable`, `tasks_backlogged`, `task_acceptance_rate`, `completion_rate`.
+- lifecycle KPI: `tasks_requested`, `tasks_dispatched`, `tasks_rejected_unreachable`, `tasks_backlogged`, `demands_completed`, `task_acceptance_rate`, `completion_rate`.
+- `tasks_completed`는 AGV station processing 완료 횟수이며, 실제 물류 수요 완료는 dropoff processing 종료 시 발행되는 `demandCompleted` 이벤트의 `demands_completed`를 기준으로 한다.
 
 ---
 
@@ -162,7 +163,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T31)
+## 테스트 구조 (T1~T33)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -184,6 +185,7 @@ T29:     Type A routeable task selection 검증
 T30:     Type D width metadata 검증
 T31:     DemandSet common/capability 생성 검증
 T32:     Common demand lifecycle metrics 검증
+T33:     Real demand completion event/KPI 검증
 ```
 
 실행:
@@ -219,8 +221,12 @@ python -m src.application.usecases.experiment_runner \
 
 | KPI | 설명 |
 |------|------|
-| throughput_tasks_per_hour | 시간당 완료 태스크 |
-| avg_task_completion_time_s | 평균 태스크 완료 시간 |
+| tasks_completed | AGV station processing 완료 횟수 (pickup/dropoff 처리 proxy) |
+| demands_completed | 실제 물류 수요 완료 횟수 (dropoff processing 종료 기준) |
+| completion_rate | 실제 물류 수요 완료율 (`demands_completed / tasks_requested`) |
+| demand_throughput_per_hour | 시간당 실제 물류 수요 완료량 |
+| throughput_tasks_per_hour | 시간당 station processing 완료량 |
+| avg_task_completion_time_s | 평균 AGV order 처리 시간 |
 | avg_wait_time_s | AGV당 평균 대기 시간 |
 | reservation_failure_rate | 예약 실패율 |
 | agv_utilization | AGV 가동률 (NAVIGATING+PROCESSING / sim_time) |
@@ -243,6 +249,7 @@ python -m src.application.usecases.experiment_runner \
 - [ ] Type B siding 커버리지 분석 (베이 사이 중간 구간 siding 없음)
 - [x] DemandSet common/capability 생성 기반
 - [x] common demand lifecycle KPI 1차 연결
+- [x] dropoff 기준 실제 demand 완료 이벤트/KPI 연결
 
 ### 중기 (Phase 3 완성)
 - [ ] **경로 전체 사전 예약 (pre-reservation)**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약. 실제 RMF Trajectory 방식에 가장 가까운 구현

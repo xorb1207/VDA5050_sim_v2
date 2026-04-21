@@ -713,6 +713,49 @@ def test_common_demand_lifecycle_metrics():
     run(_test_common_demand_lifecycle_metrics())
 
 
+async def _test_real_demand_completion_metrics():
+    print("\n[T33] Real demand completion metrics")
+    from src.application.scenario.demand import DemandSet, TaskDemand
+
+    graph = make_graph()
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    demand_set = DemandSet(
+        mode="common_demand",
+        random_seed=1,
+        demands=[
+            TaskDemand(
+                task_id="demand_real_001",
+                release_time_s=0.0,
+                pickup_node_id="node_work_01",
+                dropoff_node_id="node_work_02",
+                processing_time_s=0.1,
+            )
+        ],
+    )
+    gen = TaskGenerator(graph, bus, task_interval_s=1.0, demand_set=demand_set)
+    engine = SimulationEngine(graph, sched, task_generator=gen)
+
+    agv = AGV("AGV_001", bus, graph, sched)
+    agv.current_node_id = "node_charger_01"
+    agv.physics.x = graph.nodes["node_charger_01"].x
+    agv.physics.y = graph.nodes["node_charger_01"].y
+    engine.register_agv(agv)
+
+    await engine.run(duration_s=30.0)
+    diag = gen.diagnostics
+
+    assert_eq("requested demand", diag["tasks_requested"], 1)
+    assert_eq("dispatched demand", diag["tasks_dispatched"], 1)
+    assert_eq("real completed demand", diag["demands_completed"], 1)
+    assert_eq("real demand completion rate", diag["demand_completion_rate"], 1.0)
+    assert_true("station processing count includes pickup/dropoff", agv._task_count >= 2)
+
+
+def test_real_demand_completion_metrics():
+    run(_test_real_demand_completion_metrics())
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -752,6 +795,7 @@ if __name__ == "__main__":
         test_type_d_width_metadata,
         test_demand_set_generation,
         test_common_demand_lifecycle_metrics,
+        test_real_demand_completion_metrics,
     ]
     passed = failed = 0
     for t in tests:

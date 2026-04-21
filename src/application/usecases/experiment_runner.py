@@ -62,6 +62,9 @@ class RunResult:
     demand_mode: str = "generated"
     # KPI
     tasks_completed: int            = 0
+    demands_completed: int          = 0
+    demand_completion_rate: float   = 0.0
+    demand_throughput_per_hour: float = 0.0
     throughput_tasks_per_hour: float = 0.0
     avg_task_completion_time_s: float = 0.0
     avg_wait_time_s: float          = 0.0
@@ -89,7 +92,9 @@ class RunResult:
 SUMMARY_COLUMNS = [
     "topology_type", "n_agv",
     "demand_mode",
-    "tasks_completed", "throughput_tasks_per_hour",
+    "tasks_completed", "demands_completed",
+    "demand_completion_rate", "demand_throughput_per_hour",
+    "throughput_tasks_per_hour",
     "avg_task_completion_time_s", "avg_wait_time_s", "total_wait_time_s",
     "reservation_failure_rate", "reroute_count",
     "node_occupancy_rate", "edge_occupancy_rate", "agv_utilization",
@@ -207,6 +212,17 @@ async def _run_single(
             "station_access": _build_station_access_diagnostics(graph),
             "siding_coverage": _build_siding_coverage_diagnostics(graph),
         }
+        task_diag = result.diagnostics["task_generation"]
+        result.demands_completed = task_diag.get("demands_completed", 0)
+        requested = task_diag.get("tasks_requested", 0)
+        result.demand_completion_rate = (
+            round(result.demands_completed / requested, 4)
+            if requested else 0.0
+        )
+        result.demand_throughput_per_hour = (
+            round(result.demands_completed / duration_s * 3600.0, 3)
+            if duration_s > 0 else 0.0
+        )
 
     except Exception as e:
         result.error = str(e)
@@ -335,8 +351,9 @@ def _flatten_summary_row(result: RunResult) -> dict:
     tasks_requested = task.get("tasks_requested", 0)
     tasks_dispatched = task.get("tasks_dispatched", 0)
     tasks_rejected = task.get("tasks_rejected_unreachable", 0)
+    demands_completed = task.get("demands_completed", row.get("demands_completed", 0))
     completion_rate = (
-        round(row.get("tasks_completed", 0) / tasks_requested, 4)
+        round(demands_completed / tasks_requested, 4)
         if tasks_requested else 0.0
     )
     task_acceptance_rate = (
@@ -349,6 +366,12 @@ def _flatten_summary_row(result: RunResult) -> dict:
         "tasks_dispatched": tasks_dispatched,
         "tasks_rejected_unreachable": tasks_rejected,
         "tasks_backlogged": task.get("tasks_backlogged", 0),
+        "demands_completed": demands_completed,
+        "demand_completion_rate": completion_rate,
+        "demand_throughput_per_hour": (
+            round(demands_completed / row.get("sim_time_s", 0.0) * 3600.0, 3)
+            if row.get("sim_time_s", 0.0) else 0.0
+        ),
         "task_acceptance_rate": task_acceptance_rate,
         "completion_rate": completion_rate,
         "orders_published": task.get("orders_published", 0),

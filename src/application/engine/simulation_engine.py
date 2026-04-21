@@ -59,6 +59,8 @@ class SimulationEngine:
         self._running = True
         dt = 1.0 / self.TICK_RATE_HZ
 
+        if self.task_generator:
+            await self.task_generator.start()
         await asyncio.gather(*(agv.start() for agv in self.agvs.values()))
 
         while self.sim_time < duration_s and self._running:

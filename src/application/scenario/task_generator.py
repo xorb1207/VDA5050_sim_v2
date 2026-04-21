@@ -28,6 +28,7 @@ class TaskGenerationDiagnostics:
     tasks_dispatched: int = 0
     tasks_rejected_unreachable: int = 0
     tasks_backlogged: int = 0
+    demands_completed: int = 0
     orders_published: int = 0
     no_idle_agv: int = 0
     not_enough_work_nodes: int = 0
@@ -44,6 +45,7 @@ class TaskGenerationDiagnostics:
             "tasks_dispatched": self.tasks_dispatched,
             "tasks_rejected_unreachable": self.tasks_rejected_unreachable,
             "tasks_backlogged": self.tasks_backlogged,
+            "demands_completed": self.demands_completed,
             "orders_published": self.orders_published,
             "no_idle_agv": self.no_idle_agv,
             "not_enough_work_nodes": self.not_enough_work_nodes,
@@ -81,6 +83,8 @@ class TaskGenerator:
         self._demand_set = demand_set
         self._demand_index: int = 0
         self._backlogged_demand: TaskDemand | None = None
+        self._started: bool = False
+        self._completed_demand_ids: set[str] = set()
 
         # 작업 가능 노드 추출:
         #   - sample_fab.json 기준: NodeRole.WORK
@@ -110,10 +114,31 @@ class TaskGenerator:
                 - data["tasks_dispatched"]
                 - data["tasks_rejected_unreachable"],
             )
+            data["demand_completion_rate"] = (
+                round(data["demands_completed"] / data["tasks_requested"], 4)
+                if data["tasks_requested"] else 0.0
+            )
         else:
             data["demand_mode"] = "generated"
             data["demand_count"] = 0
+            data["demand_completion_rate"] = 0.0
         return data
+
+    async def start(self) -> None:
+        if self._started:
+            return
+        self._started = True
+        await self._bus.subscribe(
+            "uagv/v2/NEXT/demand/completed",
+            self._on_demand_completed,
+        )
+
+    async def _on_demand_completed(self, payload: dict) -> None:
+        demand_id = payload.get("demandId")
+        if not demand_id or demand_id in self._completed_demand_ids:
+            return
+        self._completed_demand_ids.add(demand_id)
+        self._diagnostics.demands_completed += 1
 
     async def step(
         self,
@@ -313,6 +338,9 @@ class TaskGenerator:
             agv_id=agv.agv_id,
             node_ids=full_path,
             processing_time_s=demand.processing_time_s,
+            demand_id=demand.task_id,
+            pickup_node_id=demand.pickup_node_id,
+            dropoff_node_id=demand.dropoff_node_id,
         )
         await self._bus.publish(
             f"uagv/v2/NEXT/{agv.agv_id}/order",
@@ -334,6 +362,9 @@ class TaskGenerator:
         agv_id: str,
         node_ids: list[str],
         processing_time_s: float | None = None,
+        demand_id: str | None = None,
+        pickup_node_id: str | None = None,
+        dropoff_node_id: str | None = None,
     ) -> dict:
         """
         node_ids 리스트를 VDA5050 Order 포맷으로 직렬화.
@@ -366,4 +397,10 @@ class TaskGenerator:
         }
         if processing_time_s is not None:
             payload["processingTimeS"] = processing_time_s
+        if demand_id is not None:
+            payload["demandId"] = demand_id
+        if pickup_node_id is not None:
+            payload["pickupNodeId"] = pickup_node_id
+        if dropoff_node_id is not None:
+            payload["dropoffNodeId"] = dropoff_node_id
         return payload
