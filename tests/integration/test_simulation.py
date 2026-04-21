@@ -570,9 +570,16 @@ async def _test_kpi_headon_fields():
     engine.register_agv(agv)
 
     results = await engine.run(duration_s=1.0)
-    for key in ("headon_total", "retry_total", "avg_retry_per_headon", "top_headon_edges"):
+    for key in (
+        "headon_total",
+        "followon_total",
+        "retry_total",
+        "avg_retry_per_headon",
+        "top_headon_edges",
+    ):
         assert_true(f"{key} 포함", key in results)
     assert_eq("headon_total 기본값", results["headon_total"], 0)
+    assert_eq("followon_total 기본값", results["followon_total"], 0)
 
 
 def test_kpi_headon_fields():
@@ -833,6 +840,68 @@ def test_topology_ranking_summary():
     assert_eq("aggregate first row wins", aggregate[0]["first_place_wins"], 1)
 
 
+async def _test_follow_on_headway_blocks_close_entry():
+    print("\n[T35] Same-direction follow-on headway")
+    s = TimeWindowScheduler()
+
+    first = await s.reserve_edge(
+        "A", "B", "AGV_001",
+        start_time=0.0,
+        end_time=10.0,
+        same_direction_headway_s=3.0,
+    )
+    too_close = await s.reserve_edge(
+        "A", "B", "AGV_002",
+        start_time=1.0,
+        end_time=11.0,
+        same_direction_headway_s=3.0,
+    )
+    spaced = await s.reserve_edge(
+        "A", "B", "AGV_003",
+        start_time=3.0,
+        end_time=13.0,
+        same_direction_headway_s=3.0,
+    )
+    summary = s.get_headon_summary()
+
+    assert_eq("첫 same-direction 예약 성공", first, True)
+    assert_eq("headway 미만 추종 차단", too_close, False)
+    assert_eq("headway 만족 추종 허용", spaced, True)
+    assert_eq("follow-on 차단 카운트", summary["followon_total"], 1)
+    assert_eq("head-on 카운트 영향 없음", summary["headon_total"], 0)
+
+
+def test_follow_on_headway_blocks_close_entry():
+    run(_test_follow_on_headway_blocks_close_entry())
+
+
+def test_type_d_follow_on_headway_shorter_than_c():
+    print("\n[T36] Type D follow-on headway shorter than C")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    gen = MapTopologyGenerator()
+    graph_c = gen.generate("C")
+    graph_d = gen.generate("D")
+    edge_c = next(e for e in graph_c.edges.values() if e.safety_model == "narrow_one_way")
+    edge_d = next(e for e in graph_d.edges.values() if e.safety_model == "wide_one_way")
+
+    agv_c = AGV("AGV_C", LocalMemoryBus(), graph_c, TimeWindowScheduler())
+    agv_d = AGV("AGV_D", LocalMemoryBus(), graph_d, TimeWindowScheduler())
+    headway_c = agv_c._calc_follow_on_headway_s(
+        edge_c.start_node_id,
+        edge_c.end_node_id,
+        speed_mps=1.5,
+    )
+    headway_d = agv_d._calc_follow_on_headway_s(
+        edge_d.start_node_id,
+        edge_d.end_node_id,
+        speed_mps=1.5,
+    )
+
+    assert_true("Type C headway positive", headway_c > 0.0)
+    assert_true("Type D wider lane reduces headway", headway_d < headway_c)
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -874,6 +943,8 @@ if __name__ == "__main__":
         test_common_demand_lifecycle_metrics,
         test_real_demand_completion_metrics,
         test_topology_ranking_summary,
+        test_follow_on_headway_blocks_close_entry,
+        test_type_d_follow_on_headway_shorter_than_c,
     ]
     passed = failed = 0
     for t in tests:

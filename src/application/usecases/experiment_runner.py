@@ -84,6 +84,7 @@ class RunResult:
     total_travel_distance_m: float  = 0.0
     max_queue_length: int           = 0
     headon_total: int               = 0
+    followon_total: int             = 0
     retry_total: int                = 0
     avg_retry_per_headon: float     = 0.0
     top_bottleneck_node: str        = ""
@@ -106,7 +107,7 @@ SUMMARY_COLUMNS = [
     "reservation_failure_rate", "reroute_count",
     "node_occupancy_rate", "edge_occupancy_rate", "agv_utilization",
     "total_travel_distance_m", "max_queue_length",
-    "headon_total", "retry_total", "avg_retry_per_headon",
+    "headon_total", "followon_total", "retry_total", "avg_retry_per_headon",
     "top_bottleneck_node", "top_bottleneck_score",
     "top_headon_edge", "top_headon_edge_count",
     "tasks_requested", "tasks_dispatched", "tasks_rejected_unreachable",
@@ -208,6 +209,7 @@ async def _run_single(
 
         # head-on 분석
         result.headon_total          = kpis.get("headon_total", 0)
+        result.followon_total        = kpis.get("followon_total", 0)
         result.retry_total           = kpis.get("retry_total", 0)
         result.avg_retry_per_headon  = kpis.get("avg_retry_per_headon", 0.0)
         top_headon_edges = kpis.get("top_headon_edges", [])
@@ -415,6 +417,7 @@ def _ranking_sort_key(row: dict) -> tuple:
         -float(row.get("task_acceptance_rate", 0.0)),
         -float(row.get("demand_throughput_per_hour", 0.0)),
         float(row.get("total_wait_time_s", 0.0)),
+        float(row.get("followon_total", 0.0)),
         float(row.get("headon_total", 0.0)),
         float(row.get("retry_total", 0.0)),
     )
@@ -452,6 +455,7 @@ def _build_ranking_rows(results: list[RunResult]) -> list[dict]:
                 "demands_completed": row.get("demands_completed", 0),
                 "demand_throughput_per_hour": row.get("demand_throughput_per_hour", 0.0),
                 "total_wait_time_s": row.get("total_wait_time_s", 0.0),
+                "followon_total": row.get("followon_total", 0),
                 "headon_total": row.get("headon_total", 0),
                 "retry_total": row.get("retry_total", 0),
                 "error": row.get("error", ""),
@@ -477,6 +481,7 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
                 "avg_demand_throughput_per_hour": 0.0,
                 "avg_total_wait_time_s": 0.0,
                 "avg_headon_total": 0.0,
+                "avg_followon_total": 0.0,
             })
             continue
 
@@ -498,6 +503,9 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
             "avg_headon_total": round(
                 sum(float(r["headon_total"]) for r in valid) / count, 3
             ),
+            "avg_followon_total": round(
+                sum(float(r["followon_total"]) for r in valid) / count, 3
+            ),
         })
 
     return sorted(
@@ -508,6 +516,7 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
             -r["avg_completion_rate"],
             -r["avg_demand_throughput_per_hour"],
             r["avg_total_wait_time_s"],
+            r["avg_followon_total"],
             r["avg_headon_total"],
         ),
     )
@@ -597,7 +606,8 @@ class ExperimentRunner:
             "n_agv", "random_seed", "demand_mode", "rank", "winner",
             "topology_type", "completion_rate", "task_acceptance_rate",
             "demands_completed", "demand_throughput_per_hour",
-            "total_wait_time_s", "headon_total", "retry_total", "error",
+            "total_wait_time_s", "followon_total", "headon_total",
+            "retry_total", "error",
         ]
         with open(ranking_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=ranking_columns, extrasaction="ignore")
@@ -698,6 +708,23 @@ class ExperimentRunner:
             print(f"{'Type '+t:6s}", end="")
             for n in cfg.agv_counts:
                 value = avg_for(t, n, "headon_total")
+                if value is not None:
+                    print(f"{value:>{col_w}.1f}", end="")
+                else:
+                    print(f"{'ERR':>{col_w}}", end="")
+            print()
+
+        print(f"\nSame-direction follow-on 차단 횟수 매트릭스")
+        print(f"{'Type':6s}", end="")
+        for n in cfg.agv_counts:
+            print(f"{'AGV='+str(n):>{col_w}}", end="")
+        print()
+        print("─" * (6 + col_w * len(cfg.agv_counts)))
+
+        for t in cfg.types:
+            print(f"{'Type '+t:6s}", end="")
+            for n in cfg.agv_counts:
+                value = avg_for(t, n, "followon_total")
                 if value is not None:
                     print(f"{value:>{col_w}.1f}", end="")
                 else:

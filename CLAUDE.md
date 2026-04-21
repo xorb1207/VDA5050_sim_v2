@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T34
+│   └── test_simulation.py     T1~T36
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -99,7 +99,8 @@ nav graph YAML         fab_nav_graph.yaml
 노드 점유: 정차/대기 충돌 처리
 엣지 예약: 이동 중 교행(head-on) 감지
   - reserve_edge(src, dst): 역방향 활성 예약 있으면 False
-  - follow-on(같은 방향)은 허용 — 노드 점유로 제어
+  - follow-on(같은 방향)은 진입 headway로 안전거리 제어
+  - Type D wide lane은 Type C보다 짧은 follow-on headway를 사용
 ```
 
 ### Conflict Resolution 정책
@@ -167,7 +168,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T34)
+## 테스트 구조 (T1~T36)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -191,6 +192,8 @@ T31:     DemandSet common/capability 생성 검증
 T32:     Common demand lifecycle metrics 검증
 T33:     Real demand completion event/KPI 검증
 T34:     Topology ranking summary 검증
+T35:     Same-direction follow-on headway 차단 검증
+T36:     Type D wide lane follow-on headway 축소 검증
 ```
 
 실행:
@@ -241,6 +244,7 @@ python -m src.application.usecases.experiment_runner \
 | node_occupancy_rate | 노드 점유율 |
 | edge_occupancy_rate | 엣지 점유율 |
 | headon_total | head-on 진성 충돌 횟수 |
+| followon_total | same-direction follow-on 안전거리 차단 횟수 |
 | retry_total | 대기 중 재시도 횟수 (병목 강도) |
 | avg_retry_per_headon | 충돌 1건당 평균 재시도 |
 | bottleneck_nodes | congestion_score 상위 5 노드 |
@@ -260,6 +264,7 @@ python -m src.application.usecases.experiment_runner \
 - [x] dropoff 기준 실제 demand 완료 이벤트/KPI 연결
 - [x] multi-seed 반복 실험 설정
 - [x] topology ranking 기준 및 승패 자동 요약
+- [x] same-direction follow-on 안전거리 1차 반영
 
 ### 중기 (Phase 3 완성)
 - [ ] **경로 전체 사전 예약 (pre-reservation)**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약. 실제 RMF Trajectory 방식에 가장 가까운 구현

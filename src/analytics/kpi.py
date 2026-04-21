@@ -95,6 +95,7 @@ class KPICalculator:
              "occupancy_rate": round(t / sim_time_s, 4),
              "congestion_score": edge_scores.get(eid, 0.0),
              "headon_count": scheduler._edge_headon_counts.get(eid, 0),
+             "followon_count": scheduler._edge_followon_counts.get(eid, 0),
              "retry_count": scheduler._edge_retry_counts.get(eid, 0)}
             for eid, t in sorted(edge_times.items(), key=lambda x: x[1], reverse=True)
         ][:5]
@@ -123,6 +124,7 @@ class KPICalculator:
             "reservation_failure_rate":    reservation_failure_rate,
             "reroute_count":               reroute_count,
             "headon_total":                headon_summary["headon_total"],
+            "followon_total":              headon_summary["followon_total"],
             "retry_total":                 headon_summary["retry_total"],
             "avg_retry_per_headon":        headon_summary["avg_retry_per_headon"],
             "top_headon_edges":            headon_summary["top_headon_edges"],

@@ -28,8 +28,9 @@ class TimeWindowScheduler:
     """
     노드 + 엣지 Time-window 예약 엔진.
 
-    엣지 예약 추가로 head-on 충돌 감지 가능:
+    엣지 예약 추가로 head-on 및 same-direction follow-on 충돌 감지 가능:
       - reserve_edge("A__B") 시 역방향 "B__A" 예약 존재 확인
+      - 같은 방향 진입 시각 간격이 headway보다 짧으면 추종 안전거리 위반
       - 충돌 시 False 반환 → AGV WAITING_RESERVATION 대기
     """
 
@@ -41,6 +42,7 @@ class TimeWindowScheduler:
         # 엣지 예약
         self._edge_reservations: dict[str, list[EdgeReservation]] = defaultdict(list)
         self._edge_headon_counts: dict[str, int] = defaultdict(int)  # 역방향 차단 (진성 충돌)
+        self._edge_followon_counts: dict[str, int] = defaultdict(int)  # 같은 방향 안전거리 차단
         self._edge_retry_counts:  dict[str, int] = defaultdict(int)  # 대기 중 재시도 (병목 강도)
         self._edge_congestion_counts: dict[str, int] = defaultdict(int)  # 합산 (하위호환)
 
@@ -118,11 +120,12 @@ class TimeWindowScheduler:
         agv_id: str,
         start_time: float,
         end_time: float,
+        same_direction_headway_s: float = 0.0,
     ) -> bool:
         """
         엣지 예약 시도.
-        head-on만 차단: 역방향(dst→src) 활성 예약 존재 시 False.
-        follow-on(같은 방향)은 허용 — 노드 점유로 충분히 제어됨.
+        - 역방향(dst→src) 활성 예약과 시간 겹침 시 head-on 차단.
+        - 같은 방향(src→dst)은 진입 시각 간 headway를 만족해야 추종 허용.
         """
         edge_key    = f"{src_id}__{dst_id}"
         reverse_key = f"{dst_id}__{src_id}"
@@ -136,6 +139,21 @@ class TimeWindowScheduler:
             if self._has_edge_conflict(reverse_active, start_time, end_time):
                 # 진성 충돌: 역방향 차단
                 self._edge_headon_counts[edge_key] += 1
+                self._edge_congestion_counts[edge_key] += 1
+                self._reserve_failure += 1
+                return False
+
+            # same-direction follow-on 안전거리 확인.
+            same_direction_active = [
+                r for r in self._edge_reservations[edge_key]
+                if not r.released and r.agv_id != agv_id
+            ]
+            if self._has_followon_conflict(
+                same_direction_active,
+                start_time,
+                same_direction_headway_s,
+            ):
+                self._edge_followon_counts[edge_key] += 1
                 self._edge_congestion_counts[edge_key] += 1
                 self._reserve_failure += 1
                 return False
@@ -253,6 +271,7 @@ class TimeWindowScheduler:
         - top_headon_edges: 충돌 상위 엣지
         """
         headon_total = sum(self._edge_headon_counts.values())
+        followon_total = sum(self._edge_followon_counts.values())
         retry_total  = sum(self._edge_retry_counts.values())
         avg_retry = round(retry_total / headon_total, 2) if headon_total > 0 else 0.0
         top_edges = sorted(
@@ -260,6 +279,7 @@ class TimeWindowScheduler:
         )[:5]
         return {
             "headon_total":          headon_total,
+            "followon_total":        followon_total,
             "retry_total":           retry_total,
             "avg_retry_per_headon":  avg_retry,
             "top_headon_edges":      [{"edge": e, "count": c} for e, c in top_edges],
@@ -280,5 +300,18 @@ class TimeWindowScheduler:
     ) -> bool:
         return any(
             not r.released and not (end <= r.start_time or start >= r.end_time)
+            for r in existing
+        )
+
+    def _has_followon_conflict(
+        self,
+        existing: list[EdgeReservation],
+        start: float,
+        headway_s: float,
+    ) -> bool:
+        if headway_s <= 0.0:
+            return False
+        return any(
+            not r.released and abs(start - r.start_time) < headway_s
             for r in existing
         )

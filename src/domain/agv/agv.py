@@ -28,6 +28,12 @@ if TYPE_CHECKING:
 
 BATTERY_ENABLED = False
 
+ROBOT_LENGTH_M = 1.8
+PROTECTIVE_ZONE_M = 0.2
+WARNING_ZONE_M = 0.5
+BASE_FOLLOWING_DISTANCE_M = ROBOT_LENGTH_M + PROTECTIVE_ZONE_M + WARNING_ZONE_M
+MIN_FOLLOW_ON_HEADWAY_S = 0.5
+
 # ── Conflict Resolution 파라미터 ──────────────────────────────
 EDGE_RETRY_INTERVAL_S  = 0.1   # 1~3회 기본 재시도 간격
 BACKOFF_MAX_S          = 0.3   # backoff 상한 (FAB: 장시간 정지 방지)
@@ -300,11 +306,13 @@ class AGV:
         dist     = self._graph._calc_distance(src, dst) if (src in self._graph.nodes and dst in self._graph.nodes) else 1.0
         speed    = max(self._get_effective_speed(sim_time), 0.01)
         travel_t = dist / speed
+        follow_on_headway_s = self._calc_follow_on_headway_s(src, dst, speed)
 
         ok = await self._sched.reserve_edge(
             src, dst, self.agv_id,
             start_time=sim_time,
             end_time=sim_time + travel_t,
+            same_direction_headway_s=follow_on_headway_s,
         )
 
         if ok:
@@ -417,6 +425,20 @@ class AGV:
         for r in self._sched._edge_reservations.get(edge_key, []):
             if not r.released:
                 return r.agv_id
+        return None
+
+    def _calc_follow_on_headway_s(self, src: str, dst: str, speed_mps: float) -> float:
+        edge = self._find_edge(src, dst)
+        width_m = edge.width_m if edge else 1.5
+        width_factor = 1.5 / max(width_m, 0.1)
+        following_distance_m = BASE_FOLLOWING_DISTANCE_M * width_factor
+        return max(MIN_FOLLOW_ON_HEADWAY_S, following_distance_m / max(speed_mps, 0.01))
+
+    def _find_edge(self, src: str, dst: str):
+        for edge_id in self._graph._out_edges.get(src, []):
+            edge = self._graph.edges[edge_id]
+            if edge.end_node_id == dst:
+                return edge
         return None
 
     async def _cancel_current_edge(self) -> None:
