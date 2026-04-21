@@ -92,7 +92,9 @@ SUMMARY_COLUMNS = [
     "headon_total", "retry_total", "avg_retry_per_headon",
     "top_bottleneck_node", "top_bottleneck_score",
     "top_headon_edge", "top_headon_edge_count",
-    "orders_published", "no_idle_agv", "not_enough_available_nodes",
+    "orders_published", "routeable_pair_count",
+    "no_idle_agv", "not_enough_available_nodes", "no_routeable_available_pair",
+    "no_routeable_current_pair",
     "no_path_to_pickup", "no_path_pickup_to_dropoff",
     "station_unreachable_from_start_count",
     "station_pair_unreachable_count", "station_min_access_edges",
@@ -276,8 +278,11 @@ def _flatten_summary_row(result: RunResult) -> dict:
 
     row.update({
         "orders_published": task.get("orders_published", 0),
+        "routeable_pair_count": task.get("routeable_pair_count", 0),
         "no_idle_agv": task.get("no_idle_agv", 0),
         "not_enough_available_nodes": task.get("not_enough_available_nodes", 0),
+        "no_routeable_available_pair": task.get("no_routeable_available_pair", 0),
+        "no_routeable_current_pair": task.get("no_routeable_current_pair", 0),
         "no_path_to_pickup": task.get("no_path_to_pickup", 0),
         "no_path_pickup_to_dropoff": task.get("no_path_pickup_to_dropoff", 0),
         "station_unreachable_from_start_count": (

@@ -27,6 +27,8 @@ class TaskGenerationDiagnostics:
     no_idle_agv: int = 0
     not_enough_work_nodes: int = 0
     not_enough_available_nodes: int = 0
+    no_routeable_available_pair: int = 0
+    no_routeable_current_pair: int = 0
     no_path_to_pickup: int = 0
     no_path_pickup_to_dropoff: int = 0
     path_failures: dict[str, int] = field(default_factory=dict)
@@ -37,6 +39,8 @@ class TaskGenerationDiagnostics:
             "no_idle_agv": self.no_idle_agv,
             "not_enough_work_nodes": self.not_enough_work_nodes,
             "not_enough_available_nodes": self.not_enough_available_nodes,
+            "no_routeable_available_pair": self.no_routeable_available_pair,
+            "no_routeable_current_pair": self.no_routeable_current_pair,
             "no_path_to_pickup": self.no_path_to_pickup,
             "no_path_pickup_to_dropoff": self.no_path_pickup_to_dropoff,
             "path_failures": dict(sorted(self.path_failures.items())),
@@ -73,10 +77,18 @@ class TaskGenerator:
             nid for nid, n in graph.nodes.items()
             if n.role == NodeRole.WORK or n.is_parking_spot
         ]
+        self._routeable_pairs = [
+            (pickup, dropoff)
+            for pickup in self._work_nodes
+            for dropoff in self._work_nodes
+            if pickup != dropoff and graph.get_path(pickup, dropoff)
+        ]
 
     @property
     def diagnostics(self) -> dict:
-        return self._diagnostics.to_dict()
+        data = self._diagnostics.to_dict()
+        data["routeable_pair_count"] = len(self._routeable_pairs)
+        return data
 
     async def step(
         self,
@@ -120,13 +132,46 @@ class TaskGenerator:
             self._diagnostics.not_enough_available_nodes += 1
             return
 
-        pickup, dropoff = random.sample(available, 2)
+        candidate_pairs = [
+            (pickup, dropoff)
+            for pickup, dropoff in self._routeable_pairs
+            if pickup in available
+            and dropoff in available
+            and self._graph.get_path(agv.current_node_id, pickup)
+        ]
+        if not candidate_pairs and len(available) < len(self._work_nodes):
+            self._diagnostics.no_routeable_available_pair += 1
+            available = self._work_nodes
+            candidate_pairs = [
+                (pickup, dropoff)
+                for pickup, dropoff in self._routeable_pairs
+                if self._graph.get_path(agv.current_node_id, pickup)
+            ]
+
+        if not candidate_pairs:
+            reachable_pickups = [
+                node_id for node_id in available
+                if self._graph.get_path(agv.current_node_id, node_id)
+            ]
+            if not reachable_pickups:
+                self._diagnostics.no_path_to_pickup += 1
+                for node_id in available[:3]:
+                    self._record_path_failure(agv.current_node_id, node_id)
+            else:
+                self._diagnostics.no_routeable_current_pair += 1
+                for pickup in reachable_pickups[:3]:
+                    self._record_path_failure(pickup, "<routeable_dropoff>")
+            self._next_task_time = sim_time + self._interval
+            return
+
+        pickup, dropoff = random.choice(candidate_pairs)
 
         # 현재 위치 → pickup → dropoff 전체 경로
         full_path = self._graph.get_path(agv.current_node_id, pickup)
         if not full_path:
             self._diagnostics.no_path_to_pickup += 1
             self._record_path_failure(agv.current_node_id, pickup)
+            self._next_task_time = sim_time + self._interval
             return
 
         if dropoff != pickup:
@@ -134,6 +179,7 @@ class TaskGenerator:
             if not tail:
                 self._diagnostics.no_path_pickup_to_dropoff += 1
                 self._record_path_failure(pickup, dropoff)
+                self._next_task_time = sim_time + self._interval
                 return
             full_path = full_path + tail[1:]  # 중복 노드 제거
 

@@ -599,6 +599,32 @@ def test_type_c_d_station_pair_reachability():
         )
 
 
+async def _test_type_a_routeable_task_selection():
+    print("\n[T29] Type A routeable task selection")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("A")
+    bus = LocalMemoryBus()
+    gen = TaskGenerator(graph, bus, task_interval_s=0.0)
+
+    agv = AGV("AGV_001", bus, graph, TimeWindowScheduler())
+    agv.current_node_id = "CH_01"
+    agv.physics.x = graph.nodes["CH_01"].x
+    agv.physics.y = graph.nodes["CH_01"].y
+
+    await gen.step(sim_time=0.0, agvs={"AGV_001": agv})
+    diag = gen.diagnostics
+
+    assert_true("routeable pair 존재", diag["routeable_pair_count"] > 0)
+    assert_eq("Order 1건 발행", diag["orders_published"], 1)
+    assert_eq("pickup 경로 실패 없음", diag["no_path_to_pickup"], 0)
+    assert_eq("dropoff 경로 실패 없음", diag["no_path_pickup_to_dropoff"], 0)
+
+
+def test_type_a_routeable_task_selection():
+    run(_test_type_a_routeable_task_selection())
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -634,6 +660,7 @@ if __name__ == "__main__":
         test_task_generator_diagnostics,
         test_kpi_headon_fields,
         test_type_c_d_station_pair_reachability,
+        test_type_a_routeable_task_selection,
     ]
     passed = failed = 0
     for t in tests:
