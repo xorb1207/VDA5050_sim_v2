@@ -10,5 +10,6 @@ agv_counts: [8, 12, 16, 20, 24]
 
 duration_s: 1800
 task_interval_s: 3.0
+random_seed: 42
 
 output_dir: outputs/experiments

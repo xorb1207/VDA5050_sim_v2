@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T27
+│   └── test_simulation.py     T1~T28
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -172,6 +172,7 @@ T24:     Type C same-lane head-on 없음
 T25:     Type D same-lane head-on 없음
 T26:     TaskGenerator diagnostics 카운터 검증
 T27:     KPI head-on 필드 회귀 검증
+T28:     Type C/D station pair reachability 검증
 ```
 
 실행:

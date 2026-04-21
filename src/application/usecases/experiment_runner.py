@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import csv
 import json
+import random
 import time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -41,6 +42,7 @@ class ExperimentConfig:
     agv_counts: list[int]     = field(default_factory=lambda: [3, 5, 8, 12])
     duration_s: float         = 600.0
     task_interval_s: float    = 5.0
+    random_seed: int          = 42
     output_dir: str           = "outputs/experiments"
     run_id: Optional[str]     = None
 
@@ -90,6 +92,11 @@ SUMMARY_COLUMNS = [
     "headon_total", "retry_total", "avg_retry_per_headon",
     "top_bottleneck_node", "top_bottleneck_score",
     "top_headon_edge", "top_headon_edge_count",
+    "orders_published", "no_idle_agv", "not_enough_available_nodes",
+    "no_path_to_pickup", "no_path_pickup_to_dropoff",
+    "station_unreachable_from_start_count",
+    "station_pair_unreachable_count", "station_min_access_edges",
+    "siding_coverage_ratio",
     "sim_time_s", "wall_time_s", "error",
 ]
 
@@ -100,11 +107,13 @@ async def _run_single(
     n_agv: int,
     duration_s: float,
     task_interval_s: float,
+    random_seed: int = 42,
 ) -> RunResult:
     result = RunResult(topology_type=topology_type, n_agv=n_agv)
     t0 = time.perf_counter()
 
     try:
+        random.seed(random_seed)
         gen_map = MapTopologyGenerator()
         graph   = gen_map.generate(topology_type)
         bus     = LocalMemoryBus()
@@ -184,6 +193,7 @@ def _build_station_access_diagnostics(graph: MapGraph) -> dict:
     stations = graph.get_stations()
     unreachable: list[str] = []
     access_edge_counts: dict[str, int] = {}
+    station_details: list[dict] = []
 
     charger_nodes = [n.node_id for n in graph.get_chargers()]
     fallback_start = next(iter(graph.nodes), "")
@@ -201,12 +211,36 @@ def _build_station_access_diagnostics(graph: MapGraph) -> dict:
         access_edge_counts[station.node_id] = len(inbound) + len(outbound)
         if start and not graph.get_path(start, station.node_id):
             unreachable.append(station.node_id)
+        station_details.append({
+            "station_id": station.node_id,
+            "inbound_edges": len(inbound),
+            "outbound_edges": len(outbound),
+            "access_edges": len(inbound) + len(outbound),
+        })
+
+    pair_failures: list[dict] = []
+    for src in stations:
+        for dst in stations:
+            if src.node_id == dst.node_id:
+                continue
+            if not graph.get_path(src.node_id, dst.node_id):
+                pair_failures.append({
+                    "src": src.node_id,
+                    "dst": dst.node_id,
+                })
 
     return {
         "station_count": len(stations),
         "reachable_from_first_charger": len(stations) - len(unreachable),
+        "unreachable_from_first_charger_count": len(unreachable),
         "unreachable_from_first_charger": unreachable[:10],
+        "station_pair_unreachable_count": len(pair_failures),
+        "station_pair_unreachable_samples": pair_failures[:10],
         "min_access_edges": min(access_edge_counts.values(), default=0),
+        "station_details": sorted(
+            station_details,
+            key=lambda x: (x["access_edges"], x["station_id"]),
+        ),
     }
 
 
@@ -233,6 +267,31 @@ def _build_siding_coverage_diagnostics(graph: MapGraph) -> dict:
     }
 
 
+def _flatten_summary_row(result: RunResult) -> dict:
+    row = asdict(result)
+    diagnostics = row.get("diagnostics", {})
+    task = diagnostics.get("task_generation", {})
+    station = diagnostics.get("station_access", {})
+    siding = diagnostics.get("siding_coverage", {})
+
+    row.update({
+        "orders_published": task.get("orders_published", 0),
+        "no_idle_agv": task.get("no_idle_agv", 0),
+        "not_enough_available_nodes": task.get("not_enough_available_nodes", 0),
+        "no_path_to_pickup": task.get("no_path_to_pickup", 0),
+        "no_path_pickup_to_dropoff": task.get("no_path_pickup_to_dropoff", 0),
+        "station_unreachable_from_start_count": (
+            station.get("unreachable_from_first_charger_count", 0)
+        ),
+        "station_pair_unreachable_count": (
+            station.get("station_pair_unreachable_count", 0)
+        ),
+        "station_min_access_edges": station.get("min_access_edges", 0),
+        "siding_coverage_ratio": siding.get("coverage_ratio", 0.0),
+    })
+    return row
+
+
 # ── 배치 실험 러너 ─────────────────────────────────────────────
 class ExperimentRunner:
     def __init__(self, config: ExperimentConfig) -> None:
@@ -256,7 +315,7 @@ class ExperimentRunner:
                 idx += 1
                 print(f"[{idx:2d}/{total}] Type-{t}  AGV={n:2d}  ...", end=" ", flush=True)
                 result = asyncio.run(
-                    _run_single(t, n, cfg.duration_s, cfg.task_interval_s)
+                    _run_single(t, n, cfg.duration_s, cfg.task_interval_s, cfg.random_seed)
                 )
                 results.append(result)
                 if result.error:
@@ -283,7 +342,7 @@ class ExperimentRunner:
         )
 
     def _save_summary(self, results: list[RunResult]) -> None:
-        rows = [asdict(r) for r in results]
+        rows = [_flatten_summary_row(r) for r in results]
 
         # CSV
         csv_path = self.out_dir / "summary.csv"
@@ -369,6 +428,7 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         agv_counts     = raw.get("agv_counts", [3, 5, 8, 12]),
         duration_s     = float(raw.get("duration_s", 600.0)),
         task_interval_s= float(raw.get("task_interval_s", 5.0)),
+        random_seed    = int(raw.get("random_seed", 42)),
         output_dir     = raw.get("output_dir", "outputs/experiments"),
         run_id         = raw.get("run_id", None),
     )
@@ -386,6 +446,8 @@ def main() -> None:
                         help="시뮬 시간 초 (기본: 600)")
     parser.add_argument("--interval", type=float, default=5.0,
                         help="태스크 발행 간격 초 (기본: 5)")
+    parser.add_argument("--seed",     type=int, default=42,
+                        help="난수 시드 (기본: 42)")
     parser.add_argument("--output",   default="outputs/experiments",
                         help="결과 저장 디렉토리")
     args = parser.parse_args()
@@ -398,6 +460,7 @@ def main() -> None:
             agv_counts     = args.agv,
             duration_s     = args.duration,
             task_interval_s= args.interval,
+            random_seed    = args.seed,
             output_dir     = args.output,
         )
 

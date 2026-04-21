@@ -579,6 +579,26 @@ def test_kpi_headon_fields():
     run(_test_kpi_headon_fields())
 
 
+def test_type_c_d_station_pair_reachability():
+    print("\n[T28] Type C/D station pair reachability")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+    from src.application.usecases.experiment_runner import _build_station_access_diagnostics
+
+    gen = MapTopologyGenerator()
+    for type_code in ("C", "D"):
+        graph = gen.generate(type_code)
+        diag = _build_station_access_diagnostics(graph)
+        assert_eq(
+            f"Type {type_code} station pair unreachable",
+            diag["station_pair_unreachable_count"],
+            0,
+        )
+        assert_true(
+            f"Type {type_code} station min access edges >= 4",
+            diag["min_access_edges"] >= 4,
+        )
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -613,6 +633,7 @@ if __name__ == "__main__":
         # Diagnostics / KPI regression (T26~T27)
         test_task_generator_diagnostics,
         test_kpi_headon_fields,
+        test_type_c_d_station_pair_reachability,
     ]
     passed = failed = 0
     for t in tests:
