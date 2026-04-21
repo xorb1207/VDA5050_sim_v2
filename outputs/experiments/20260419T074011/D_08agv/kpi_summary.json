@@ -1,0 +1,21 @@
+{
+  "topology_type": "D",
+  "n_agv": 8,
+  "tasks_completed": 19,
+  "throughput_tasks_per_hour": 114.0,
+  "avg_task_completion_time_s": 185.25,
+  "avg_wait_time_s": 0.0,
+  "total_wait_time_s": 0.0,
+  "reservation_failure_rate": 0.0,
+  "reroute_count": 0,
+  "node_occupancy_rate": 0.0,
+  "edge_occupancy_rate": 0.046,
+  "agv_utilization": 0.9707,
+  "total_travel_distance_m": 4509.54,
+  "max_queue_length": 2,
+  "top_bottleneck_node": "",
+  "top_bottleneck_score": 0.0,
+  "sim_time_s": 600.02,
+  "wall_time_s": 5.76,
+  "error": ""
+}

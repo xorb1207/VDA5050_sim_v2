@@ -1,0 +1,37 @@
+name: baseline_fab_a
+description: "FAB A baseline — 3 AGVs, one-way, single-lane. 이후 비교의 기준점."
+
+map_file: maps/sample_fab.json
+
+runtime_seconds: 300
+tick_hz: 50
+random_seed: 42
+
+fleet:
+  size: 3
+  initial_nodes:
+    - node_charger_01
+    - node_charger_02
+    - node_charger_01
+
+traffic_policy:
+  lane_mode: one_way
+  lane_count: 1
+  reservation_mode: next_node
+  lookahead_depth: 1
+  allow_reroute: false
+  critical_section_enabled: false
+
+task_profile:
+  type: cyclic
+  generator: fixed_interval
+  interval_seconds: 20
+  pickup_nodes:
+    - node_work_01
+  dropoff_nodes:
+    - node_work_02
+
+outputs:
+  save_kpi_json: true
+  save_kpi_csv: true
+  save_node_stats: true

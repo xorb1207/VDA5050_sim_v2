@@ -1,0 +1,8 @@
+{
+  "scenario_name": "scenario_025",
+  "random_seed": 42,
+  "runtime_seconds": 300,
+  "tick_hz": 50,
+  "wall_time_s": 2.7,
+  "finished_at": "2026-04-18T15:55:04.010554+00:00"
+}

@@ -1,0 +1,2286 @@
+{
+  "metadata": {
+    "name": "FAB_AMR_Map_v1",
+    "version": "1.0",
+    "width_m": 640,
+    "height_m": 120,
+    "coordinate_system": {
+      "x": "0=서(West), 640=동(East)",
+      "y": "20=남측(South corridor), 60=중앙(Center), 100=북측(North corridor)"
+    },
+    "corridors": {
+      "north": {
+        "y": 100,
+        "width_m": 2.0,
+        "mode": "bidirectional",
+        "speed_limit_ms": 1.5
+      },
+      "center": {
+        "y": 60,
+        "width_m": 1.5,
+        "mode": "unidirectional_east_to_west",
+        "speed_limit_ms": 1.5
+      },
+      "south": {
+        "y": 20,
+        "width_m": 2.0,
+        "mode": "bidirectional",
+        "speed_limit_ms": 1.5
+      }
+    },
+    "bays": [
+      {
+        "id": "B1",
+        "x": 0
+      },
+      {
+        "id": "B2",
+        "x": 160
+      },
+      {
+        "id": "B3",
+        "x": 320
+      },
+      {
+        "id": "B4",
+        "x": 480
+      },
+      {
+        "id": "B5",
+        "x": 640
+      }
+    ],
+    "robot": {
+      "width_mm": 800,
+      "length_mm": 1800,
+      "max_speed_ms": 1.5,
+      "protective_zone_mm": 200,
+      "warning_zone_mm": 500
+    },
+    "stats": {
+      "total_nodes": 82,
+      "total_edges": 162,
+      "stations": 27,
+      "chargers": 8,
+      "waypoints": 51
+    }
+  },
+  "nodes": [
+    {
+      "id": "WP_N_000",
+      "x": 0,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=0m"
+    },
+    {
+      "id": "WP_N_040",
+      "x": 40,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=40m"
+    },
+    {
+      "id": "WP_N_080",
+      "x": 80,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=80m"
+    },
+    {
+      "id": "WP_N_120",
+      "x": 120,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=120m"
+    },
+    {
+      "id": "WP_N_160",
+      "x": 160,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=160m"
+    },
+    {
+      "id": "WP_N_200",
+      "x": 200,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=200m"
+    },
+    {
+      "id": "WP_N_240",
+      "x": 240,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=240m"
+    },
+    {
+      "id": "WP_N_280",
+      "x": 280,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=280m"
+    },
+    {
+      "id": "WP_N_320",
+      "x": 320,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=320m"
+    },
+    {
+      "id": "WP_N_360",
+      "x": 360,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=360m"
+    },
+    {
+      "id": "WP_N_400",
+      "x": 400,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=400m"
+    },
+    {
+      "id": "WP_N_440",
+      "x": 440,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=440m"
+    },
+    {
+      "id": "WP_N_480",
+      "x": 480,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=480m"
+    },
+    {
+      "id": "WP_N_520",
+      "x": 520,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=520m"
+    },
+    {
+      "id": "WP_N_560",
+      "x": 560,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=560m"
+    },
+    {
+      "id": "WP_N_600",
+      "x": 600,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=600m"
+    },
+    {
+      "id": "WP_N_640",
+      "x": 640,
+      "y": 100,
+      "type": "waypoint",
+      "corridor": "north",
+      "description": "북측 엔드베이 X=640m"
+    },
+    {
+      "id": "WP_C_000",
+      "x": 0,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=0m"
+    },
+    {
+      "id": "WP_C_040",
+      "x": 40,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=40m"
+    },
+    {
+      "id": "WP_C_080",
+      "x": 80,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=80m"
+    },
+    {
+      "id": "WP_C_120",
+      "x": 120,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=120m"
+    },
+    {
+      "id": "WP_C_160",
+      "x": 160,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=160m"
+    },
+    {
+      "id": "WP_C_200",
+      "x": 200,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=200m"
+    },
+    {
+      "id": "WP_C_240",
+      "x": 240,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=240m"
+    },
+    {
+      "id": "WP_C_280",
+      "x": 280,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=280m"
+    },
+    {
+      "id": "WP_C_320",
+      "x": 320,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=320m"
+    },
+    {
+      "id": "WP_C_360",
+      "x": 360,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=360m"
+    },
+    {
+      "id": "WP_C_400",
+      "x": 400,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=400m"
+    },
+    {
+      "id": "WP_C_440",
+      "x": 440,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=440m"
+    },
+    {
+      "id": "WP_C_480",
+      "x": 480,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=480m"
+    },
+    {
+      "id": "WP_C_520",
+      "x": 520,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=520m"
+    },
+    {
+      "id": "WP_C_560",
+      "x": 560,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=560m"
+    },
+    {
+      "id": "WP_C_600",
+      "x": 600,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=600m"
+    },
+    {
+      "id": "WP_C_640",
+      "x": 640,
+      "y": 60,
+      "type": "waypoint",
+      "corridor": "center",
+      "description": "중앙통로 X=640m"
+    },
+    {
+      "id": "WP_S_000",
+      "x": 0,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=0m"
+    },
+    {
+      "id": "WP_S_040",
+      "x": 40,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=40m"
+    },
+    {
+      "id": "WP_S_080",
+      "x": 80,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=80m"
+    },
+    {
+      "id": "WP_S_120",
+      "x": 120,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=120m"
+    },
+    {
+      "id": "WP_S_160",
+      "x": 160,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=160m"
+    },
+    {
+      "id": "WP_S_200",
+      "x": 200,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=200m"
+    },
+    {
+      "id": "WP_S_240",
+      "x": 240,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=240m"
+    },
+    {
+      "id": "WP_S_280",
+      "x": 280,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=280m"
+    },
+    {
+      "id": "WP_S_320",
+      "x": 320,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=320m"
+    },
+    {
+      "id": "WP_S_360",
+      "x": 360,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=360m"
+    },
+    {
+      "id": "WP_S_400",
+      "x": 400,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=400m"
+    },
+    {
+      "id": "WP_S_440",
+      "x": 440,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=440m"
+    },
+    {
+      "id": "WP_S_480",
+      "x": 480,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=480m"
+    },
+    {
+      "id": "WP_S_520",
+      "x": 520,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=520m"
+    },
+    {
+      "id": "WP_S_560",
+      "x": 560,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=560m"
+    },
+    {
+      "id": "WP_S_600",
+      "x": 600,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=600m"
+    },
+    {
+      "id": "WP_S_640",
+      "x": 640,
+      "y": 20,
+      "type": "waypoint",
+      "corridor": "south",
+      "description": "남측 엔드베이 X=640m"
+    },
+    {
+      "id": "ST_N_01",
+      "x": 0,
+      "y": 88,
+      "type": "station",
+      "station_id": "S1",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S1 @ X=0m"
+    },
+    {
+      "id": "ST_N_02",
+      "x": 80,
+      "y": 88,
+      "type": "station",
+      "station_id": "S2",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S2 @ X=80m"
+    },
+    {
+      "id": "ST_N_03",
+      "x": 160,
+      "y": 88,
+      "type": "station",
+      "station_id": "S3",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S3 @ X=160m"
+    },
+    {
+      "id": "ST_N_04",
+      "x": 240,
+      "y": 88,
+      "type": "station",
+      "station_id": "S4",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S4 @ X=240m"
+    },
+    {
+      "id": "ST_N_05",
+      "x": 320,
+      "y": 88,
+      "type": "station",
+      "station_id": "S5",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S5 @ X=320m"
+    },
+    {
+      "id": "ST_N_06",
+      "x": 400,
+      "y": 88,
+      "type": "station",
+      "station_id": "S6",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S6 @ X=400m"
+    },
+    {
+      "id": "ST_N_07",
+      "x": 480,
+      "y": 88,
+      "type": "station",
+      "station_id": "S7",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S7 @ X=480m"
+    },
+    {
+      "id": "ST_N_08",
+      "x": 560,
+      "y": 88,
+      "type": "station",
+      "station_id": "S8",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S8 @ X=560m"
+    },
+    {
+      "id": "ST_N_09",
+      "x": 640,
+      "y": 88,
+      "type": "station",
+      "station_id": "S9",
+      "corridor": "north",
+      "pocket_side": "south",
+      "description": "북측 스테이션 S9 @ X=640m"
+    },
+    {
+      "id": "ST_C_01",
+      "x": 0,
+      "y": 72,
+      "type": "station",
+      "station_id": "S10",
+      "corridor": "center",
+      "pocket_side": "north",
+      "description": "중앙 스테이션 S10 @ X=0m (북쪽 포켓)"
+    },
+    {
+      "id": "ST_C_02",
+      "x": 160,
+      "y": 72,
+      "type": "station",
+      "station_id": "S11",
+      "corridor": "center",
+      "pocket_side": "north",
+      "description": "중앙 스테이션 S11 @ X=160m (북쪽 포켓)"
+    },
+    {
+      "id": "ST_C_03",
+      "x": 320,
+      "y": 72,
+      "type": "station",
+      "station_id": "S12",
+      "corridor": "center",
+      "pocket_side": "north",
+      "description": "중앙 스테이션 S12 @ X=320m (북쪽 포켓)"
+    },
+    {
+      "id": "ST_C_04",
+      "x": 480,
+      "y": 72,
+      "type": "station",
+      "station_id": "S13",
+      "corridor": "center",
+      "pocket_side": "north",
+      "description": "중앙 스테이션 S13 @ X=480m (북쪽 포켓)"
+    },
+    {
+      "id": "ST_C_05",
+      "x": 640,
+      "y": 72,
+      "type": "station",
+      "station_id": "S14",
+      "corridor": "center",
+      "pocket_side": "north",
+      "description": "중앙 스테이션 S14 @ X=640m (북쪽 포켓)"
+    },
+    {
+      "id": "ST_S_01",
+      "x": 0,
+      "y": 32,
+      "type": "station",
+      "station_id": "S15",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S15 @ X=0m"
+    },
+    {
+      "id": "ST_S_02",
+      "x": 80,
+      "y": 32,
+      "type": "station",
+      "station_id": "S16",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S16 @ X=80m"
+    },
+    {
+      "id": "ST_S_03",
+      "x": 160,
+      "y": 32,
+      "type": "station",
+      "station_id": "S17",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S17 @ X=160m"
+    },
+    {
+      "id": "ST_S_04",
+      "x": 240,
+      "y": 32,
+      "type": "station",
+      "station_id": "S18",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S18 @ X=240m"
+    },
+    {
+      "id": "ST_S_05",
+      "x": 320,
+      "y": 32,
+      "type": "station",
+      "station_id": "S19",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S19 @ X=320m"
+    },
+    {
+      "id": "ST_S_06",
+      "x": 400,
+      "y": 32,
+      "type": "station",
+      "station_id": "S20",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S20 @ X=400m"
+    },
+    {
+      "id": "ST_S_07",
+      "x": 480,
+      "y": 32,
+      "type": "station",
+      "station_id": "S21",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S21 @ X=480m"
+    },
+    {
+      "id": "ST_S_08",
+      "x": 560,
+      "y": 32,
+      "type": "station",
+      "station_id": "S22",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S22 @ X=560m"
+    },
+    {
+      "id": "ST_S_09",
+      "x": 640,
+      "y": 32,
+      "type": "station",
+      "station_id": "S23",
+      "corridor": "south",
+      "pocket_side": "north",
+      "description": "남측 스테이션 S23 @ X=640m"
+    },
+    {
+      "id": "CH_01",
+      "x": 0,
+      "y": 100,
+      "type": "charger",
+      "charger_id": "C1",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C1 — 북측 서단"
+    },
+    {
+      "id": "CH_02",
+      "x": 320,
+      "y": 100,
+      "type": "charger",
+      "charger_id": "C2",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C2 — 북측 중앙"
+    },
+    {
+      "id": "CH_03",
+      "x": 640,
+      "y": 100,
+      "type": "charger",
+      "charger_id": "C3",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C3 — 북측 동단"
+    },
+    {
+      "id": "CH_04",
+      "x": 0,
+      "y": 60,
+      "type": "charger",
+      "charger_id": "C4",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C4 — 중앙 서단"
+    },
+    {
+      "id": "CH_05",
+      "x": 640,
+      "y": 60,
+      "type": "charger",
+      "charger_id": "C5",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C5 — 중앙 동단"
+    },
+    {
+      "id": "CH_06",
+      "x": 0,
+      "y": 20,
+      "type": "charger",
+      "charger_id": "C6",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C6 — 남측 서단"
+    },
+    {
+      "id": "CH_07",
+      "x": 320,
+      "y": 20,
+      "type": "charger",
+      "charger_id": "C7",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C7 — 남측 중앙"
+    },
+    {
+      "id": "CH_08",
+      "x": 640,
+      "y": 20,
+      "type": "charger",
+      "charger_id": "C8",
+      "charge_rate_pct_per_sec": 0.01068,
+      "description": "충전소 C8 — 남측 동단"
+    }
+  ],
+  "edges": [
+    {
+      "id": "E_N_0000",
+      "from": "WP_N_000",
+      "to": "WP_N_040",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0000_r",
+      "from": "WP_N_040",
+      "to": "WP_N_000",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0001",
+      "from": "WP_N_040",
+      "to": "WP_N_080",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0001_r",
+      "from": "WP_N_080",
+      "to": "WP_N_040",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0002",
+      "from": "WP_N_080",
+      "to": "WP_N_120",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0002_r",
+      "from": "WP_N_120",
+      "to": "WP_N_080",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0003",
+      "from": "WP_N_120",
+      "to": "WP_N_160",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0003_r",
+      "from": "WP_N_160",
+      "to": "WP_N_120",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0004",
+      "from": "WP_N_160",
+      "to": "WP_N_200",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0004_r",
+      "from": "WP_N_200",
+      "to": "WP_N_160",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0005",
+      "from": "WP_N_200",
+      "to": "WP_N_240",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0005_r",
+      "from": "WP_N_240",
+      "to": "WP_N_200",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0006",
+      "from": "WP_N_240",
+      "to": "WP_N_280",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0006_r",
+      "from": "WP_N_280",
+      "to": "WP_N_240",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0007",
+      "from": "WP_N_280",
+      "to": "WP_N_320",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0007_r",
+      "from": "WP_N_320",
+      "to": "WP_N_280",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0008",
+      "from": "WP_N_320",
+      "to": "WP_N_360",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0008_r",
+      "from": "WP_N_360",
+      "to": "WP_N_320",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0009",
+      "from": "WP_N_360",
+      "to": "WP_N_400",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0009_r",
+      "from": "WP_N_400",
+      "to": "WP_N_360",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0010",
+      "from": "WP_N_400",
+      "to": "WP_N_440",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0010_r",
+      "from": "WP_N_440",
+      "to": "WP_N_400",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0011",
+      "from": "WP_N_440",
+      "to": "WP_N_480",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0011_r",
+      "from": "WP_N_480",
+      "to": "WP_N_440",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0012",
+      "from": "WP_N_480",
+      "to": "WP_N_520",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0012_r",
+      "from": "WP_N_520",
+      "to": "WP_N_480",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0013",
+      "from": "WP_N_520",
+      "to": "WP_N_560",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0013_r",
+      "from": "WP_N_560",
+      "to": "WP_N_520",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0014",
+      "from": "WP_N_560",
+      "to": "WP_N_600",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0014_r",
+      "from": "WP_N_600",
+      "to": "WP_N_560",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0015",
+      "from": "WP_N_600",
+      "to": "WP_N_640",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_N_0015_r",
+      "from": "WP_N_640",
+      "to": "WP_N_600",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "north"
+    },
+    {
+      "id": "E_C_0016",
+      "from": "WP_C_640",
+      "to": "WP_C_600",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0017",
+      "from": "WP_C_600",
+      "to": "WP_C_560",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0018",
+      "from": "WP_C_560",
+      "to": "WP_C_520",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0019",
+      "from": "WP_C_520",
+      "to": "WP_C_480",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0020",
+      "from": "WP_C_480",
+      "to": "WP_C_440",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0021",
+      "from": "WP_C_440",
+      "to": "WP_C_400",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0022",
+      "from": "WP_C_400",
+      "to": "WP_C_360",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0023",
+      "from": "WP_C_360",
+      "to": "WP_C_320",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0024",
+      "from": "WP_C_320",
+      "to": "WP_C_280",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0025",
+      "from": "WP_C_280",
+      "to": "WP_C_240",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0026",
+      "from": "WP_C_240",
+      "to": "WP_C_200",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0027",
+      "from": "WP_C_200",
+      "to": "WP_C_160",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0028",
+      "from": "WP_C_160",
+      "to": "WP_C_120",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0029",
+      "from": "WP_C_120",
+      "to": "WP_C_080",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0030",
+      "from": "WP_C_080",
+      "to": "WP_C_040",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_C_0031",
+      "from": "WP_C_040",
+      "to": "WP_C_000",
+      "bidirectional": false,
+      "speed_limit": 1.5,
+      "width": 1.5,
+      "corridor": "center",
+      "direction": "east_to_west"
+    },
+    {
+      "id": "E_S_0032",
+      "from": "WP_S_000",
+      "to": "WP_S_040",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0032_r",
+      "from": "WP_S_040",
+      "to": "WP_S_000",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0033",
+      "from": "WP_S_040",
+      "to": "WP_S_080",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0033_r",
+      "from": "WP_S_080",
+      "to": "WP_S_040",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0034",
+      "from": "WP_S_080",
+      "to": "WP_S_120",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0034_r",
+      "from": "WP_S_120",
+      "to": "WP_S_080",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0035",
+      "from": "WP_S_120",
+      "to": "WP_S_160",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0035_r",
+      "from": "WP_S_160",
+      "to": "WP_S_120",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0036",
+      "from": "WP_S_160",
+      "to": "WP_S_200",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0036_r",
+      "from": "WP_S_200",
+      "to": "WP_S_160",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0037",
+      "from": "WP_S_200",
+      "to": "WP_S_240",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0037_r",
+      "from": "WP_S_240",
+      "to": "WP_S_200",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0038",
+      "from": "WP_S_240",
+      "to": "WP_S_280",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0038_r",
+      "from": "WP_S_280",
+      "to": "WP_S_240",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0039",
+      "from": "WP_S_280",
+      "to": "WP_S_320",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0039_r",
+      "from": "WP_S_320",
+      "to": "WP_S_280",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0040",
+      "from": "WP_S_320",
+      "to": "WP_S_360",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0040_r",
+      "from": "WP_S_360",
+      "to": "WP_S_320",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0041",
+      "from": "WP_S_360",
+      "to": "WP_S_400",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0041_r",
+      "from": "WP_S_400",
+      "to": "WP_S_360",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0042",
+      "from": "WP_S_400",
+      "to": "WP_S_440",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0042_r",
+      "from": "WP_S_440",
+      "to": "WP_S_400",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0043",
+      "from": "WP_S_440",
+      "to": "WP_S_480",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0043_r",
+      "from": "WP_S_480",
+      "to": "WP_S_440",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0044",
+      "from": "WP_S_480",
+      "to": "WP_S_520",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0044_r",
+      "from": "WP_S_520",
+      "to": "WP_S_480",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0045",
+      "from": "WP_S_520",
+      "to": "WP_S_560",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0045_r",
+      "from": "WP_S_560",
+      "to": "WP_S_520",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0046",
+      "from": "WP_S_560",
+      "to": "WP_S_600",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0046_r",
+      "from": "WP_S_600",
+      "to": "WP_S_560",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0047",
+      "from": "WP_S_600",
+      "to": "WP_S_640",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_S_0047_r",
+      "from": "WP_S_640",
+      "to": "WP_S_600",
+      "bidirectional": true,
+      "speed_limit": 1.5,
+      "width": 2.0,
+      "corridor": "south"
+    },
+    {
+      "id": "E_BAY_NC_000",
+      "from": "WP_N_000",
+      "to": "WP_C_000",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 0
+    },
+    {
+      "id": "E_BAY_NC_000_r",
+      "from": "WP_C_000",
+      "to": "WP_N_000",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 0
+    },
+    {
+      "id": "E_BAY_CS_000",
+      "from": "WP_C_000",
+      "to": "WP_S_000",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 0
+    },
+    {
+      "id": "E_BAY_CS_000_r",
+      "from": "WP_S_000",
+      "to": "WP_C_000",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 0
+    },
+    {
+      "id": "E_BAY_NC_160",
+      "from": "WP_N_160",
+      "to": "WP_C_160",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 160
+    },
+    {
+      "id": "E_BAY_NC_160_r",
+      "from": "WP_C_160",
+      "to": "WP_N_160",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 160
+    },
+    {
+      "id": "E_BAY_CS_160",
+      "from": "WP_C_160",
+      "to": "WP_S_160",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 160
+    },
+    {
+      "id": "E_BAY_CS_160_r",
+      "from": "WP_S_160",
+      "to": "WP_C_160",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 160
+    },
+    {
+      "id": "E_BAY_NC_320",
+      "from": "WP_N_320",
+      "to": "WP_C_320",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 320
+    },
+    {
+      "id": "E_BAY_NC_320_r",
+      "from": "WP_C_320",
+      "to": "WP_N_320",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 320
+    },
+    {
+      "id": "E_BAY_CS_320",
+      "from": "WP_C_320",
+      "to": "WP_S_320",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 320
+    },
+    {
+      "id": "E_BAY_CS_320_r",
+      "from": "WP_S_320",
+      "to": "WP_C_320",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 320
+    },
+    {
+      "id": "E_BAY_NC_480",
+      "from": "WP_N_480",
+      "to": "WP_C_480",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 480
+    },
+    {
+      "id": "E_BAY_NC_480_r",
+      "from": "WP_C_480",
+      "to": "WP_N_480",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 480
+    },
+    {
+      "id": "E_BAY_CS_480",
+      "from": "WP_C_480",
+      "to": "WP_S_480",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 480
+    },
+    {
+      "id": "E_BAY_CS_480_r",
+      "from": "WP_S_480",
+      "to": "WP_C_480",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 480
+    },
+    {
+      "id": "E_BAY_NC_640",
+      "from": "WP_N_640",
+      "to": "WP_C_640",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 640
+    },
+    {
+      "id": "E_BAY_NC_640_r",
+      "from": "WP_C_640",
+      "to": "WP_N_640",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 640
+    },
+    {
+      "id": "E_BAY_CS_640",
+      "from": "WP_C_640",
+      "to": "WP_S_640",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 640
+    },
+    {
+      "id": "E_BAY_CS_640_r",
+      "from": "WP_S_640",
+      "to": "WP_C_640",
+      "bidirectional": true,
+      "speed_limit": 0.8,
+      "width": 2.0,
+      "corridor": "bay",
+      "bay_x": 640
+    },
+    {
+      "id": "E_ST_N_01",
+      "from": "WP_N_000",
+      "to": "ST_N_01",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_01_r",
+      "from": "ST_N_01",
+      "to": "WP_N_000",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_02",
+      "from": "WP_N_080",
+      "to": "ST_N_02",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_02_r",
+      "from": "ST_N_02",
+      "to": "WP_N_080",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_03",
+      "from": "WP_N_160",
+      "to": "ST_N_03",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_03_r",
+      "from": "ST_N_03",
+      "to": "WP_N_160",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_04",
+      "from": "WP_N_240",
+      "to": "ST_N_04",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_04_r",
+      "from": "ST_N_04",
+      "to": "WP_N_240",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_05",
+      "from": "WP_N_320",
+      "to": "ST_N_05",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_05_r",
+      "from": "ST_N_05",
+      "to": "WP_N_320",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_06",
+      "from": "WP_N_400",
+      "to": "ST_N_06",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_06_r",
+      "from": "ST_N_06",
+      "to": "WP_N_400",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_07",
+      "from": "WP_N_480",
+      "to": "ST_N_07",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_07_r",
+      "from": "ST_N_07",
+      "to": "WP_N_480",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_08",
+      "from": "WP_N_560",
+      "to": "ST_N_08",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_08_r",
+      "from": "ST_N_08",
+      "to": "WP_N_560",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_09",
+      "from": "WP_N_640",
+      "to": "ST_N_09",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_N_09_r",
+      "from": "ST_N_09",
+      "to": "WP_N_640",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_C_01",
+      "from": "WP_C_000",
+      "to": "ST_C_01",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_01_r",
+      "from": "ST_C_01",
+      "to": "WP_C_000",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_02",
+      "from": "WP_C_160",
+      "to": "ST_C_02",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_02_r",
+      "from": "ST_C_02",
+      "to": "WP_C_160",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_03",
+      "from": "WP_C_320",
+      "to": "ST_C_03",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_03_r",
+      "from": "ST_C_03",
+      "to": "WP_C_320",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_04",
+      "from": "WP_C_480",
+      "to": "ST_C_04",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_04_r",
+      "from": "ST_C_04",
+      "to": "WP_C_480",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_05",
+      "from": "WP_C_640",
+      "to": "ST_C_05",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_C_05_r",
+      "from": "ST_C_05",
+      "to": "WP_C_640",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 1.5,
+      "type": "station_access",
+      "pocket": "north"
+    },
+    {
+      "id": "E_ST_S_01",
+      "from": "WP_S_000",
+      "to": "ST_S_01",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_01_r",
+      "from": "ST_S_01",
+      "to": "WP_S_000",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_02",
+      "from": "WP_S_080",
+      "to": "ST_S_02",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_02_r",
+      "from": "ST_S_02",
+      "to": "WP_S_080",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_03",
+      "from": "WP_S_160",
+      "to": "ST_S_03",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_03_r",
+      "from": "ST_S_03",
+      "to": "WP_S_160",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_04",
+      "from": "WP_S_240",
+      "to": "ST_S_04",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_04_r",
+      "from": "ST_S_04",
+      "to": "WP_S_240",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_05",
+      "from": "WP_S_320",
+      "to": "ST_S_05",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_05_r",
+      "from": "ST_S_05",
+      "to": "WP_S_320",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_06",
+      "from": "WP_S_400",
+      "to": "ST_S_06",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_06_r",
+      "from": "ST_S_06",
+      "to": "WP_S_400",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_07",
+      "from": "WP_S_480",
+      "to": "ST_S_07",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_07_r",
+      "from": "ST_S_07",
+      "to": "WP_S_480",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_08",
+      "from": "WP_S_560",
+      "to": "ST_S_08",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_08_r",
+      "from": "ST_S_08",
+      "to": "WP_S_560",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_09",
+      "from": "WP_S_640",
+      "to": "ST_S_09",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_ST_S_09_r",
+      "from": "ST_S_09",
+      "to": "WP_S_640",
+      "bidirectional": true,
+      "speed_limit": 0.5,
+      "width": 2.0,
+      "type": "station_access"
+    },
+    {
+      "id": "E_CH_01",
+      "from": "WP_N_000",
+      "to": "CH_01",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_01_r",
+      "from": "CH_01",
+      "to": "WP_N_000",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_02",
+      "from": "WP_N_320",
+      "to": "CH_02",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_02_r",
+      "from": "CH_02",
+      "to": "WP_N_320",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_03",
+      "from": "WP_N_640",
+      "to": "CH_03",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_03_r",
+      "from": "CH_03",
+      "to": "WP_N_640",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_04",
+      "from": "WP_C_000",
+      "to": "CH_04",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_04_r",
+      "from": "CH_04",
+      "to": "WP_C_000",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_05",
+      "from": "WP_C_640",
+      "to": "CH_05",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_05_r",
+      "from": "CH_05",
+      "to": "WP_C_640",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_06",
+      "from": "WP_S_000",
+      "to": "CH_06",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_06_r",
+      "from": "CH_06",
+      "to": "WP_S_000",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_07",
+      "from": "WP_S_320",
+      "to": "CH_07",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_07_r",
+      "from": "CH_07",
+      "to": "WP_S_320",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_08",
+      "from": "WP_S_640",
+      "to": "CH_08",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    },
+    {
+      "id": "E_CH_08_r",
+      "from": "CH_08",
+      "to": "WP_S_640",
+      "bidirectional": true,
+      "speed_limit": 0.3,
+      "width": 2.0,
+      "type": "charger_access"
+    }
+  ]
+}

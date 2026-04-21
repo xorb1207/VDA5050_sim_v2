@@ -1,0 +1,16 @@
+# FAB 토폴로지 비교 실험 — 빠른 버전
+# 전체: python -m src.application.usecases.experiment_runner --experiment experiments/fab_topology_full.yaml
+
+types:
+  - A
+  - B
+  - C
+  - D
+  - E
+
+agv_counts: [8, 12, 16, 20]   # 24 제외 — 시간 절약
+
+duration_s: 600        # 10분 (1800 → 600, 벽시계 ~3배 단축)
+task_interval_s: 3.0
+
+output_dir: outputs/experiments

@@ -1,0 +1,65 @@
+{
+  "scenario_name": "scenario_003",
+  "policy": {
+    "fleet_size": 3,
+    "lane_mode": "one_way",
+    "lane_count": 1,
+    "reservation_mode": "lookahead_n",
+    "lookahead_depth": 2
+  },
+  "kpis": {
+    "throughput_tasks_per_hour": 96.0,
+    "tasks_completed": 8,
+    "avg_task_completion_time_s": 79.93,
+    "avg_wait_time_s": 0.0,
+    "total_wait_time_s": 0.0,
+    "reservation_failure_rate": 0.0,
+    "reroute_count": 0,
+    "node_occupancy_rate": 0.0,
+    "edge_occupancy_rate": 0.0048,
+    "agv_utilization": 0.9556,
+    "total_travel_distance_m": 21.0,
+    "bottleneck_nodes": [],
+    "bottleneck_edges": [
+      {
+        "edge_id": "node_intersection_01__node_work_01",
+        "occupancy_time_s": 4.0,
+        "occupancy_rate": 0.0133
+      },
+      {
+        "edge_id": "node_charger_01__node_approach_01",
+        "occupancy_time_s": 2.68,
+        "occupancy_rate": 0.0089
+      },
+      {
+        "edge_id": "node_approach_01__node_intersection_01",
+        "occupancy_time_s": 2.68,
+        "occupancy_rate": 0.0089
+      },
+      {
+        "edge_id": "node_intersection_02__node_work_02",
+        "occupancy_time_s": 2.0,
+        "occupancy_rate": 0.0067
+      },
+      {
+        "edge_id": "node_charger_02__node_approach_02",
+        "occupancy_time_s": 1.34,
+        "occupancy_rate": 0.0045
+      }
+    ],
+    "max_queue_length": 0,
+    "deadlock_or_stall_count": 0,
+    "sim_time_s": 300.0,
+    "avg_wait_per_agv_s": 0.0,
+    "scenario_name": "scenario_004",
+    "fleet_size": 3,
+    "lane_mode": "one_way",
+    "lane_count": 1,
+    "reservation_mode": "lookahead_n",
+    "lookahead_depth": 2,
+    "random_seed": 42,
+    "scenario_id": "scenario_003",
+    "wall_time_s": 1.48
+  },
+  "generated_at": "2026-04-18T15:54:24.096481+00:00"
+}

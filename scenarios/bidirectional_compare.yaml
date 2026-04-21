@@ -1,0 +1,43 @@
+name: bidirectional_compare_fab_a
+description: "baseline과 동일 맵/fleet — 양방향 정책으로 변경. lookahead + reroute 효과 확인."
+
+map_file: maps/sample_fab.json
+
+runtime_seconds: 300
+tick_hz: 50
+random_seed: 42
+
+fleet:
+  size: 5
+  initial_nodes:
+    - node_charger_01
+    - node_charger_02
+    - node_charger_01
+    - node_charger_02
+    - node_charger_01
+
+traffic_policy:
+  lane_mode: bidirectional
+  lane_count: 1
+  reservation_mode: lookahead_n
+  lookahead_depth: 2
+  allow_reroute: true
+  critical_section_enabled: true
+
+task_profile:
+  type: hotspot
+  generator: fixed_interval
+  interval_seconds: 15
+  pickup_nodes:
+    - node_work_01
+    - node_work_02
+  dropoff_nodes:
+    - node_work_02
+    - node_work_01
+  hotspot_nodes:
+    - node_work_01
+
+outputs:
+  save_kpi_json: true
+  save_kpi_csv: true
+  save_node_stats: true

@@ -1,0 +1,65 @@
+{
+  "scenario_name": "scenario_024",
+  "policy": {
+    "fleet_size": 5,
+    "lane_mode": "bidirectional",
+    "lane_count": 2,
+    "reservation_mode": "lookahead_n",
+    "lookahead_depth": 2
+  },
+  "kpis": {
+    "throughput_tasks_per_hour": 204.0,
+    "tasks_completed": 17,
+    "avg_task_completion_time_s": 76.36,
+    "avg_wait_time_s": 0.0,
+    "total_wait_time_s": 0.0,
+    "reservation_failure_rate": 0.0,
+    "reroute_count": 0,
+    "node_occupancy_rate": 0.0,
+    "edge_occupancy_rate": 0.0223,
+    "agv_utilization": 0.9259,
+    "total_travel_distance_m": 169.68,
+    "bottleneck_nodes": [],
+    "bottleneck_edges": [
+      {
+        "edge_id": "node_intersection_01__node_work_01",
+        "occupancy_time_s": 28.0,
+        "occupancy_rate": 0.0933
+      },
+      {
+        "edge_id": "node_work_01__node_intersection_01",
+        "occupancy_time_s": 24.0,
+        "occupancy_rate": 0.08
+      },
+      {
+        "edge_id": "node_intersection_02__node_work_02",
+        "occupancy_time_s": 10.0,
+        "occupancy_rate": 0.0333
+      },
+      {
+        "edge_id": "node_work_02__node_intersection_02",
+        "occupancy_time_s": 6.0,
+        "occupancy_rate": 0.02
+      },
+      {
+        "edge_id": "node_intersection_02__node_corridor",
+        "occupancy_time_s": 5.36,
+        "occupancy_rate": 0.0179
+      }
+    ],
+    "max_queue_length": 0,
+    "deadlock_or_stall_count": 0,
+    "sim_time_s": 300.0,
+    "avg_wait_per_agv_s": 0.0,
+    "scenario_name": "scenario_032",
+    "fleet_size": 5,
+    "lane_mode": "bidirectional",
+    "lane_count": 2,
+    "reservation_mode": "lookahead_n",
+    "lookahead_depth": 2,
+    "random_seed": 42,
+    "scenario_id": "scenario_024",
+    "wall_time_s": 1.91
+  },
+  "generated_at": "2026-04-18T15:55:01.313315+00:00"
+}

@@ -1,0 +1,27 @@
+{
+  "mapId": "sample_fab_v2",
+  "mapDescription": "FAB 복도 레이아웃 — APPROACH/SIDING/WORK 배치 전략 검증용",
+  "nodes": [
+    {"nodeId":"node_charger_01","x":0.0,"y":0.0,"role":"charger","lock_radius":1},
+    {"nodeId":"node_charger_02","x":0.0,"y":6.0,"role":"charger","lock_radius":1},
+    {"nodeId":"node_approach_01","x":2.0,"y":0.0,"role":"approach","lock_radius":1},
+    {"nodeId":"node_approach_02","x":2.0,"y":6.0,"role":"approach","lock_radius":1},
+    {"nodeId":"node_intersection_01","x":4.0,"y":0.0,"role":"standard","lock_radius":1},
+    {"nodeId":"node_intersection_02","x":4.0,"y":6.0,"role":"standard","lock_radius":1},
+    {"nodeId":"node_siding_01","x":4.0,"y":2.0,"role":"siding","lock_radius":1},
+    {"nodeId":"node_corridor","x":4.0,"y":4.0,"role":"standard","lock_radius":1},
+    {"nodeId":"node_work_01","x":7.0,"y":0.0,"role":"work","lock_radius":2},
+    {"nodeId":"node_work_02","x":7.0,"y":6.0,"role":"work","lock_radius":2}
+  ],
+  "edges": [
+    {"edgeId":"e_c1_ap1","startNodeId":"node_charger_01","endNodeId":"node_approach_01","capacity":1,"bidirectional":true,"maxSpeed":1.5},
+    {"edgeId":"e_c2_ap2","startNodeId":"node_charger_02","endNodeId":"node_approach_02","capacity":1,"bidirectional":true,"maxSpeed":1.5},
+    {"edgeId":"e_ap1_ix1","startNodeId":"node_approach_01","endNodeId":"node_intersection_01","capacity":1,"bidirectional":false,"maxSpeed":1.0},
+    {"edgeId":"e_ap2_ix2","startNodeId":"node_approach_02","endNodeId":"node_intersection_02","capacity":1,"bidirectional":false,"maxSpeed":1.0},
+    {"edgeId":"e_ix1_sid","startNodeId":"node_intersection_01","endNodeId":"node_siding_01","capacity":1,"bidirectional":true,"maxSpeed":0.5},
+    {"edgeId":"e_sid_cor","startNodeId":"node_siding_01","endNodeId":"node_corridor","capacity":1,"bidirectional":true,"maxSpeed":0.5},
+    {"edgeId":"e_cor_ix2","startNodeId":"node_corridor","endNodeId":"node_intersection_02","capacity":1,"bidirectional":true,"maxSpeed":0.5},
+    {"edgeId":"e_ix1_w1","startNodeId":"node_intersection_01","endNodeId":"node_work_01","capacity":1,"bidirectional":true,"maxSpeed":1.0},
+    {"edgeId":"e_ix2_w2","startNodeId":"node_intersection_02","endNodeId":"node_work_02","capacity":1,"bidirectional":true,"maxSpeed":1.0}
+  ]
+}

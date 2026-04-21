@@ -1,0 +1,344 @@
+"""
+ExperimentRunner — 토폴로지 5종 × AGV 대수 매트릭스 실험
+
+실행:
+  python -m src.application.usecases.experiment_runner
+  python -m src.application.usecases.experiment_runner --types A B C --agv 3 5 8 --duration 600
+  python -m src.application.usecases.experiment_runner --experiment experiments/fab_topology.yaml
+
+출력:
+  outputs/experiments/{run_id}/
+    summary.csv
+    summary.json
+    {type}_{n_agv}/
+      kpi_summary.json
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import csv
+import json
+import time
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from src.domain.map.graph import MapGraph, NodeRole
+from src.domain.map.topology_generator import MapTopologyGenerator
+from src.domain.reservation.scheduler import TimeWindowScheduler
+from src.application.engine.simulation_engine import SimulationEngine
+from src.application.scenario.task_generator import TaskGenerator
+from src.adapters.bus.adapters import LocalMemoryBus
+from src.domain.agv.agv import AGV
+
+
+# ── 실험 파라미터 ──────────────────────────────────────────────
+@dataclass
+class ExperimentConfig:
+    types: list[str]          = field(default_factory=lambda: ["A","B","C","D","E"])
+    agv_counts: list[int]     = field(default_factory=lambda: [3, 5, 8, 12])
+    duration_s: float         = 600.0
+    task_interval_s: float    = 5.0
+    output_dir: str           = "outputs/experiments"
+    run_id: Optional[str]     = None
+
+    def __post_init__(self):
+        if self.run_id is None:
+            self.run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+
+
+# ── 단일 실험 결과 ─────────────────────────────────────────────
+@dataclass
+class RunResult:
+    topology_type: str
+    n_agv: int
+    # KPI
+    tasks_completed: int            = 0
+    throughput_tasks_per_hour: float = 0.0
+    avg_task_completion_time_s: float = 0.0
+    avg_wait_time_s: float          = 0.0
+    total_wait_time_s: float        = 0.0
+    reservation_failure_rate: float = 0.0
+    reroute_count: int              = 0
+    node_occupancy_rate: float      = 0.0
+    edge_occupancy_rate: float      = 0.0
+    agv_utilization: float          = 0.0
+    total_travel_distance_m: float  = 0.0
+    max_queue_length: int           = 0
+    headon_total: int               = 0
+    retry_total: int                = 0
+    avg_retry_per_headon: float     = 0.0
+    top_bottleneck_node: str        = ""
+    top_bottleneck_score: float     = 0.0
+    top_headon_edge: str            = ""
+    top_headon_edge_count: int      = 0
+    sim_time_s: float               = 0.0
+    wall_time_s: float              = 0.0
+    error: str                      = ""
+
+
+SUMMARY_COLUMNS = [
+    "topology_type", "n_agv",
+    "tasks_completed", "throughput_tasks_per_hour",
+    "avg_task_completion_time_s", "avg_wait_time_s", "total_wait_time_s",
+    "reservation_failure_rate", "reroute_count",
+    "node_occupancy_rate", "edge_occupancy_rate", "agv_utilization",
+    "total_travel_distance_m", "max_queue_length",
+    "headon_total", "retry_total", "avg_retry_per_headon",
+    "top_bottleneck_node", "top_bottleneck_score",
+    "top_headon_edge", "top_headon_edge_count",
+    "sim_time_s", "wall_time_s", "error",
+]
+
+
+# ── 단일 시나리오 실행 ─────────────────────────────────────────
+async def _run_single(
+    topology_type: str,
+    n_agv: int,
+    duration_s: float,
+    task_interval_s: float,
+) -> RunResult:
+    result = RunResult(topology_type=topology_type, n_agv=n_agv)
+    t0 = time.perf_counter()
+
+    try:
+        gen_map = MapTopologyGenerator()
+        graph   = gen_map.generate(topology_type)
+        bus     = LocalMemoryBus()
+        sched   = TimeWindowScheduler()
+        task_gen = TaskGenerator(graph, bus, task_interval_s=task_interval_s)
+
+        # Type E: graph._lane_mode 태그로 creep policy 자동 주입
+        # (agv._get_effective_speed()가 graph._lane_mode를 직접 읽음)
+        engine  = SimulationEngine(graph, sched, task_generator=task_gen)
+
+        # AGV 초기 배치 — 충전소 우선, 부족하면 웨이포인트로 채움
+        charger_nodes = [n.node_id for n in graph.get_chargers()]
+        wp_nodes = [
+            nid for nid, n in graph.nodes.items()
+            if n.role == NodeRole.STANDARD and nid.startswith("WP_")
+        ]
+        start_nodes = (charger_nodes + wp_nodes)[:n_agv]
+
+        for i, start_node in enumerate(start_nodes):
+            agv = AGV(f"AGV_{i+1:03d}", bus, graph, sched)
+            agv.current_node_id = start_node
+            node = graph.nodes[start_node]
+            agv.physics.x = node.x
+            agv.physics.y = node.y
+            engine.register_agv(agv)
+
+        kpis = await engine.run(duration_s=duration_s)
+
+        # KPI 매핑
+        result.tasks_completed             = kpis.get("tasks_completed", 0)
+        result.throughput_tasks_per_hour   = kpis.get("throughput_tasks_per_hour", 0.0)
+        result.avg_task_completion_time_s  = kpis.get("avg_task_completion_time_s", 0.0)
+        result.avg_wait_time_s             = kpis.get("avg_wait_time_s", 0.0)
+        result.total_wait_time_s           = kpis.get("total_wait_time_s", 0.0)
+        result.reservation_failure_rate    = kpis.get("reservation_failure_rate", 0.0)
+        result.reroute_count               = kpis.get("reroute_count", 0)
+        result.node_occupancy_rate         = kpis.get("node_occupancy_rate", 0.0)
+        result.edge_occupancy_rate         = kpis.get("edge_occupancy_rate", 0.0)
+        result.agv_utilization             = kpis.get("agv_utilization", 0.0)
+        result.total_travel_distance_m     = kpis.get("total_travel_distance_m", 0.0)
+        result.max_queue_length            = kpis.get("max_queue_length", 0)
+        result.sim_time_s                  = kpis.get("sim_time_s", 0.0)
+
+        bn = kpis.get("bottleneck_nodes", [])
+        if bn:
+            result.top_bottleneck_node  = bn[0].get("node_id", "")
+            result.top_bottleneck_score = bn[0].get("congestion_score", 0.0)
+
+        # head-on 분석
+        summary = sched.get_headon_summary()
+        result.headon_total          = summary["headon_total"]
+        result.retry_total           = summary["retry_total"]
+        result.avg_retry_per_headon  = summary["avg_retry_per_headon"]
+        if summary["top_headon_edges"]:
+            result.top_headon_edge       = summary["top_headon_edges"][0]["edge"]
+            result.top_headon_edge_count = summary["top_headon_edges"][0]["count"]
+
+    except Exception as e:
+        result.error = str(e)
+
+    result.wall_time_s = round(time.perf_counter() - t0, 2)
+    return result
+
+
+# ── 배치 실험 러너 ─────────────────────────────────────────────
+class ExperimentRunner:
+    def __init__(self, config: ExperimentConfig) -> None:
+        self.config = config
+        self.out_dir = Path(config.output_dir) / config.run_id
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+
+    def run(self) -> list[RunResult]:
+        cfg = self.config
+        total = len(cfg.types) * len(cfg.agv_counts)
+        print(f"\n{'='*56}")
+        print(f"FAB Topology Experiment  run_id={cfg.run_id}")
+        print(f"Types: {cfg.types}  AGV counts: {cfg.agv_counts}")
+        print(f"Duration: {cfg.duration_s}s  Total runs: {total}")
+        print(f"{'='*56}\n")
+
+        results: list[RunResult] = []
+        idx = 0
+        for t in cfg.types:
+            for n in cfg.agv_counts:
+                idx += 1
+                print(f"[{idx:2d}/{total}] Type-{t}  AGV={n:2d}  ...", end=" ", flush=True)
+                result = asyncio.run(
+                    _run_single(t, n, cfg.duration_s, cfg.task_interval_s)
+                )
+                results.append(result)
+                if result.error:
+                    print(f"ERROR: {result.error}")
+                else:
+                    print(
+                        f"tasks={result.tasks_completed:3d}  "
+                        f"tph={result.throughput_tasks_per_hour:6.1f}  "
+                        f"util={result.agv_utilization:.3f}  "
+                        f"wait={result.total_wait_time_s:6.1f}s  "
+                        f"wall={result.wall_time_s:.1f}s"
+                    )
+                self._save_single(result)
+
+        self._save_summary(results)
+        self._print_matrix(results)
+        return results
+
+    def _save_single(self, r: RunResult) -> None:
+        d = self.out_dir / f"{r.topology_type}_{r.n_agv:02d}agv"
+        d.mkdir(exist_ok=True)
+        (d / "kpi_summary.json").write_text(
+            json.dumps(asdict(r), ensure_ascii=False, indent=2)
+        )
+
+    def _save_summary(self, results: list[RunResult]) -> None:
+        rows = [asdict(r) for r in results]
+
+        # CSV
+        csv_path = self.out_dir / "summary.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=SUMMARY_COLUMNS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+
+        # JSON
+        json_path = self.out_dir / "summary.json"
+        json_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2))
+
+        print(f"\n결과 저장: {self.out_dir}/")
+        print(f"  summary.csv  ({len(results)}행)")
+        print(f"  summary.json")
+
+    def _print_matrix(self, results: list[RunResult]) -> None:
+        """처리량 매트릭스 콘솔 출력."""
+        cfg = self.config
+        col_w = 10
+
+        print(f"\n{'─'*56}")
+        print("처리량 (tasks/hour) 매트릭스")
+        print(f"{'Type':6s}", end="")
+        for n in cfg.agv_counts:
+            print(f"{'AGV='+str(n):>{col_w}}", end="")
+        print()
+        print("─" * (6 + col_w * len(cfg.agv_counts)))
+
+        for t in cfg.types:
+            print(f"{'Type '+t:6s}", end="")
+            for n in cfg.agv_counts:
+                r = next((x for x in results if x.topology_type == t and x.n_agv == n), None)
+                if r and not r.error:
+                    print(f"{r.throughput_tasks_per_hour:>{col_w}.1f}", end="")
+                else:
+                    print(f"{'ERR':>{col_w}}", end="")
+            print()
+
+        print(f"\n가동률 (agv_utilization) 매트릭스")
+        print(f"{'Type':6s}", end="")
+        for n in cfg.agv_counts:
+            print(f"{'AGV='+str(n):>{col_w}}", end="")
+        print()
+        print("─" * (6 + col_w * len(cfg.agv_counts)))
+
+        for t in cfg.types:
+            print(f"{'Type '+t:6s}", end="")
+            for n in cfg.agv_counts:
+                r = next((x for x in results if x.topology_type == t and x.n_agv == n), None)
+                if r and not r.error:
+                    print(f"{r.agv_utilization:>{col_w}.4f}", end="")
+                else:
+                    print(f"{'ERR':>{col_w}}", end="")
+            print()
+
+        print(f"\nHead-on 충돌 횟수 매트릭스")
+        print(f"{'Type':6s}", end="")
+        for n in cfg.agv_counts:
+            print(f"{'AGV='+str(n):>{col_w}}", end="")
+        print()
+        print("─" * (6 + col_w * len(cfg.agv_counts)))
+
+        for t in cfg.types:
+            print(f"{'Type '+t:6s}", end="")
+            for n in cfg.agv_counts:
+                r = next((x for x in results if x.topology_type == t and x.n_agv == n), None)
+                if r and not r.error:
+                    print(f"{r.headon_total:>{col_w}}", end="")
+                else:
+                    print(f"{'ERR':>{col_w}}", end="")
+            print()
+        print(f"{'─'*56}\n")
+
+
+# ── YAML 기반 실험 설정 ────────────────────────────────────────
+def load_from_yaml(path: str) -> ExperimentConfig:
+    import yaml
+    with open(path) as f:
+        raw = yaml.safe_load(f)
+    return ExperimentConfig(
+        types          = raw.get("types", ["A","B","C","D","E"]),
+        agv_counts     = raw.get("agv_counts", [3, 5, 8, 12]),
+        duration_s     = float(raw.get("duration_s", 600.0)),
+        task_interval_s= float(raw.get("task_interval_s", 5.0)),
+        output_dir     = raw.get("output_dir", "outputs/experiments"),
+        run_id         = raw.get("run_id", None),
+    )
+
+
+# ── CLI ───────────────────────────────────────────────────────
+def main() -> None:
+    parser = argparse.ArgumentParser(description="FAB Topology Experiment Runner")
+    parser.add_argument("--experiment", help="실험 설정 YAML 파일")
+    parser.add_argument("--types",    nargs="+", default=["A","B","C","D","E"],
+                        help="토폴로지 타입 (기본: A B C D E)")
+    parser.add_argument("--agv",      nargs="+", type=int, default=[3, 5, 8, 12],
+                        help="AGV 대수 목록 (기본: 3 5 8 12)")
+    parser.add_argument("--duration", type=float, default=600.0,
+                        help="시뮬 시간 초 (기본: 600)")
+    parser.add_argument("--interval", type=float, default=5.0,
+                        help="태스크 발행 간격 초 (기본: 5)")
+    parser.add_argument("--output",   default="outputs/experiments",
+                        help="결과 저장 디렉토리")
+    args = parser.parse_args()
+
+    if args.experiment:
+        config = load_from_yaml(args.experiment)
+    else:
+        config = ExperimentConfig(
+            types          = args.types,
+            agv_counts     = args.agv,
+            duration_s     = args.duration,
+            task_interval_s= args.interval,
+            output_dir     = args.output,
+        )
+
+    runner = ExperimentRunner(config)
+    runner.run()
+
+
+if __name__ == "__main__":
+    main()

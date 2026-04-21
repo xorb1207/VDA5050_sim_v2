@@ -1,0 +1,537 @@
+levels:
+  FAB_L1:
+    vertices:
+    - - 0.0
+      - 100.0
+      - {name: WP_N_000, rmf_role: standard}
+    - - 40.0
+      - 100.0
+      - {name: WP_N_040, rmf_role: standard}
+    - - 80.0
+      - 100.0
+      - {name: WP_N_080, rmf_role: standard}
+    - - 120.0
+      - 100.0
+      - {name: WP_N_120, rmf_role: standard}
+    - - 160.0
+      - 100.0
+      - {name: WP_N_160, rmf_role: standard}
+    - - 200.0
+      - 100.0
+      - {name: WP_N_200, rmf_role: standard}
+    - - 240.0
+      - 100.0
+      - {name: WP_N_240, rmf_role: standard}
+    - - 280.0
+      - 100.0
+      - {name: WP_N_280, rmf_role: standard}
+    - - 320.0
+      - 100.0
+      - {name: WP_N_320, rmf_role: standard}
+    - - 360.0
+      - 100.0
+      - {name: WP_N_360, rmf_role: standard}
+    - - 400.0
+      - 100.0
+      - {name: WP_N_400, rmf_role: standard}
+    - - 440.0
+      - 100.0
+      - {name: WP_N_440, rmf_role: standard}
+    - - 480.0
+      - 100.0
+      - {name: WP_N_480, rmf_role: standard}
+    - - 520.0
+      - 100.0
+      - {name: WP_N_520, rmf_role: standard}
+    - - 560.0
+      - 100.0
+      - {name: WP_N_560, rmf_role: standard}
+    - - 600.0
+      - 100.0
+      - {name: WP_N_600, rmf_role: standard}
+    - - 640.0
+      - 100.0
+      - {name: WP_N_640, rmf_role: standard}
+    - - 0.0
+      - 60.0
+      - {name: WP_C_000, rmf_role: approach}
+    - - 40.0
+      - 60.0
+      - {name: WP_C_040, rmf_role: approach}
+    - - 80.0
+      - 60.0
+      - {name: WP_C_080, rmf_role: approach}
+    - - 120.0
+      - 60.0
+      - {name: WP_C_120, rmf_role: approach}
+    - - 160.0
+      - 60.0
+      - {name: WP_C_160, rmf_role: approach}
+    - - 200.0
+      - 60.0
+      - {name: WP_C_200, rmf_role: approach}
+    - - 240.0
+      - 60.0
+      - {name: WP_C_240, rmf_role: approach}
+    - - 280.0
+      - 60.0
+      - {name: WP_C_280, rmf_role: approach}
+    - - 320.0
+      - 60.0
+      - {name: WP_C_320, rmf_role: approach}
+    - - 360.0
+      - 60.0
+      - {name: WP_C_360, rmf_role: approach}
+    - - 400.0
+      - 60.0
+      - {name: WP_C_400, rmf_role: approach}
+    - - 440.0
+      - 60.0
+      - {name: WP_C_440, rmf_role: approach}
+    - - 480.0
+      - 60.0
+      - {name: WP_C_480, rmf_role: approach}
+    - - 520.0
+      - 60.0
+      - {name: WP_C_520, rmf_role: approach}
+    - - 560.0
+      - 60.0
+      - {name: WP_C_560, rmf_role: approach}
+    - - 600.0
+      - 60.0
+      - {name: WP_C_600, rmf_role: approach}
+    - - 640.0
+      - 60.0
+      - {name: WP_C_640, rmf_role: approach}
+    - - 0.0
+      - 20.0
+      - {name: WP_S_000, rmf_role: standard}
+    - - 40.0
+      - 20.0
+      - {name: WP_S_040, rmf_role: standard}
+    - - 80.0
+      - 20.0
+      - {name: WP_S_080, rmf_role: standard}
+    - - 120.0
+      - 20.0
+      - {name: WP_S_120, rmf_role: standard}
+    - - 160.0
+      - 20.0
+      - {name: WP_S_160, rmf_role: standard}
+    - - 200.0
+      - 20.0
+      - {name: WP_S_200, rmf_role: standard}
+    - - 240.0
+      - 20.0
+      - {name: WP_S_240, rmf_role: standard}
+    - - 280.0
+      - 20.0
+      - {name: WP_S_280, rmf_role: standard}
+    - - 320.0
+      - 20.0
+      - {name: WP_S_320, rmf_role: standard}
+    - - 360.0
+      - 20.0
+      - {name: WP_S_360, rmf_role: standard}
+    - - 400.0
+      - 20.0
+      - {name: WP_S_400, rmf_role: standard}
+    - - 440.0
+      - 20.0
+      - {name: WP_S_440, rmf_role: standard}
+    - - 480.0
+      - 20.0
+      - {name: WP_S_480, rmf_role: standard}
+    - - 520.0
+      - 20.0
+      - {name: WP_S_520, rmf_role: standard}
+    - - 560.0
+      - 20.0
+      - {name: WP_S_560, rmf_role: standard}
+    - - 600.0
+      - 20.0
+      - {name: WP_S_600, rmf_role: standard}
+    - - 640.0
+      - 20.0
+      - {name: WP_S_640, rmf_role: standard}
+    - - 0.0
+      - 88.0
+      - {name: ST_N_01, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 80.0
+      - 88.0
+      - {name: ST_N_02, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 160.0
+      - 88.0
+      - {name: ST_N_03, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 240.0
+      - 88.0
+      - {name: ST_N_04, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 320.0
+      - 88.0
+      - {name: ST_N_05, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 400.0
+      - 88.0
+      - {name: ST_N_06, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 480.0
+      - 88.0
+      - {name: ST_N_07, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 560.0
+      - 88.0
+      - {name: ST_N_08, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 640.0
+      - 88.0
+      - {name: ST_N_09, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 0.0
+      - 72.0
+      - {name: ST_C_01, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 160.0
+      - 72.0
+      - {name: ST_C_02, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 320.0
+      - 72.0
+      - {name: ST_C_03, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 480.0
+      - 72.0
+      - {name: ST_C_04, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 640.0
+      - 72.0
+      - {name: ST_C_05, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 0.0
+      - 32.0
+      - {name: ST_S_01, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 80.0
+      - 32.0
+      - {name: ST_S_02, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 160.0
+      - 32.0
+      - {name: ST_S_03, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 240.0
+      - 32.0
+      - {name: ST_S_04, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 320.0
+      - 32.0
+      - {name: ST_S_05, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 400.0
+      - 32.0
+      - {name: ST_S_06, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 480.0
+      - 32.0
+      - {name: ST_S_07, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 560.0
+      - 32.0
+      - {name: ST_S_08, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 640.0
+      - 32.0
+      - {name: ST_S_09, is_holding_point: true, is_parking_spot: true, rmf_role: work}
+    - - 0.0
+      - 100.0
+      - {name: CH_01, is_charger: true, is_holding_point: true}
+    - - 320.0
+      - 100.0
+      - {name: CH_02, is_charger: true, is_holding_point: true}
+    - - 640.0
+      - 100.0
+      - {name: CH_03, is_charger: true, is_holding_point: true}
+    - - 0.0
+      - 60.0
+      - {name: CH_04, is_charger: true, is_holding_point: true}
+    - - 640.0
+      - 60.0
+      - {name: CH_05, is_charger: true, is_holding_point: true}
+    - - 0.0
+      - 20.0
+      - {name: CH_06, is_charger: true, is_holding_point: true}
+    - - 320.0
+      - 20.0
+      - {name: CH_07, is_charger: true, is_holding_point: true}
+    - - 640.0
+      - 20.0
+      - {name: CH_08, is_charger: true, is_holding_point: true}
+    lanes:
+    - - 0
+      - 1
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 1
+      - 2
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 2
+      - 3
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 3
+      - 4
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 4
+      - 5
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 5
+      - 6
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 6
+      - 7
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 7
+      - 8
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 8
+      - 9
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 9
+      - 10
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 10
+      - 11
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 11
+      - 12
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 12
+      - 13
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 13
+      - 14
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 14
+      - 15
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 15
+      - 16
+      - {speed_limit: 1.5, bidirectional: true, corridor: north}
+    - - 33
+      - 32
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 32
+      - 31
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 31
+      - 30
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 30
+      - 29
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 29
+      - 28
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 28
+      - 27
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 27
+      - 26
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 26
+      - 25
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 25
+      - 24
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 24
+      - 23
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 23
+      - 22
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 22
+      - 21
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 21
+      - 20
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 20
+      - 19
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 19
+      - 18
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 18
+      - 17
+      - {speed_limit: 1.5, bidirectional: false, corridor: center, direction: east_to_west}
+    - - 34
+      - 35
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 35
+      - 36
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 36
+      - 37
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 37
+      - 38
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 38
+      - 39
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 39
+      - 40
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 40
+      - 41
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 41
+      - 42
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 42
+      - 43
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 43
+      - 44
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 44
+      - 45
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 45
+      - 46
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 46
+      - 47
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 47
+      - 48
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 48
+      - 49
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 49
+      - 50
+      - {speed_limit: 1.5, bidirectional: true, corridor: south}
+    - - 0
+      - 17
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 17
+      - 34
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 4
+      - 21
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 21
+      - 38
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 8
+      - 25
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 25
+      - 42
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 12
+      - 29
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 29
+      - 46
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 16
+      - 33
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 33
+      - 50
+      - {speed_limit: 0.8, bidirectional: true, corridor: bay}
+    - - 0
+      - 51
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 2
+      - 52
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 4
+      - 53
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 6
+      - 54
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 8
+      - 55
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 10
+      - 56
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 12
+      - 57
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 14
+      - 58
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 16
+      - 59
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 17
+      - 60
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 21
+      - 61
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 25
+      - 62
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 29
+      - 63
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 33
+      - 64
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 34
+      - 65
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 36
+      - 66
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 38
+      - 67
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 40
+      - 68
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 42
+      - 69
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 44
+      - 70
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 46
+      - 71
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 48
+      - 72
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 50
+      - 73
+      - {speed_limit: 0.5, bidirectional: true, access_type: station_access}
+    - - 0
+      - 74
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+    - - 8
+      - 75
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+    - - 16
+      - 76
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+    - - 17
+      - 77
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+    - - 33
+      - 78
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+    - - 34
+      - 79
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+    - - 42
+      - 80
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+    - - 50
+      - 81
+      - {speed_limit: 0.3, bidirectional: true, access_type: charger_access}
+metadata:
+  name: FAB_AMR_Map_v1
+  version: '1.0'
+  width_m: 640
+  height_m: 120
+  coordinate_system: {x: '0=서(West), 640=동(East)', y: '20=남측(South corridor), 60=중앙(Center),
+      100=북측(North corridor)'}
+  corridors:
+    north: {y: 100, width_m: 2.0, mode: bidirectional, speed_limit_ms: 1.5}
+    center: {y: 60, width_m: 1.5, mode: unidirectional_east_to_west, speed_limit_ms: 1.5}
+    south: {y: 20, width_m: 2.0, mode: bidirectional, speed_limit_ms: 1.5}
+  bays:
+  - {id: B1, x: 0}
+  - {id: B2, x: 160}
+  - {id: B3, x: 320}
+  - {id: B4, x: 480}
+  - {id: B5, x: 640}
+  robot: {width_mm: 800, length_mm: 1800, max_speed_ms: 1.5, protective_zone_mm: 200,
+    warning_zone_mm: 500}
+  stats: {total_nodes: 82, total_edges: 162, stations: 27, chargers: 8, waypoints: 51}

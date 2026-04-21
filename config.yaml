@@ -1,0 +1,23 @@
+# vda5050_simulator 실행 설정
+# bus: memory (브로커 불필요) | mqtt (실 연동)
+bus: memory
+
+# 맵 파일 경로 (VDA5050 확장 JSON)
+map: maps/sample_fab.json
+
+# 시뮬레이션 시간 (초)
+duration_s: 3600
+
+# AGV 목록
+agvs:
+  - id: AGV_001
+    start_node: node_charger_01
+  - id: AGV_002
+    start_node: node_charger_02
+  - id: AGV_003
+    start_node: node_charger_03
+
+# 태스크 생성 주기 (초) — TaskGenerator가 IDLE AGV에게 Order 발행하는 간격
+task_interval_s: 20.0
+  host: localhost
+  port: 1883

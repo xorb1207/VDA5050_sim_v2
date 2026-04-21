@@ -1,0 +1,14 @@
+# FAB 토폴로지 비교 실험 — 전체 버전 (통계 수렴용)
+types:
+  - A
+  - B
+  - C
+  - D
+  - E
+
+agv_counts: [8, 12, 16, 20, 24]
+
+duration_s: 1800
+task_interval_s: 3.0
+
+output_dir: outputs/experiments
