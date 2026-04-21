@@ -29,6 +29,7 @@ from typing import Optional
 from src.domain.map.graph import MapGraph, NodeRole
 from src.domain.map.topology_generator import MapTopologyGenerator
 from src.domain.reservation.scheduler import TimeWindowScheduler
+from src.application.scenario.demand import DemandSet
 from src.application.engine.simulation_engine import SimulationEngine
 from src.application.scenario.task_generator import TaskGenerator
 from src.adapters.bus.adapters import LocalMemoryBus
@@ -43,6 +44,8 @@ class ExperimentConfig:
     duration_s: float         = 600.0
     task_interval_s: float    = 5.0
     random_seed: int          = 42
+    demand_mode: str          = "generated"
+    demand_count: Optional[int] = None
     output_dir: str           = "outputs/experiments"
     run_id: Optional[str]     = None
 
@@ -56,6 +59,7 @@ class ExperimentConfig:
 class RunResult:
     topology_type: str
     n_agv: int
+    demand_mode: str = "generated"
     # KPI
     tasks_completed: int            = 0
     throughput_tasks_per_hour: float = 0.0
@@ -84,6 +88,7 @@ class RunResult:
 
 SUMMARY_COLUMNS = [
     "topology_type", "n_agv",
+    "demand_mode",
     "tasks_completed", "throughput_tasks_per_hour",
     "avg_task_completion_time_s", "avg_wait_time_s", "total_wait_time_s",
     "reservation_failure_rate", "reroute_count",
@@ -92,6 +97,8 @@ SUMMARY_COLUMNS = [
     "headon_total", "retry_total", "avg_retry_per_headon",
     "top_bottleneck_node", "top_bottleneck_score",
     "top_headon_edge", "top_headon_edge_count",
+    "tasks_requested", "tasks_dispatched", "tasks_rejected_unreachable",
+    "tasks_backlogged", "task_acceptance_rate", "completion_rate",
     "orders_published", "routeable_pair_count",
     "no_idle_agv", "not_enough_available_nodes", "no_routeable_available_pair",
     "no_routeable_current_pair",
@@ -110,8 +117,10 @@ async def _run_single(
     duration_s: float,
     task_interval_s: float,
     random_seed: int = 42,
+    demand_mode: str = "generated",
+    demand_count: int | None = None,
 ) -> RunResult:
-    result = RunResult(topology_type=topology_type, n_agv=n_agv)
+    result = RunResult(topology_type=topology_type, n_agv=n_agv, demand_mode=demand_mode)
     t0 = time.perf_counter()
 
     try:
@@ -120,7 +129,20 @@ async def _run_single(
         graph   = gen_map.generate(topology_type)
         bus     = LocalMemoryBus()
         sched   = TimeWindowScheduler()
-        task_gen = TaskGenerator(graph, bus, task_interval_s=task_interval_s)
+        demand_set = _build_demand_set(
+            graph=graph,
+            mode=demand_mode,
+            duration_s=duration_s,
+            interval_s=task_interval_s,
+            random_seed=random_seed,
+            demand_count=demand_count,
+        )
+        task_gen = TaskGenerator(
+            graph,
+            bus,
+            task_interval_s=task_interval_s,
+            demand_set=demand_set,
+        )
 
         # Type E: graph._lane_mode 태그로 creep policy 자동 주입
         # (agv._get_effective_speed()가 graph._lane_mode를 직접 읽음)
@@ -179,6 +201,8 @@ async def _run_single(
         result.diagnostics = {
             "registered_agvs": len(engine.agvs),
             "requested_agvs": n_agv,
+            "demand_mode": demand_mode,
+            "demand_set": demand_set.to_dict() if demand_set else None,
             "task_generation": task_gen.diagnostics,
             "station_access": _build_station_access_diagnostics(graph),
             "siding_coverage": _build_siding_coverage_diagnostics(graph),
@@ -189,6 +213,38 @@ async def _run_single(
 
     result.wall_time_s = round(time.perf_counter() - t0, 2)
     return result
+
+
+def _build_demand_set(
+    graph: MapGraph,
+    mode: str,
+    duration_s: float,
+    interval_s: float,
+    random_seed: int,
+    demand_count: int | None,
+) -> DemandSet | None:
+    if mode == "generated":
+        return None
+
+    count = demand_count
+    if count is None:
+        count = int(duration_s // max(interval_s, 0.001)) + 1
+
+    if mode == "common_demand":
+        return DemandSet.common_from_graph(
+            graph,
+            count=count,
+            interval_s=interval_s,
+            random_seed=random_seed,
+        )
+    if mode == "capability":
+        return DemandSet.capability_from_graph(
+            graph,
+            count=count,
+            interval_s=interval_s,
+            random_seed=random_seed,
+        )
+    raise ValueError(f"unknown demand_mode: {mode}")
 
 
 def _build_station_access_diagnostics(graph: MapGraph) -> dict:
@@ -276,7 +332,25 @@ def _flatten_summary_row(result: RunResult) -> dict:
     station = diagnostics.get("station_access", {})
     siding = diagnostics.get("siding_coverage", {})
 
+    tasks_requested = task.get("tasks_requested", 0)
+    tasks_dispatched = task.get("tasks_dispatched", 0)
+    tasks_rejected = task.get("tasks_rejected_unreachable", 0)
+    completion_rate = (
+        round(row.get("tasks_completed", 0) / tasks_requested, 4)
+        if tasks_requested else 0.0
+    )
+    task_acceptance_rate = (
+        round(tasks_dispatched / tasks_requested, 4)
+        if tasks_requested else 0.0
+    )
+
     row.update({
+        "tasks_requested": tasks_requested,
+        "tasks_dispatched": tasks_dispatched,
+        "tasks_rejected_unreachable": tasks_rejected,
+        "tasks_backlogged": task.get("tasks_backlogged", 0),
+        "task_acceptance_rate": task_acceptance_rate,
+        "completion_rate": completion_rate,
         "orders_published": task.get("orders_published", 0),
         "routeable_pair_count": task.get("routeable_pair_count", 0),
         "no_idle_agv": task.get("no_idle_agv", 0),
@@ -320,7 +394,15 @@ class ExperimentRunner:
                 idx += 1
                 print(f"[{idx:2d}/{total}] Type-{t}  AGV={n:2d}  ...", end=" ", flush=True)
                 result = asyncio.run(
-                    _run_single(t, n, cfg.duration_s, cfg.task_interval_s, cfg.random_seed)
+                    _run_single(
+                        t,
+                        n,
+                        cfg.duration_s,
+                        cfg.task_interval_s,
+                        cfg.random_seed,
+                        cfg.demand_mode,
+                        cfg.demand_count,
+                    )
                 )
                 results.append(result)
                 if result.error:
@@ -434,6 +516,10 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         duration_s     = float(raw.get("duration_s", 600.0)),
         task_interval_s= float(raw.get("task_interval_s", 5.0)),
         random_seed    = int(raw.get("random_seed", 42)),
+        demand_mode    = raw.get("demand_mode", "generated"),
+        demand_count   = (
+            int(raw["demand_count"]) if raw.get("demand_count") is not None else None
+        ),
         output_dir     = raw.get("output_dir", "outputs/experiments"),
         run_id         = raw.get("run_id", None),
     )
@@ -453,6 +539,11 @@ def main() -> None:
                         help="태스크 발행 간격 초 (기본: 5)")
     parser.add_argument("--seed",     type=int, default=42,
                         help="난수 시드 (기본: 42)")
+    parser.add_argument("--demand-mode", default="generated",
+                        choices=["generated", "common_demand", "capability"],
+                        help="태스크 수요 생성 모드")
+    parser.add_argument("--demand-count", type=int, default=None,
+                        help="DemandSet 태스크 개수")
     parser.add_argument("--output",   default="outputs/experiments",
                         help="결과 저장 디렉토리")
     args = parser.parse_args()
@@ -466,6 +557,8 @@ def main() -> None:
             duration_s     = args.duration,
             task_interval_s= args.interval,
             random_seed    = args.seed,
+            demand_mode    = args.demand_mode,
+            demand_count   = args.demand_count,
             output_dir     = args.output,
         )
 

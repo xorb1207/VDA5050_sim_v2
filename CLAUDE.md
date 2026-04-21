@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T31
+│   └── test_simulation.py     T1~T32
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -142,6 +142,7 @@ _edge_congestion_counts: 합산 (하위호환)
 - `common_demand`: 모든 topology에 같은 pickup/dropoff sequence를 투입한다. 불가능 task는 rejected/backlog KPI로 집계해야 한다.
 - `capability`: 해당 topology에서 routeable한 pickup/dropoff pair만 생성한다. topology 내부 효율 비교용이다.
 - `processing_time_s`는 demand에 고정되어 topology 간 processing randomness를 분리하는 기반이다.
+- 1차 lifecycle KPI: `tasks_requested`, `tasks_dispatched`, `tasks_rejected_unreachable`, `tasks_backlogged`, `task_acceptance_rate`, `completion_rate`.
 
 ---
 
@@ -182,6 +183,7 @@ T28:     Type C/D station pair reachability 검증
 T29:     Type A routeable task selection 검증
 T30:     Type D width metadata 검증
 T31:     DemandSet common/capability 생성 검증
+T32:     Common demand lifecycle metrics 검증
 ```
 
 실행:
@@ -239,6 +241,8 @@ python -m src.application.usecases.experiment_runner \
 - [x] `kpi.py`에 `get_headon_summary()` 연결
 - [ ] bottleneck_edges 정확도 개선 및 head-on 병목 해석 고도화
 - [ ] Type B siding 커버리지 분석 (베이 사이 중간 구간 siding 없음)
+- [x] DemandSet common/capability 생성 기반
+- [x] common demand lifecycle KPI 1차 연결
 
 ### 중기 (Phase 3 완성)
 - [ ] **경로 전체 사전 예약 (pre-reservation)**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약. 실제 RMF Trajectory 방식에 가장 가까운 구현

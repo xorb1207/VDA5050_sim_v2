@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from src.domain.map.graph import MapGraph
     from src.interfaces.bus import IMessageBus
     from src.domain.agv.agv import AGV
+    from src.application.scenario.demand import DemandSet, TaskDemand
 from src.domain.agv.fsm import AGVState
 
 
@@ -23,6 +24,10 @@ class TaskSpec:
 @dataclass
 class TaskGenerationDiagnostics:
     """TaskGenerator가 태스크를 못 낸 이유를 집계한다."""
+    tasks_requested: int = 0
+    tasks_dispatched: int = 0
+    tasks_rejected_unreachable: int = 0
+    tasks_backlogged: int = 0
     orders_published: int = 0
     no_idle_agv: int = 0
     not_enough_work_nodes: int = 0
@@ -35,6 +40,10 @@ class TaskGenerationDiagnostics:
 
     def to_dict(self) -> dict:
         return {
+            "tasks_requested": self.tasks_requested,
+            "tasks_dispatched": self.tasks_dispatched,
+            "tasks_rejected_unreachable": self.tasks_rejected_unreachable,
+            "tasks_backlogged": self.tasks_backlogged,
             "orders_published": self.orders_published,
             "no_idle_agv": self.no_idle_agv,
             "not_enough_work_nodes": self.not_enough_work_nodes,
@@ -61,6 +70,7 @@ class TaskGenerator:
         graph: MapGraph,
         bus: IMessageBus,
         task_interval_s: float = 30.0,
+        demand_set: DemandSet | None = None,
     ) -> None:
         self._graph = graph
         self._bus = bus
@@ -68,6 +78,9 @@ class TaskGenerator:
         self._next_task_time: float = 0.0
         self._task_counter: int = 0
         self._diagnostics = TaskGenerationDiagnostics()
+        self._demand_set = demand_set
+        self._demand_index: int = 0
+        self._backlogged_demand: TaskDemand | None = None
 
         # 작업 가능 노드 추출:
         #   - sample_fab.json 기준: NodeRole.WORK
@@ -88,6 +101,18 @@ class TaskGenerator:
     def diagnostics(self) -> dict:
         data = self._diagnostics.to_dict()
         data["routeable_pair_count"] = len(self._routeable_pairs)
+        if self._demand_set:
+            data["demand_mode"] = self._demand_set.mode
+            data["demand_count"] = len(self._demand_set.demands)
+            data["tasks_backlogged"] = max(
+                0,
+                data["tasks_requested"]
+                - data["tasks_dispatched"]
+                - data["tasks_rejected_unreachable"],
+            )
+        else:
+            data["demand_mode"] = "generated"
+            data["demand_count"] = 0
         return data
 
     async def step(
@@ -96,6 +121,10 @@ class TaskGenerator:
         agvs: dict[str, AGV],
     ) -> None:
         """엔진 틱마다 호출. interval 경과 시 IDLE AGV에 Order 발행."""
+        if self._demand_set is not None:
+            await self._step_demand_set(sim_time, agvs)
+            return
+
         if sim_time < self._next_task_time:
             return
         if len(self._work_nodes) < 2:
@@ -199,6 +228,100 @@ class TaskGenerator:
 
     # ------------------------------------------------------------------
 
+    async def _step_demand_set(
+        self,
+        sim_time: float,
+        agvs: dict[str, AGV],
+    ) -> None:
+        released_count = sum(
+            1 for demand in self._demand_set.demands
+            if demand.release_time_s <= sim_time
+        )
+        self._diagnostics.tasks_requested = max(
+            self._diagnostics.tasks_requested,
+            released_count,
+        )
+        self._diagnostics.tasks_backlogged = max(
+            0,
+            self._diagnostics.tasks_requested
+            - self._diagnostics.tasks_dispatched
+            - self._diagnostics.tasks_rejected_unreachable,
+        )
+
+        if self._backlogged_demand is not None:
+            dispatched = await self._dispatch_demand(self._backlogged_demand, agvs)
+            if not dispatched:
+                return
+            self._backlogged_demand = None
+
+        while self._demand_index < len(self._demand_set.demands):
+            demand = self._demand_set.demands[self._demand_index]
+            if demand.release_time_s > sim_time:
+                return
+
+            self._demand_index += 1
+
+            if not self._graph.get_path(demand.pickup_node_id, demand.dropoff_node_id):
+                self._diagnostics.tasks_rejected_unreachable += 1
+                self._record_path_failure(
+                    demand.pickup_node_id,
+                    demand.dropoff_node_id,
+                )
+                continue
+
+            dispatched = await self._dispatch_demand(demand, agvs)
+            if not dispatched:
+                self._backlogged_demand = demand
+                return
+
+    async def _dispatch_demand(
+        self,
+        demand: TaskDemand,
+        agvs: dict[str, AGV],
+    ) -> bool:
+        idle_agvs = [
+            agv for agv in agvs.values()
+            if agv.state.value == "IDLE"
+            and agv.current_node_id
+            and self._graph.get_path(agv.current_node_id, demand.pickup_node_id)
+        ]
+        if not idle_agvs:
+            self._diagnostics.no_idle_agv += 1
+            return False
+
+        agv = min(
+            idle_agvs,
+            key=lambda a: len(self._graph.get_path(a.current_node_id, demand.pickup_node_id)),
+        )
+        path_to_pickup = self._graph.get_path(agv.current_node_id, demand.pickup_node_id)
+        path_to_dropoff = self._graph.get_path(
+            demand.pickup_node_id,
+            demand.dropoff_node_id,
+        )
+        if not path_to_pickup:
+            self._diagnostics.no_path_to_pickup += 1
+            self._record_path_failure(agv.current_node_id, demand.pickup_node_id)
+            return False
+        if not path_to_dropoff:
+            self._diagnostics.no_path_pickup_to_dropoff += 1
+            self._record_path_failure(demand.pickup_node_id, demand.dropoff_node_id)
+            return False
+
+        full_path = path_to_pickup + path_to_dropoff[1:]
+        order_payload = self._build_order(
+            task_id=demand.task_id,
+            agv_id=agv.agv_id,
+            node_ids=full_path,
+            processing_time_s=demand.processing_time_s,
+        )
+        await self._bus.publish(
+            f"uagv/v2/NEXT/{agv.agv_id}/order",
+            order_payload,
+        )
+        self._diagnostics.tasks_dispatched += 1
+        self._diagnostics.orders_published += 1
+        return True
+
     def _record_path_failure(self, src: str | None, dst: str) -> None:
         key = f"{src or '<none>'}->{dst}"
         self._diagnostics.path_failures[key] = (
@@ -210,6 +333,7 @@ class TaskGenerator:
         task_id: str,
         agv_id: str,
         node_ids: list[str],
+        processing_time_s: float | None = None,
     ) -> dict:
         """
         node_ids 리스트를 VDA5050 Order 포맷으로 직렬화.
@@ -233,10 +357,13 @@ class TaskGenerator:
                     "released":   True,
                 })
 
-        return {
+        payload = {
             "orderId":        task_id,
             "orderUpdateId":  0,
             "agvId":          agv_id,
             "nodes":          nodes,
             "edges":          edges,
         }
+        if processing_time_s is not None:
+            payload["processingTimeS"] = processing_time_s
+        return payload

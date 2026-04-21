@@ -687,6 +687,32 @@ def test_demand_set_generation():
     assert_eq("capability excludes unreachable demand", len(unreachable_capability), 0)
 
 
+async def _test_common_demand_lifecycle_metrics():
+    print("\n[T32] Common demand lifecycle metrics")
+    from src.application.usecases.experiment_runner import _run_single, _flatten_summary_row
+
+    result = await _run_single(
+        "A",
+        n_agv=3,
+        duration_s=10.0,
+        task_interval_s=3.0,
+        random_seed=2,
+        demand_mode="common_demand",
+        demand_count=5,
+    )
+    row = _flatten_summary_row(result)
+
+    assert_eq("demand mode", row["demand_mode"], "common_demand")
+    assert_true("requested > 0", row["tasks_requested"] > 0)
+    assert_true("unreachable rejected > 0", row["tasks_rejected_unreachable"] > 0)
+    assert_true("acceptance rate bounded", 0.0 <= row["task_acceptance_rate"] <= 1.0)
+    assert_true("completion rate bounded", 0.0 <= row["completion_rate"] <= 1.0)
+
+
+def test_common_demand_lifecycle_metrics():
+    run(_test_common_demand_lifecycle_metrics())
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -725,6 +751,7 @@ if __name__ == "__main__":
         test_type_a_routeable_task_selection,
         test_type_d_width_metadata,
         test_demand_set_generation,
+        test_common_demand_lifecycle_metrics,
     ]
     passed = failed = 0
     for t in tests:

@@ -73,6 +73,7 @@ class AGV:
         self._path:       list[str] = []
         self._path_index: int       = 0
         self._process_remaining: float = 0.0
+        self._order_processing_time_s: Optional[float] = None
 
         # Conflict Resolution
         self.collision_retry_count: int   = 0
@@ -110,6 +111,10 @@ class AGV:
         order = VDA5050Parser.parse_order(payload)
         self._path       = [n.nodeId for n in order.base_nodes if n.released]
         self._path_index = 0
+        processing_time = payload.get("processingTimeS")
+        self._order_processing_time_s = (
+            float(processing_time) if processing_time is not None else None
+        )
         if self._path and self._fsm.state == AGVState.IDLE:
             await self._navigate_to_next_node(sim_time=0.0)
 
@@ -207,7 +212,10 @@ class AGV:
             self.collision_retry_count = 0  # 도착 시 retry 초기화
 
             if t.role.value in ("work", "station") or t.is_parking_spot:
-                self._process_remaining = random.uniform(30.0, 120.0)
+                if self._order_processing_time_s is not None:
+                    self._process_remaining = self._order_processing_time_s
+                else:
+                    self._process_remaining = random.uniform(30.0, 120.0)
                 self._fsm.force(AGVState.PROCESSING)
             else:
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
