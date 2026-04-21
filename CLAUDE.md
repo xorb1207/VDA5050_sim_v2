@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T25
+│   └── test_simulation.py     T1~T27
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -170,6 +170,8 @@ T22:     Type E creep policy 주입 검증
 T23:     Type A head-on 엣지 쌍 없음
 T24:     Type C same-lane head-on 없음
 T25:     Type D same-lane head-on 없음
+T26:     TaskGenerator diagnostics 카운터 검증
+T27:     KPI head-on 필드 회귀 검증
 ```
 
 실행:
@@ -224,7 +226,8 @@ python -m src.application.usecases.experiment_runner \
 
 ### 단기
 - [ ] Type C/D 처리량 낮은 원인 확정 (스테이션 L1 연결 구조)
-- [ ] `kpi.py`에 `get_headon_summary()` 연결 (bottleneck_edges 정확도)
+- [x] `kpi.py`에 `get_headon_summary()` 연결
+- [ ] bottleneck_edges 정확도 개선 및 head-on 병목 해석 고도화
 - [ ] Type B siding 커버리지 분석 (베이 사이 중간 구간 siding 없음)
 
 ### 중기 (Phase 3 완성)

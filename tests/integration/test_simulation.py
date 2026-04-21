@@ -535,6 +535,51 @@ def test_type_d_no_samelane_headon():
 
 
 # ─────────────────────────────────────────────
+# TEST 9: Diagnostics / KPI regression
+# ─────────────────────────────────────────────
+
+async def _test_task_generator_diagnostics():
+    print("\n[T26] TaskGenerator diagnostics")
+    graph = make_graph()
+    bus = LocalMemoryBus()
+    gen = TaskGenerator(graph, bus, task_interval_s=0.0)
+
+    await gen.step(sim_time=0.0, agvs={})
+    diag = gen.diagnostics
+
+    assert_eq("no_idle_agv 카운트", diag["no_idle_agv"], 1)
+    assert_eq("orders_published 0", diag["orders_published"], 0)
+
+
+def test_task_generator_diagnostics():
+    run(_test_task_generator_diagnostics())
+
+
+async def _test_kpi_headon_fields():
+    print("\n[T27] KPI head-on fields")
+    graph = make_graph()
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    gen = TaskGenerator(graph, bus, task_interval_s=1000.0)
+    engine = SimulationEngine(graph, sched, task_generator=gen)
+
+    agv = AGV("AGV_001", bus, graph, sched)
+    agv.current_node_id = "node_charger_01"
+    agv.physics.x = graph.nodes["node_charger_01"].x
+    agv.physics.y = graph.nodes["node_charger_01"].y
+    engine.register_agv(agv)
+
+    results = await engine.run(duration_s=1.0)
+    for key in ("headon_total", "retry_total", "avg_retry_per_headon", "top_headon_edges"):
+        assert_true(f"{key} 포함", key in results)
+    assert_eq("headon_total 기본값", results["headon_total"], 0)
+
+
+def test_kpi_headon_fields():
+    run(_test_kpi_headon_fields())
+
+
+# ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
 
@@ -565,6 +610,9 @@ if __name__ == "__main__":
         test_type_a_no_headon,
         test_type_c_no_headon,
         test_type_d_no_samelane_headon,
+        # Diagnostics / KPI regression (T26~T27)
+        test_task_generator_diagnostics,
+        test_kpi_headon_fields,
     ]
     passed = failed = 0
     for t in tests:

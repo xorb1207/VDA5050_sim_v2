@@ -19,5 +19,8 @@ agvs:
 
 # 태스크 생성 주기 (초) — TaskGenerator가 IDLE AGV에게 Order 발행하는 간격
 task_interval_s: 20.0
+
+# MQTT 사용 시 설정
+mqtt:
   host: localhost
   port: 1883

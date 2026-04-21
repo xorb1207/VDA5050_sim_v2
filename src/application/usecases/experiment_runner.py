@@ -74,6 +74,7 @@ class RunResult:
     top_bottleneck_score: float     = 0.0
     top_headon_edge: str            = ""
     top_headon_edge_count: int      = 0
+    diagnostics: dict               = field(default_factory=dict)
     sim_time_s: float               = 0.0
     wall_time_s: float              = 0.0
     error: str                      = ""
@@ -120,7 +121,10 @@ async def _run_single(
             nid for nid, n in graph.nodes.items()
             if n.role == NodeRole.STANDARD and nid.startswith("WP_")
         ]
-        start_nodes = (charger_nodes + wp_nodes)[:n_agv]
+        start_pool = charger_nodes + wp_nodes
+        if not start_pool:
+            raise ValueError("no start nodes available")
+        start_nodes = [start_pool[i % len(start_pool)] for i in range(n_agv)]
 
         for i, start_node in enumerate(start_nodes):
             agv = AGV(f"AGV_{i+1:03d}", bus, graph, sched)
@@ -153,19 +157,80 @@ async def _run_single(
             result.top_bottleneck_score = bn[0].get("congestion_score", 0.0)
 
         # head-on 분석
-        summary = sched.get_headon_summary()
-        result.headon_total          = summary["headon_total"]
-        result.retry_total           = summary["retry_total"]
-        result.avg_retry_per_headon  = summary["avg_retry_per_headon"]
-        if summary["top_headon_edges"]:
-            result.top_headon_edge       = summary["top_headon_edges"][0]["edge"]
-            result.top_headon_edge_count = summary["top_headon_edges"][0]["count"]
+        result.headon_total          = kpis.get("headon_total", 0)
+        result.retry_total           = kpis.get("retry_total", 0)
+        result.avg_retry_per_headon  = kpis.get("avg_retry_per_headon", 0.0)
+        top_headon_edges = kpis.get("top_headon_edges", [])
+        if top_headon_edges:
+            result.top_headon_edge       = top_headon_edges[0]["edge"]
+            result.top_headon_edge_count = top_headon_edges[0]["count"]
+
+        result.diagnostics = {
+            "registered_agvs": len(engine.agvs),
+            "requested_agvs": n_agv,
+            "task_generation": task_gen.diagnostics,
+            "station_access": _build_station_access_diagnostics(graph),
+            "siding_coverage": _build_siding_coverage_diagnostics(graph),
+        }
 
     except Exception as e:
         result.error = str(e)
 
     result.wall_time_s = round(time.perf_counter() - t0, 2)
     return result
+
+
+def _build_station_access_diagnostics(graph: MapGraph) -> dict:
+    stations = graph.get_stations()
+    unreachable: list[str] = []
+    access_edge_counts: dict[str, int] = {}
+
+    charger_nodes = [n.node_id for n in graph.get_chargers()]
+    fallback_start = next(iter(graph.nodes), "")
+    start = charger_nodes[0] if charger_nodes else fallback_start
+
+    for station in stations:
+        inbound = [
+            e for e in graph.edges.values()
+            if e.end_node_id == station.node_id
+        ]
+        outbound = [
+            e for e in graph.edges.values()
+            if e.start_node_id == station.node_id
+        ]
+        access_edge_counts[station.node_id] = len(inbound) + len(outbound)
+        if start and not graph.get_path(start, station.node_id):
+            unreachable.append(station.node_id)
+
+    return {
+        "station_count": len(stations),
+        "reachable_from_first_charger": len(stations) - len(unreachable),
+        "unreachable_from_first_charger": unreachable[:10],
+        "min_access_edges": min(access_edge_counts.values(), default=0),
+    }
+
+
+def _build_siding_coverage_diagnostics(graph: MapGraph) -> dict:
+    siding_nodes = [
+        nid for nid, node in graph.nodes.items()
+        if node.role == NodeRole.SIDING
+    ]
+    main_nodes = [
+        nid for nid, node in graph.nodes.items()
+        if node.role in (NodeRole.STANDARD, NodeRole.APPROACH)
+        and nid.startswith("WP_")
+    ]
+    covered = [
+        nid for nid in main_nodes
+        if any(nb.role == NodeRole.SIDING for nb in graph.get_neighbors(nid))
+    ]
+    coverage_ratio = round(len(covered) / len(main_nodes), 4) if main_nodes else 0.0
+    return {
+        "siding_count": len(siding_nodes),
+        "main_node_count": len(main_nodes),
+        "main_nodes_with_adjacent_siding": len(covered),
+        "coverage_ratio": coverage_ratio,
+    }
 
 
 # ── 배치 실험 러너 ─────────────────────────────────────────────

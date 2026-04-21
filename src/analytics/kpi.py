@@ -89,11 +89,17 @@ class KPICalculator:
         ][:5]
 
         # edge: 점유 시간 기준 Top N
+        edge_scores = scheduler.get_all_edge_scores()
         bottleneck_edges = [
             {"edge_id": eid, "occupancy_time_s": round(t, 2),
-             "occupancy_rate": round(t / sim_time_s, 4)}
+             "occupancy_rate": round(t / sim_time_s, 4),
+             "congestion_score": edge_scores.get(eid, 0.0),
+             "headon_count": scheduler._edge_headon_counts.get(eid, 0),
+             "retry_count": scheduler._edge_retry_counts.get(eid, 0)}
             for eid, t in sorted(edge_times.items(), key=lambda x: x[1], reverse=True)
         ][:5]
+
+        headon_summary = scheduler.get_headon_summary()
 
         # ── 6. Stability ───────────────────────────────────────────
         # stall은 engine의 deadlock_count에서 가져옴 (별도 주입)
@@ -116,6 +122,10 @@ class KPICalculator:
             # 3. Traffic Efficiency
             "reservation_failure_rate":    reservation_failure_rate,
             "reroute_count":               reroute_count,
+            "headon_total":                headon_summary["headon_total"],
+            "retry_total":                 headon_summary["retry_total"],
+            "avg_retry_per_headon":        headon_summary["avg_retry_per_headon"],
+            "top_headon_edges":            headon_summary["top_headon_edges"],
 
             # 4. Resource Utilization
             "node_occupancy_rate":         node_occupancy_rate,
