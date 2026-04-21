@@ -573,6 +573,7 @@ async def _test_kpi_headon_fields():
     for key in (
         "headon_total",
         "followon_total",
+        "section_conflict_total",
         "retry_total",
         "itinerary_success",
         "itinerary_failure",
@@ -582,6 +583,7 @@ async def _test_kpi_headon_fields():
         assert_true(f"{key} 포함", key in results)
     assert_eq("headon_total 기본값", results["headon_total"], 0)
     assert_eq("followon_total 기본값", results["followon_total"], 0)
+    assert_eq("section_conflict_total 기본값", results["section_conflict_total"], 0)
 
 
 def test_kpi_headon_fields():
@@ -958,6 +960,81 @@ def test_itinerary_reservation_atomic_conflict():
     run(_test_itinerary_reservation_atomic_conflict())
 
 
+async def _test_critical_section_conflict_blocks_itinerary():
+    print("\n[T38] Critical section conflict")
+    from src.domain.reservation.scheduler import ItinerarySegment
+
+    s = TimeWindowScheduler()
+    first = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="A__B",
+            agv_id="AGV_001",
+            start_time=0.0,
+            end_time=10.0,
+            src_id="A",
+            dst_id="B",
+            section_key="bay:160",
+        )
+    ])
+    conflict = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="C__D",
+            agv_id="AGV_002",
+            start_time=2.0,
+            end_time=5.0,
+            src_id="C",
+            dst_id="D",
+            section_key="bay:160",
+        )
+    ])
+    allowed = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="E__F",
+            agv_id="AGV_003",
+            start_time=2.0,
+            end_time=5.0,
+            src_id="E",
+            dst_id="F",
+            section_key="bay:320",
+        )
+    ])
+    summary = s.get_headon_summary()
+
+    assert_eq("첫 section 예약 성공", first, True)
+    assert_eq("동일 section 겹침 차단", conflict, False)
+    assert_eq("다른 section 겹침 허용", allowed, True)
+    assert_eq("section conflict count", summary["section_conflict_total"], 1)
+    assert_eq("실패 section edge 미추가", len(s._edge_reservations["C__D"]), 0)
+
+
+def test_critical_section_conflict_blocks_itinerary():
+    run(_test_critical_section_conflict_blocks_itinerary())
+
+
+def test_critical_section_key_generation():
+    print("\n[T39] Critical section key generation")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B")
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    bay_edge = next(e for e in graph.edges.values() if e.corridor == "bay")
+    access_edge = next(e for e in graph.edges.values() if e.access_type == "station_access")
+    shared_edge = next(e for e in graph.edges.values() if e.corridor == "north")
+
+    assert_true("bay section key", agv._critical_section_key(bay_edge).startswith("bay:"))
+    assert_true(
+        "access section key",
+        agv._critical_section_key(access_edge).startswith("access:station_access:"),
+    )
+    assert_true(
+        "shared corridor section key",
+        agv._critical_section_key(shared_edge).startswith("shared_corridor:north:"),
+    )
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -1002,6 +1079,8 @@ if __name__ == "__main__":
         test_follow_on_headway_blocks_close_entry,
         test_type_d_follow_on_headway_shorter_than_c,
         test_itinerary_reservation_atomic_conflict,
+        test_critical_section_conflict_blocks_itinerary,
+        test_critical_section_key_generation,
     ]
     passed = failed = 0
     for t in tests:

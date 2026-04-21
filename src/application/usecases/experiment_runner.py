@@ -85,6 +85,7 @@ class RunResult:
     max_queue_length: int           = 0
     headon_total: int               = 0
     followon_total: int             = 0
+    section_conflict_total: int     = 0
     retry_total: int                = 0
     itinerary_success: int          = 0
     itinerary_failure: int          = 0
@@ -109,7 +110,7 @@ SUMMARY_COLUMNS = [
     "reservation_failure_rate", "reroute_count",
     "node_occupancy_rate", "edge_occupancy_rate", "agv_utilization",
     "total_travel_distance_m", "max_queue_length",
-    "headon_total", "followon_total", "retry_total",
+    "headon_total", "followon_total", "section_conflict_total", "retry_total",
     "itinerary_success", "itinerary_failure", "avg_retry_per_headon",
     "top_bottleneck_node", "top_bottleneck_score",
     "top_headon_edge", "top_headon_edge_count",
@@ -213,6 +214,7 @@ async def _run_single(
         # head-on 분석
         result.headon_total          = kpis.get("headon_total", 0)
         result.followon_total        = kpis.get("followon_total", 0)
+        result.section_conflict_total = kpis.get("section_conflict_total", 0)
         result.retry_total           = kpis.get("retry_total", 0)
         result.itinerary_success     = kpis.get("itinerary_success", 0)
         result.itinerary_failure     = kpis.get("itinerary_failure", 0)
@@ -415,13 +417,23 @@ def _flatten_summary_row(result: RunResult) -> dict:
 
 def _ranking_sort_key(row: dict) -> tuple:
     if row.get("error"):
-        return (1, 0.0, 0.0, 0.0, float("inf"), float("inf"), float("inf"))
+        return (
+            1,
+            0.0,
+            0.0,
+            0.0,
+            float("inf"),
+            float("inf"),
+            float("inf"),
+            float("inf"),
+        )
     return (
         0,
         -float(row.get("completion_rate", 0.0)),
         -float(row.get("task_acceptance_rate", 0.0)),
         -float(row.get("demand_throughput_per_hour", 0.0)),
         float(row.get("total_wait_time_s", 0.0)),
+        float(row.get("section_conflict_total", 0.0)),
         float(row.get("followon_total", 0.0)),
         float(row.get("headon_total", 0.0)),
         float(row.get("retry_total", 0.0)),
@@ -460,6 +472,7 @@ def _build_ranking_rows(results: list[RunResult]) -> list[dict]:
                 "demands_completed": row.get("demands_completed", 0),
                 "demand_throughput_per_hour": row.get("demand_throughput_per_hour", 0.0),
                 "total_wait_time_s": row.get("total_wait_time_s", 0.0),
+                "section_conflict_total": row.get("section_conflict_total", 0),
                 "followon_total": row.get("followon_total", 0),
                 "headon_total": row.get("headon_total", 0),
                 "retry_total": row.get("retry_total", 0),
@@ -487,6 +500,7 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
                 "avg_total_wait_time_s": 0.0,
                 "avg_headon_total": 0.0,
                 "avg_followon_total": 0.0,
+                "avg_section_conflict_total": 0.0,
             })
             continue
 
@@ -511,6 +525,9 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
             "avg_followon_total": round(
                 sum(float(r["followon_total"]) for r in valid) / count, 3
             ),
+            "avg_section_conflict_total": round(
+                sum(float(r["section_conflict_total"]) for r in valid) / count, 3
+            ),
         })
 
     return sorted(
@@ -521,6 +538,7 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
             -r["avg_completion_rate"],
             -r["avg_demand_throughput_per_hour"],
             r["avg_total_wait_time_s"],
+            r["avg_section_conflict_total"],
             r["avg_followon_total"],
             r["avg_headon_total"],
         ),
@@ -611,7 +629,8 @@ class ExperimentRunner:
             "n_agv", "random_seed", "demand_mode", "rank", "winner",
             "topology_type", "completion_rate", "task_acceptance_rate",
             "demands_completed", "demand_throughput_per_hour",
-            "total_wait_time_s", "followon_total", "headon_total",
+            "total_wait_time_s", "section_conflict_total",
+            "followon_total", "headon_total",
             "retry_total", "error",
         ]
         with open(ranking_path, "w", newline="", encoding="utf-8") as f:
@@ -730,6 +749,23 @@ class ExperimentRunner:
             print(f"{'Type '+t:6s}", end="")
             for n in cfg.agv_counts:
                 value = avg_for(t, n, "followon_total")
+                if value is not None:
+                    print(f"{value:>{col_w}.1f}", end="")
+                else:
+                    print(f"{'ERR':>{col_w}}", end="")
+            print()
+
+        print(f"\nCritical section conflict 횟수 매트릭스")
+        print(f"{'Type':6s}", end="")
+        for n in cfg.agv_counts:
+            print(f"{'AGV='+str(n):>{col_w}}", end="")
+        print()
+        print("─" * (6 + col_w * len(cfg.agv_counts)))
+
+        for t in cfg.types:
+            print(f"{'Type '+t:6s}", end="")
+            for n in cfg.agv_counts:
+                value = avg_for(t, n, "section_conflict_total")
                 if value is not None:
                     print(f"{value:>{col_w}.1f}", end="")
                 else:

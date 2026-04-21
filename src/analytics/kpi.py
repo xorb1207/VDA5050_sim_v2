@@ -125,11 +125,13 @@ class KPICalculator:
             "reroute_count":               reroute_count,
             "headon_total":                headon_summary["headon_total"],
             "followon_total":              headon_summary["followon_total"],
+            "section_conflict_total":      headon_summary["section_conflict_total"],
             "retry_total":                 headon_summary["retry_total"],
             "avg_retry_per_headon":        headon_summary["avg_retry_per_headon"],
             "top_headon_edges":            headon_summary["top_headon_edges"],
             "itinerary_success":           headon_summary["itinerary_success"],
             "itinerary_failure":           headon_summary["itinerary_failure"],
+            "top_section_conflicts":       headon_summary["top_section_conflicts"],
 
             # 4. Resource Utilization
             "node_occupancy_rate":         node_occupancy_rate,

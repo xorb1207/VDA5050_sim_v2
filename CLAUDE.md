@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T37
+│   └── test_simulation.py     T1~T39
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -104,6 +104,9 @@ nav graph YAML         fab_nav_graph.yaml
 Itinerary 예약:
   - reserve_itinerary([...segments]): 전체 path의 node/edge time-window를 atomic 예약
   - 실패 시 아무 segment도 추가하지 않음
+Critical section 예약:
+  - bay / siding / station_access / charger_access / B,E shared corridor를 section_key로 묶음
+  - 같은 section time-window가 겹치면 itinerary를 atomic reject
 ```
 
 ### Conflict Resolution 정책
@@ -171,7 +174,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T37)
+## 테스트 구조 (T1~T39)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -198,6 +201,8 @@ T34:     Topology ranking summary 검증
 T35:     Same-direction follow-on headway 차단 검증
 T36:     Type D wide lane follow-on headway 축소 검증
 T37:     Itinerary reservation atomic conflict 검증
+T38:     Critical section conflict 검증
+T39:     Critical section key generation 검증
 ```
 
 실행:
@@ -249,6 +254,7 @@ python -m src.application.usecases.experiment_runner \
 | edge_occupancy_rate | 엣지 점유율 |
 | headon_total | head-on 진성 충돌 횟수 |
 | followon_total | same-direction follow-on 안전거리 차단 횟수 |
+| section_conflict_total | critical section time-window 충돌 횟수 |
 | retry_total | 대기 중 재시도 횟수 (병목 강도) |
 | itinerary_success | 전체 path 사전 예약 성공 횟수 |
 | itinerary_failure | 전체 path 사전 예약 실패 횟수 |
@@ -272,10 +278,12 @@ python -m src.application.usecases.experiment_runner \
 - [x] topology ranking 기준 및 승패 자동 요약
 - [x] same-direction follow-on 안전거리 1차 반영
 - [x] Open-RMF식 itinerary/pre-reservation 1차 API 및 AGV 연결
+- [x] critical section 예약 1차 반영
 
 ### 중기 (Phase 3 완성)
 - [x] **경로 전체 사전 예약 (pre-reservation) 1차**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약
-- [ ] **critical section 예약 본격화**: 교차로/좁은 bay/양방향 lane을 section 단위로 묶어 예약
+- [x] **critical section 예약 1차**: 교차로/좁은 bay/양방향 lane을 section 단위로 묶어 예약
+- [ ] **critical section 세분화**: section capacity/priority/release timing 고도화
 - [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
 - [ ] **물리 모델 고도화**: 가감속 구간, head-on 해소 후 재출발 시간 반영
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합

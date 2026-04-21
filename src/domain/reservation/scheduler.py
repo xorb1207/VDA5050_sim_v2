@@ -34,6 +34,7 @@ class ItinerarySegment:
     src_id: str = ""
     dst_id: str = ""
     same_direction_headway_s: float = 0.0
+    section_key: str = ""
 
 
 class TimeWindowScheduler:
@@ -57,6 +58,8 @@ class TimeWindowScheduler:
         self._edge_followon_counts: dict[str, int] = defaultdict(int)  # 같은 방향 안전거리 차단
         self._edge_retry_counts:  dict[str, int] = defaultdict(int)  # 대기 중 재시도 (병목 강도)
         self._edge_congestion_counts: dict[str, int] = defaultdict(int)  # 합산 (하위호환)
+        self._section_reservations: dict[str, list[Reservation]] = defaultdict(list)
+        self._section_conflict_counts: dict[str, int] = defaultdict(int)
         self._itinerary_success: int = 0
         self._itinerary_failure: int = 0
 
@@ -140,6 +143,15 @@ class TimeWindowScheduler:
                 return False
 
             for segment in segments:
+                if segment.section_key:
+                    self._section_reservations[segment.section_key].append(
+                        Reservation(
+                            segment.section_key,
+                            segment.agv_id,
+                            segment.start_time,
+                            segment.end_time,
+                        )
+                    )
                 if segment.segment_type == "node":
                     self._reservations[segment.key].append(
                         Reservation(
@@ -176,6 +188,10 @@ class TimeWindowScheduler:
                     if r.agv_id == agv_id and not r.released:
                         r.released = True
             for reservations in self._edge_reservations.values():
+                for r in reservations:
+                    if r.agv_id == agv_id and not r.released:
+                        r.released = True
+            for reservations in self._section_reservations.values():
                 for r in reservations:
                     if r.agv_id == agv_id and not r.released:
                         r.released = True
@@ -339,6 +355,7 @@ class TimeWindowScheduler:
         """
         headon_total = sum(self._edge_headon_counts.values())
         followon_total = sum(self._edge_followon_counts.values())
+        section_total = sum(self._section_conflict_counts.values())
         retry_total  = sum(self._edge_retry_counts.values())
         avg_retry = round(retry_total / headon_total, 2) if headon_total > 0 else 0.0
         top_edges = sorted(
@@ -347,11 +364,20 @@ class TimeWindowScheduler:
         return {
             "headon_total":          headon_total,
             "followon_total":        followon_total,
+            "section_conflict_total": section_total,
             "retry_total":           retry_total,
             "avg_retry_per_headon":  avg_retry,
             "top_headon_edges":      [{"edge": e, "count": c} for e, c in top_edges],
             "itinerary_success":     self._itinerary_success,
             "itinerary_failure":     self._itinerary_failure,
+            "top_section_conflicts":  [
+                {"section": section, "count": count}
+                for section, count in sorted(
+                    self._section_conflict_counts.items(),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )[:5]
+            ],
         }
 
     # ── 내부 헬퍼 ─────────────────────────────────────────────
@@ -388,8 +414,30 @@ class TimeWindowScheduler:
     def _has_itinerary_conflict(self, segments: list[ItinerarySegment]) -> bool:
         staged_nodes: dict[str, list[Reservation]] = defaultdict(list)
         staged_edges: dict[str, list[EdgeReservation]] = defaultdict(list)
+        staged_sections: dict[str, list[Reservation]] = defaultdict(list)
 
         for segment in segments:
+            if segment.section_key:
+                existing_sections = [
+                    r for r in self._section_reservations[segment.section_key]
+                    if not r.released and r.agv_id != segment.agv_id
+                ] + staged_sections[segment.section_key]
+                if self._has_node_conflict(
+                    existing_sections,
+                    segment.start_time,
+                    segment.end_time,
+                ):
+                    self._section_conflict_counts[segment.section_key] += 1
+                    return True
+                staged_sections[segment.section_key].append(
+                    Reservation(
+                        segment.section_key,
+                        segment.agv_id,
+                        segment.start_time,
+                        segment.end_time,
+                    )
+                )
+
             if segment.segment_type == "node":
                 existing = [
                     r for r in self._reservations[segment.key]

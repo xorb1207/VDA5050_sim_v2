@@ -493,6 +493,7 @@ class AGV:
                         dst,
                         edge_speed,
                     ),
+                    section_key=self._critical_section_key(edge),
                 )
             )
             cursor = edge_end
@@ -513,6 +514,23 @@ class AGV:
             current = dst
 
         return segments
+
+    def _critical_section_key(self, edge) -> str:
+        topology_type = getattr(self._graph, "_topology_type", "")
+        if edge.access_type:
+            return f"access:{edge.access_type}:{edge.start_node_id}->{edge.end_node_id}"
+        if edge.corridor == "bay":
+            return f"bay:{edge.start_node_id.split('_')[-1]}"
+        if edge.corridor == "siding":
+            return f"siding:{edge.start_node_id}->{edge.end_node_id}"
+        if topology_type in ("B", "E") and edge.corridor in ("north", "center", "south"):
+            return f"shared_corridor:{edge.corridor}:{self._undirected_edge_key(edge)}"
+        return ""
+
+    @staticmethod
+    def _undirected_edge_key(edge) -> str:
+        a, b = sorted([edge.start_node_id, edge.end_node_id])
+        return f"{a}<->{b}"
 
     def _find_blocking_agv(self, src: str, dst: str, sim_time: float) -> Optional[str]:
         reverse_key = f"{dst}__{src}"
