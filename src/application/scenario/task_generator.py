@@ -344,6 +344,8 @@ class TaskGenerator:
             agv_id=agv.agv_id,
             node_ids=full_path,
             processing_time_s=demand.processing_time_s,
+            pickup_processing_time_s=demand.pickup_processing_time_s,
+            dropoff_processing_time_s=demand.dropoff_processing_time_s,
             dispatch_time_s=sim_time,
             demand_id=demand.task_id,
             pickup_node_id=demand.pickup_node_id,
@@ -369,6 +371,8 @@ class TaskGenerator:
         agv_id: str,
         node_ids: list[str],
         processing_time_s: float | None = None,
+        pickup_processing_time_s: float | None = None,
+        dropoff_processing_time_s: float | None = None,
         dispatch_time_s: float | None = None,
         demand_id: str | None = None,
         pickup_node_id: str | None = None,
@@ -405,6 +409,10 @@ class TaskGenerator:
         }
         if processing_time_s is not None:
             payload["processingTimeS"] = processing_time_s
+        if pickup_processing_time_s is not None:
+            payload["pickupProcessingTimeS"] = pickup_processing_time_s
+        if dropoff_processing_time_s is not None:
+            payload["dropoffProcessingTimeS"] = dropoff_processing_time_s
         if dispatch_time_s is not None:
             payload["dispatchTimeS"] = dispatch_time_s
         if demand_id is not None:

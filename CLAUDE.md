@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T43
+│   └── test_simulation.py     T1~T44
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -150,7 +150,8 @@ _edge_congestion_counts: 합산 (하위호환)
 `src/application/scenario/demand.py`는 topology 비교용 deterministic demand sequence를 생성한다.
 - `common_demand`: 모든 topology에 같은 pickup/dropoff sequence를 투입한다. 불가능 task는 rejected/backlog KPI로 집계해야 한다.
 - `capability`: 해당 topology에서 routeable한 pickup/dropoff pair만 생성한다. topology 내부 효율 비교용이다.
-- `processing_time_s`는 demand에 고정되어 topology 간 processing randomness를 분리하는 기반이다.
+- `pickup_processing_time_s`와 `dropoff_processing_time_s`는 demand 생성 시 seed 기반 deterministic random으로 고정된다.
+- `processing_time_s`는 pickup+dropoff 합산 호환 필드다.
 - lifecycle KPI: `tasks_requested`, `tasks_dispatched`, `tasks_rejected_unreachable`, `tasks_backlogged`, `demands_completed`, `task_acceptance_rate`, `completion_rate`.
 - `tasks_completed`는 AGV station processing 완료 횟수이며, 실제 물류 수요 완료는 dropoff processing 종료 시 발행되는 `demandCompleted` 이벤트의 `demands_completed`를 기준으로 한다.
 
@@ -176,7 +177,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T43)
+## 테스트 구조 (T1~T44)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -209,6 +210,7 @@ T40:     Critical section capacity 검증
 T41:     Type D section capacity > Type C 검증
 T42:     Motion model acceleration 검증
 T43:     Restart delay accounting 검증
+T44:     AGV pickup/dropoff processing split 검증
 ```
 
 실행:
@@ -288,6 +290,7 @@ python -m src.application.usecases.experiment_runner \
 - [x] critical section 예약 1차 반영
 - [x] edge capacity / lane width 영향 1차 반영
 - [x] 가감속 / 재출발 지연 1차 반영
+- [x] pickup/dropoff processing randomness 분리
 
 ### 중기 (Phase 3 완성)
 - [x] **경로 전체 사전 예약 (pre-reservation) 1차**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약
@@ -297,6 +300,7 @@ python -m src.application.usecases.experiment_runner \
 - [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
 - [x] **물리 모델 고도화 1차**: 가감속 구간, processing 이후 재출발 시간 반영
 - [ ] **물리 모델 고도화 2차**: head-on 해소 후 재출발 시간, 회전/곡선 감속 반영
+- [x] **station processing randomness 1차**: seed 기반 pickup/dropoff 처리시간 분리
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
 
 ### 장기

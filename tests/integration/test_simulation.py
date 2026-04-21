@@ -675,16 +675,42 @@ def test_demand_set_generation():
     )
 
     sig_a = [
-        (d.release_time_s, d.pickup_node_id, d.dropoff_node_id, d.processing_time_s)
+        (
+            d.release_time_s,
+            d.pickup_node_id,
+            d.dropoff_node_id,
+            d.processing_time_s,
+            d.pickup_processing_time_s,
+            d.dropoff_processing_time_s,
+        )
         for d in common_a.demands
     ]
     sig_b = [
-        (d.release_time_s, d.pickup_node_id, d.dropoff_node_id, d.processing_time_s)
+        (
+            d.release_time_s,
+            d.pickup_node_id,
+            d.dropoff_node_id,
+            d.processing_time_s,
+            d.pickup_processing_time_s,
+            d.dropoff_processing_time_s,
+        )
         for d in common_b.demands
     ]
     assert_eq("common deterministic", sig_a == sig_b, True)
     assert_eq("common count", len(common_a.demands), 20)
     assert_eq("capability count", len(capability.demands), 20)
+    assert_true(
+        "pickup/dropoff processing split",
+        all(
+            d.pickup_processing_time_s > 0.0
+            and d.dropoff_processing_time_s > 0.0
+            and d.processing_time_s == round(
+                d.pickup_processing_time_s + d.dropoff_processing_time_s,
+                3,
+            )
+            for d in common_a.demands
+        ),
+    )
 
     unreachable_common = [
         d for d in common_a.demands
@@ -741,6 +767,8 @@ async def _test_real_demand_completion_metrics():
                 pickup_node_id="node_work_01",
                 dropoff_node_id="node_work_02",
                 processing_time_s=0.1,
+                pickup_processing_time_s=0.1,
+                dropoff_processing_time_s=0.1,
             )
         ],
     )
@@ -1139,6 +1167,22 @@ def test_restart_delay_accounting():
     assert_eq("restart sets speed zero", agv._motion.state.speed, 0.0)
 
 
+def test_agv_pickup_dropoff_processing_time_split():
+    print("\n[T44] AGV pickup/dropoff processing split")
+    graph = make_graph()
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv._current_pickup_node_id = "node_work_01"
+    agv._current_dropoff_node_id = "node_work_02"
+    agv._pickup_processing_time_s = 7.0
+    agv._dropoff_processing_time_s = 11.0
+
+    agv._processing_node_id = "node_work_01"
+    assert_eq("pickup processing time", agv._processing_time_for_current_node(), 7.0)
+
+    agv._processing_node_id = "node_work_02"
+    assert_eq("dropoff processing time", agv._processing_time_for_current_node(), 11.0)
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -1189,6 +1233,7 @@ if __name__ == "__main__":
         test_type_d_section_capacity_higher_than_c,
         test_motion_model_acceleration,
         test_restart_delay_accounting,
+        test_agv_pickup_dropoff_processing_time_split,
     ]
     passed = failed = 0
     for t in tests:

@@ -81,6 +81,8 @@ class AGV:
         self._path_index: int       = 0
         self._process_remaining: float = 0.0
         self._order_processing_time_s: Optional[float] = None
+        self._pickup_processing_time_s: Optional[float] = None
+        self._dropoff_processing_time_s: Optional[float] = None
         self._current_demand_id: Optional[str] = None
         self._current_pickup_node_id: Optional[str] = None
         self._current_dropoff_node_id: Optional[str] = None
@@ -129,6 +131,14 @@ class AGV:
         processing_time = payload.get("processingTimeS")
         self._order_processing_time_s = (
             float(processing_time) if processing_time is not None else None
+        )
+        pickup_processing_time = payload.get("pickupProcessingTimeS")
+        dropoff_processing_time = payload.get("dropoffProcessingTimeS")
+        self._pickup_processing_time_s = (
+            float(pickup_processing_time) if pickup_processing_time is not None else None
+        )
+        self._dropoff_processing_time_s = (
+            float(dropoff_processing_time) if dropoff_processing_time is not None else None
         )
         self._current_demand_id = payload.get("demandId")
         self._current_pickup_node_id = payload.get("pickupNodeId")
@@ -250,11 +260,8 @@ class AGV:
             self.collision_retry_count = 0  # 도착 시 retry 초기화
 
             if t.role.value in ("work", "station") or t.is_parking_spot:
-                if self._order_processing_time_s is not None:
-                    self._process_remaining = self._order_processing_time_s
-                else:
-                    self._process_remaining = random.uniform(30.0, 120.0)
                 self._processing_node_id = self.current_node_id
+                self._process_remaining = self._processing_time_for_current_node()
                 self._fsm.force(AGVState.PROCESSING)
             else:
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
@@ -283,6 +290,23 @@ class AGV:
         self._current_demand_id = None
         self._current_pickup_node_id = None
         self._current_dropoff_node_id = None
+
+    def _processing_time_for_current_node(self) -> float:
+        if (
+            self._current_pickup_node_id is not None
+            and self._processing_node_id == self._current_pickup_node_id
+            and self._pickup_processing_time_s is not None
+        ):
+            return self._pickup_processing_time_s
+        if (
+            self._current_dropoff_node_id is not None
+            and self._processing_node_id == self._current_dropoff_node_id
+            and self._dropoff_processing_time_s is not None
+        ):
+            return self._dropoff_processing_time_s
+        if self._order_processing_time_s is not None:
+            return self._order_processing_time_s
+        return random.uniform(30.0, 120.0)
 
     async def _navigate_to_next_node(self, sim_time: float) -> None:
         if self._path_index >= len(self._path):
@@ -490,9 +514,7 @@ class AGV:
         cursor = start_time
         speed = max(self._motion.max_speed, 0.01)
         processing_time = (
-            self._order_processing_time_s
-            if self._order_processing_time_s is not None
-            else 30.0
+            self._order_processing_time_s if self._order_processing_time_s is not None else 30.0
         )
         segments: list[ItinerarySegment] = []
 
@@ -528,7 +550,8 @@ class AGV:
 
             node = self._graph.nodes.get(dst)
             if node and (node.role.value in ("work", "station") or node.is_parking_spot):
-                dwell_end = cursor + processing_time
+                dwell_time = self._itinerary_processing_time_for_node(dst, processing_time)
+                dwell_end = cursor + dwell_time
                 segments.append(
                     ItinerarySegment(
                         segment_type="node",
@@ -542,6 +565,25 @@ class AGV:
             current = dst
 
         return segments
+
+    def _itinerary_processing_time_for_node(
+        self,
+        node_id: str,
+        fallback_processing_time_s: float,
+    ) -> float:
+        if (
+            self._current_pickup_node_id is not None
+            and node_id == self._current_pickup_node_id
+            and self._pickup_processing_time_s is not None
+        ):
+            return self._pickup_processing_time_s
+        if (
+            self._current_dropoff_node_id is not None
+            and node_id == self._current_dropoff_node_id
+            and self._dropoff_processing_time_s is not None
+        ):
+            return self._dropoff_processing_time_s
+        return fallback_processing_time_s
 
     def _critical_section_key(self, edge) -> str:
         topology_type = getattr(self._graph, "_topology_type", "")

@@ -16,6 +16,8 @@ class TaskDemand:
     pickup_node_id: str
     dropoff_node_id: str
     processing_time_s: float
+    pickup_processing_time_s: float = 0.0
+    dropoff_processing_time_s: float = 0.0
     priority: int = 0
 
 
@@ -43,7 +45,8 @@ class DemandSet:
         count: int,
         interval_s: float,
         random_seed: int,
-        processing_time_range_s: tuple[float, float] = (30.0, 120.0),
+        pickup_processing_time_range_s: tuple[float, float] = (20.0, 60.0),
+        dropoff_processing_time_range_s: tuple[float, float] = (30.0, 120.0),
     ) -> "DemandSet":
         nodes = _work_node_ids(graph)
         return cls._generate(
@@ -52,7 +55,8 @@ class DemandSet:
             count=count,
             interval_s=interval_s,
             random_seed=random_seed,
-            processing_time_range_s=processing_time_range_s,
+            pickup_processing_time_range_s=pickup_processing_time_range_s,
+            dropoff_processing_time_range_s=dropoff_processing_time_range_s,
         )
 
     @classmethod
@@ -62,7 +66,8 @@ class DemandSet:
         count: int,
         interval_s: float,
         random_seed: int,
-        processing_time_range_s: tuple[float, float] = (30.0, 120.0),
+        pickup_processing_time_range_s: tuple[float, float] = (20.0, 60.0),
+        dropoff_processing_time_range_s: tuple[float, float] = (30.0, 120.0),
     ) -> "DemandSet":
         nodes = _work_node_ids(graph)
         pairs = [
@@ -77,7 +82,8 @@ class DemandSet:
             count=count,
             interval_s=interval_s,
             random_seed=random_seed,
-            processing_time_range_s=processing_time_range_s,
+            pickup_processing_time_range_s=pickup_processing_time_range_s,
+            dropoff_processing_time_range_s=dropoff_processing_time_range_s,
         )
 
     @classmethod
@@ -88,7 +94,8 @@ class DemandSet:
         count: int,
         interval_s: float,
         random_seed: int,
-        processing_time_range_s: tuple[float, float],
+        pickup_processing_time_range_s: tuple[float, float],
+        dropoff_processing_time_range_s: tuple[float, float],
     ) -> "DemandSet":
         if count < 0:
             raise ValueError("count must be >= 0")
@@ -98,18 +105,26 @@ class DemandSet:
             raise ValueError("cannot generate demands without candidate pairs")
 
         rng = random.Random(random_seed)
-        low, high = processing_time_range_s
+        pickup_low, pickup_high = pickup_processing_time_range_s
+        dropoff_low, dropoff_high = dropoff_processing_time_range_s
         demands: list[TaskDemand] = []
         for i in range(count):
             pickup, dropoff = rng.choice(pairs)
-            processing_time = rng.uniform(low, high)
+            pickup_processing_time = round(rng.uniform(pickup_low, pickup_high), 3)
+            dropoff_processing_time = round(rng.uniform(dropoff_low, dropoff_high), 3)
+            processing_time = round(
+                pickup_processing_time + dropoff_processing_time,
+                3,
+            )
             demands.append(
                 TaskDemand(
                     task_id=f"demand_{i + 1:05d}",
                     release_time_s=round(i * interval_s, 3),
                     pickup_node_id=pickup,
                     dropoff_node_id=dropoff,
-                    processing_time_s=round(processing_time, 3),
+                    processing_time_s=processing_time,
+                    pickup_processing_time_s=pickup_processing_time,
+                    dropoff_processing_time_s=dropoff_processing_time,
                 )
             )
         return cls(mode=mode, random_seed=random_seed, demands=demands)
@@ -126,6 +141,8 @@ class DemandSet:
                     "pickup_node_id": d.pickup_node_id,
                     "dropoff_node_id": d.dropoff_node_id,
                     "processing_time_s": d.processing_time_s,
+                    "pickup_processing_time_s": d.pickup_processing_time_s,
+                    "dropoff_processing_time_s": d.dropoff_processing_time_s,
                     "priority": d.priority,
                 }
                 for d in self.demands
