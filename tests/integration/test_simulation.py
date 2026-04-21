@@ -625,6 +625,68 @@ def test_type_a_routeable_task_selection():
     run(_test_type_a_routeable_task_selection())
 
 
+def test_type_d_width_metadata():
+    print("\n[T30] Type D width metadata")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    gen = MapTopologyGenerator()
+    type_c = gen.generate("C")
+    type_d = gen.generate("D")
+
+    c_widths = {
+        e.width_m for e in type_c.edges.values()
+        if e.corridor in ("north_l1", "north_l2", "center_l1", "center_l2", "south_l1", "south_l2")
+    }
+    d_widths = {
+        e.width_m for e in type_d.edges.values()
+        if e.corridor in ("north_l1", "north_l2", "center_l1", "center_l2", "south_l1", "south_l2")
+    }
+
+    assert_eq("Type C lane width", c_widths, {1.5})
+    assert_eq("Type D lane width", d_widths, {2.0})
+    assert_true("Type D wider than Type C", min(d_widths) > max(c_widths))
+
+
+def test_demand_set_generation():
+    print("\n[T31] DemandSet generation")
+    from src.application.scenario.demand import DemandSet
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("A")
+    common_a = DemandSet.common_from_graph(
+        graph, count=20, interval_s=3.0, random_seed=7
+    )
+    common_b = DemandSet.common_from_graph(
+        graph, count=20, interval_s=3.0, random_seed=7
+    )
+    capability = DemandSet.capability_from_graph(
+        graph, count=20, interval_s=3.0, random_seed=7
+    )
+
+    sig_a = [
+        (d.release_time_s, d.pickup_node_id, d.dropoff_node_id, d.processing_time_s)
+        for d in common_a.demands
+    ]
+    sig_b = [
+        (d.release_time_s, d.pickup_node_id, d.dropoff_node_id, d.processing_time_s)
+        for d in common_b.demands
+    ]
+    assert_eq("common deterministic", sig_a == sig_b, True)
+    assert_eq("common count", len(common_a.demands), 20)
+    assert_eq("capability count", len(capability.demands), 20)
+
+    unreachable_common = [
+        d for d in common_a.demands
+        if not graph.get_path(d.pickup_node_id, d.dropoff_node_id)
+    ]
+    unreachable_capability = [
+        d for d in capability.demands
+        if not graph.get_path(d.pickup_node_id, d.dropoff_node_id)
+    ]
+    assert_true("common may include unreachable demand", len(unreachable_common) > 0)
+    assert_eq("capability excludes unreachable demand", len(unreachable_capability), 0)
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -661,6 +723,8 @@ if __name__ == "__main__":
         test_kpi_headon_fields,
         test_type_c_d_station_pair_reachability,
         test_type_a_routeable_task_selection,
+        test_type_d_width_metadata,
+        test_demand_set_generation,
     ]
     passed = failed = 0
     for t in tests:

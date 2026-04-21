@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T29
+│   └── test_simulation.py     T1~T31
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -69,7 +69,7 @@ vda5050_sim_v2/
 | A | 1차선 | 단방향 (순환) | 없음 | head-on 구조적 불가 |
 | B | 1차선 | 양방향 | siding 대피 | head-on 발생, siding으로 해소 |
 | C | 2차선 | 단방향 (L1/L2 분리) | 없음 | same-lane head-on 불가 |
-| D | 2차선 | 단방향 (L1:동→서, L2:서→동) | 없음 | C와 구조 동일, 폭 가정 다름 |
+| D | 2차선 | 단방향 (L1:동→서, L2:서→동) | 없음 | C와 방향 구조 동일, lane width=2.0m의 wide safety 모델 |
 | E | 1차선 | 양방향 | 크리프 감속 (0.3m/s) | _lane_mode 태그로 자동 적용 |
 
 ### 베이 통로 (전 타입 공통)
@@ -137,6 +137,12 @@ _edge_congestion_counts: 합산 (하위호환)
 - `retry_total`은 진성 실패가 아닌 head-on 대기 중 polling 횟수
 - `headon_total < 1000` (AGV 20대, 1800초 기준) — regression 임계값
 
+### DemandSet 비교 모드
+`src/application/scenario/demand.py`는 topology 비교용 deterministic demand sequence를 생성한다.
+- `common_demand`: 모든 topology에 같은 pickup/dropoff sequence를 투입한다. 불가능 task는 rejected/backlog KPI로 집계해야 한다.
+- `capability`: 해당 topology에서 routeable한 pickup/dropoff pair만 생성한다. topology 내부 효율 비교용이다.
+- `processing_time_s`는 demand에 고정되어 topology 간 processing randomness를 분리하는 기반이다.
+
 ---
 
 ## Topology Invariants (불변조건)
@@ -155,7 +161,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T25)
+## 테스트 구조 (T1~T31)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -174,6 +180,8 @@ T26:     TaskGenerator diagnostics 카운터 검증
 T27:     KPI head-on 필드 회귀 검증
 T28:     Type C/D station pair reachability 검증
 T29:     Type A routeable task selection 검증
+T30:     Type D width metadata 검증
+T31:     DemandSet common/capability 생성 검증
 ```
 
 실행:

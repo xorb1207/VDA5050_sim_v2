@@ -32,6 +32,11 @@ SPEED_STATION_MS = 0.5
 SPEED_CHARGER_MS = 0.3
 SPEED_CREEP_MS   = 0.3
 LANE_OFFSET = 2
+WIDTH_SINGLE_LANE_M = 1.5
+WIDTH_NARROW_LANE_M = 1.5
+WIDTH_WIDE_LANE_M = 2.0
+WIDTH_BAY_M = 1.5
+WIDTH_ACCESS_M = 1.2
 
 TopologyType = Literal["A", "B", "C", "D", "E"]
 
@@ -95,16 +100,22 @@ class MapTopologyGenerator:
     # ── Type C: 2차선 단방향 ───────────────────────────────────
     def _build_type_c(self) -> MapGraph:
         g = MapGraph()
+        g._lane_width_m = WIDTH_NARROW_LANE_M
+        g._safety_model = "narrow_one_way"
         for y_base, tag in [(Y_NORTH, "N"), (Y_CENTER, "C"), (Y_SOUTH, "S")]:
             corr = "center" if tag == "C" else ("north" if tag == "N" else "south")
             role = NodeRole.APPROACH if tag == "C" else NodeRole.STANDARD
             # L1: 동→서, L2: 서→동 — 완전 분리 단방향
             self._add_corridor(g, y_base + LANE_OFFSET, f"{tag}L1",
                                bidirectional=False, direction="east_to_west",
-                               corridor=f"{corr}_l1", role=role)
+                               corridor=f"{corr}_l1", role=role,
+                               width_m=WIDTH_NARROW_LANE_M,
+                               safety_model="narrow_one_way")
             self._add_corridor(g, y_base - LANE_OFFSET, f"{tag}L2",
                                bidirectional=False, direction="west_to_east",
-                               corridor=f"{corr}_l2", role=role)
+                               corridor=f"{corr}_l2", role=role,
+                               width_m=WIDTH_NARROW_LANE_M,
+                               safety_model="narrow_one_way")
             self._add_uturn(g, y_base, tag)
         self._add_bays(g, two_lane=True)
         self._add_stations(g, two_lane=True)
@@ -114,17 +125,23 @@ class MapTopologyGenerator:
     # ── Type D: 2차선 양방향 (L1: 동→서, L2: 서→동 완전 분리) ──
     def _build_type_d(self) -> MapGraph:
         g = MapGraph()
+        g._lane_width_m = WIDTH_WIDE_LANE_M
+        g._safety_model = "wide_one_way"
         for y_base, tag in [(Y_NORTH, "N"), (Y_CENTER, "C"), (Y_SOUTH, "S")]:
             corr = "center" if tag == "C" else ("north" if tag == "N" else "south")
             role = NodeRole.APPROACH if tag == "C" else NodeRole.STANDARD
             # L1: 동→서 단방향
             self._add_corridor(g, y_base + LANE_OFFSET, f"{tag}L1",
                                bidirectional=False, direction="east_to_west",
-                               corridor=f"{corr}_l1", role=role)
+                               corridor=f"{corr}_l1", role=role,
+                               width_m=WIDTH_WIDE_LANE_M,
+                               safety_model="wide_one_way")
             # L2: 서→동 단방향
             self._add_corridor(g, y_base - LANE_OFFSET, f"{tag}L2",
                                bidirectional=False, direction="west_to_east",
-                               corridor=f"{corr}_l2", role=role)
+                               corridor=f"{corr}_l2", role=role,
+                               width_m=WIDTH_WIDE_LANE_M,
+                               safety_model="wide_one_way")
             self._add_uturn(g, y_base, tag)
         self._add_bays(g, two_lane=True)
         self._add_stations(g, two_lane=True)
@@ -217,6 +234,8 @@ class MapTopologyGenerator:
         direction: str = "",
         role: NodeRole = NodeRole.STANDARD,
         speed: float = SPEED_MAIN_MS,
+        width_m: float = WIDTH_SINGLE_LANE_M,
+        safety_model: str = "",
     ) -> None:
         node_ids: list[str] = []
         for x in WP_X:
@@ -244,6 +263,8 @@ class MapTopologyGenerator:
                 end_node_id=dst,
                 bidirectional=bidirectional,
                 max_speed=speed,
+                width_m=width_m,
+                safety_model=safety_model,
                 corridor=corridor,
             )
             g._add_edge(e)

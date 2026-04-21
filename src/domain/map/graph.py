@@ -56,6 +56,8 @@ class Edge:
     bidirectional: bool = False
     max_speed: float = 1.0
     distance: float = 0.0
+    width_m: float = 1.5
+    safety_model: str = ""
     # Open-RMF 확장
     corridor: str = ""
     access_type: str = ""     # station_access / charger_access
@@ -137,6 +139,8 @@ class MapGraph:
                 end_node_id=dst_id,
                 bidirectional=bidir,
                 max_speed=speed,
+                width_m=float(params.get("width_m", params.get("lane_width", 1.5))),
+                safety_model=params.get("safety_model", ""),
                 corridor=params.get("corridor", ""),
                 access_type=params.get("access_type", ""),
             )
@@ -170,6 +174,8 @@ class MapGraph:
                 bidirectional=e.get("bidirectional", False),
                 max_speed=float(e.get("maxSpeed", 1.0)),
                 distance=float(e.get("distance", 0.0)),
+                width_m=float(e.get("width_m", e.get("laneWidth", 1.5))),
+                safety_model=e.get("safety_model", ""),
             ))
         return graph
 
@@ -195,6 +201,8 @@ class MapGraph:
                 bidirectional=False,
                 max_speed=edge.max_speed,
                 distance=edge.distance,
+                width_m=edge.width_m,
+                safety_model=edge.safety_model,
                 corridor=edge.corridor,
                 access_type=edge.access_type,
             )
