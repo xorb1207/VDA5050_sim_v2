@@ -494,6 +494,7 @@ class AGV:
                         edge_speed,
                     ),
                     section_key=self._critical_section_key(edge),
+                    section_capacity=self._critical_section_capacity(edge),
                 )
             )
             cursor = edge_end
@@ -525,7 +526,24 @@ class AGV:
             return f"siding:{edge.start_node_id}->{edge.end_node_id}"
         if topology_type in ("B", "E") and edge.corridor in ("north", "center", "south"):
             return f"shared_corridor:{edge.corridor}:{self._undirected_edge_key(edge)}"
+        if edge.corridor in (
+            "north_l1",
+            "north_l2",
+            "center_l1",
+            "center_l2",
+            "south_l1",
+            "south_l2",
+        ):
+            return f"lane:{edge.corridor}:{self._undirected_edge_key(edge)}"
         return ""
+
+    @staticmethod
+    def _critical_section_capacity(edge) -> int:
+        if edge.access_type or edge.corridor in ("bay", "siding"):
+            return 1
+        if edge.width_m >= 2.0:
+            return 2
+        return max(1, int(edge.capacity))
 
     @staticmethod
     def _undirected_edge_key(edge) -> str:

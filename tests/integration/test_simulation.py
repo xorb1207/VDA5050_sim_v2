@@ -1035,6 +1035,80 @@ def test_critical_section_key_generation():
     )
 
 
+async def _test_critical_section_capacity_allows_overlap_until_limit():
+    print("\n[T40] Critical section capacity")
+    from src.domain.reservation.scheduler import ItinerarySegment
+
+    s = TimeWindowScheduler()
+    first = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="A__B",
+            agv_id="AGV_001",
+            start_time=0.0,
+            end_time=10.0,
+            src_id="A",
+            dst_id="B",
+            section_key="lane:wide",
+            section_capacity=2,
+        )
+    ])
+    second = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="C__D",
+            agv_id="AGV_002",
+            start_time=2.0,
+            end_time=5.0,
+            src_id="C",
+            dst_id="D",
+            section_key="lane:wide",
+            section_capacity=2,
+        )
+    ])
+    third = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="E__F",
+            agv_id="AGV_003",
+            start_time=3.0,
+            end_time=4.0,
+            src_id="E",
+            dst_id="F",
+            section_key="lane:wide",
+            section_capacity=2,
+        )
+    ])
+    summary = s.get_headon_summary()
+
+    assert_eq("capacity 첫 예약 성공", first, True)
+    assert_eq("capacity 내 두 번째 겹침 허용", second, True)
+    assert_eq("capacity 초과 세 번째 차단", third, False)
+    assert_eq("section conflict count", summary["section_conflict_total"], 1)
+
+
+def test_critical_section_capacity_allows_overlap_until_limit():
+    run(_test_critical_section_capacity_allows_overlap_until_limit())
+
+
+def test_type_d_section_capacity_higher_than_c():
+    print("\n[T41] Type D section capacity higher than C")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    gen = MapTopologyGenerator()
+    graph_c = gen.generate("C")
+    graph_d = gen.generate("D")
+    edge_c = next(e for e in graph_c.edges.values() if e.safety_model == "narrow_one_way")
+    edge_d = next(e for e in graph_d.edges.values() if e.safety_model == "wide_one_way")
+    agv_c = AGV("AGV_C", LocalMemoryBus(), graph_c, TimeWindowScheduler())
+    agv_d = AGV("AGV_D", LocalMemoryBus(), graph_d, TimeWindowScheduler())
+
+    assert_true("Type C lane section key", agv_c._critical_section_key(edge_c).startswith("lane:"))
+    assert_true("Type D lane section key", agv_d._critical_section_key(edge_d).startswith("lane:"))
+    assert_eq("Type C section capacity", agv_c._critical_section_capacity(edge_c), 1)
+    assert_eq("Type D section capacity", agv_d._critical_section_capacity(edge_d), 2)
+
+
 # ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
@@ -1081,6 +1155,8 @@ if __name__ == "__main__":
         test_itinerary_reservation_atomic_conflict,
         test_critical_section_conflict_blocks_itinerary,
         test_critical_section_key_generation,
+        test_critical_section_capacity_allows_overlap_until_limit,
+        test_type_d_section_capacity_higher_than_c,
     ]
     passed = failed = 0
     for t in tests:

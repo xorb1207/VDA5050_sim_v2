@@ -35,6 +35,7 @@ class ItinerarySegment:
     dst_id: str = ""
     same_direction_headway_s: float = 0.0
     section_key: str = ""
+    section_capacity: int = 1
 
 
 class TimeWindowScheduler:
@@ -411,6 +412,21 @@ class TimeWindowScheduler:
             for r in existing
         )
 
+    def _has_section_capacity_conflict(
+        self,
+        existing: list[Reservation],
+        start: float,
+        end: float,
+        capacity: int,
+    ) -> bool:
+        cap = max(1, capacity)
+        overlap_count = sum(
+            1
+            for r in existing
+            if not r.released and not (end <= r.start_time or start >= r.end_time)
+        )
+        return overlap_count >= cap
+
     def _has_itinerary_conflict(self, segments: list[ItinerarySegment]) -> bool:
         staged_nodes: dict[str, list[Reservation]] = defaultdict(list)
         staged_edges: dict[str, list[EdgeReservation]] = defaultdict(list)
@@ -422,10 +438,11 @@ class TimeWindowScheduler:
                     r for r in self._section_reservations[segment.section_key]
                     if not r.released and r.agv_id != segment.agv_id
                 ] + staged_sections[segment.section_key]
-                if self._has_node_conflict(
+                if self._has_section_capacity_conflict(
                     existing_sections,
                     segment.start_time,
                     segment.end_time,
+                    segment.section_capacity,
                 ):
                     self._section_conflict_counts[segment.section_key] += 1
                     return True

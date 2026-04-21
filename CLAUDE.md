@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T39
+│   └── test_simulation.py     T1~T41
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -106,7 +106,9 @@ Itinerary 예약:
   - 실패 시 아무 segment도 추가하지 않음
 Critical section 예약:
   - bay / siding / station_access / charger_access / B,E shared corridor를 section_key로 묶음
-  - 같은 section time-window가 겹치면 itinerary를 atomic reject
+  - 같은 section time-window가 capacity를 초과해 겹치면 itinerary를 atomic reject
+  - bay/access/siding은 capacity=1
+  - Type D wide lane(width=2.0m)은 capacity=2, Type C narrow lane(width=1.5m)은 capacity=1
 ```
 
 ### Conflict Resolution 정책
@@ -174,7 +176,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T39)
+## 테스트 구조 (T1~T41)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -203,6 +205,8 @@ T36:     Type D wide lane follow-on headway 축소 검증
 T37:     Itinerary reservation atomic conflict 검증
 T38:     Critical section conflict 검증
 T39:     Critical section key generation 검증
+T40:     Critical section capacity 검증
+T41:     Type D section capacity > Type C 검증
 ```
 
 실행:
@@ -279,11 +283,13 @@ python -m src.application.usecases.experiment_runner \
 - [x] same-direction follow-on 안전거리 1차 반영
 - [x] Open-RMF식 itinerary/pre-reservation 1차 API 및 AGV 연결
 - [x] critical section 예약 1차 반영
+- [x] edge capacity / lane width 영향 1차 반영
 
 ### 중기 (Phase 3 완성)
 - [x] **경로 전체 사전 예약 (pre-reservation) 1차**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약
 - [x] **critical section 예약 1차**: 교차로/좁은 bay/양방향 lane을 section 단위로 묶어 예약
-- [ ] **critical section 세분화**: section capacity/priority/release timing 고도화
+- [x] **critical section capacity 1차**: lane width 기반 section capacity 반영
+- [ ] **critical section 세분화**: priority/release timing 고도화
 - [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
 - [ ] **물리 모델 고도화**: 가감속 구간, head-on 해소 후 재출발 시간 반영
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
