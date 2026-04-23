@@ -356,12 +356,89 @@ def _build_siding_coverage_diagnostics(graph: MapGraph) -> dict:
         nid for nid in main_nodes
         if any(nb.role == NodeRole.SIDING for nb in graph.get_neighbors(nid))
     ]
+    covered_set = set(covered)
     coverage_ratio = round(len(covered) / len(main_nodes), 4) if main_nodes else 0.0
+
+    corridor_groups: dict[str, list[tuple[int, str]]] = {}
+    for nid in main_nodes:
+        parts = nid.split("_")
+        if len(parts) < 3:
+            continue
+        corridor_tag = parts[1]
+        try:
+            x_pos = int(parts[2])
+        except ValueError:
+            continue
+        corridor_groups.setdefault(corridor_tag, []).append((x_pos, nid))
+
+    corridor_coverage: list[dict] = []
+    longest_gap_nodes = 0
+    longest_gap_m = 0.0
+    longest_gap_corridor = ""
+    uncovered_samples: list[str] = []
+
+    for corridor_tag, entries in sorted(corridor_groups.items()):
+        ordered = sorted(entries)
+        uncovered_in_corridor = [nid for _, nid in ordered if nid not in covered_set]
+        if not uncovered_samples:
+            uncovered_samples = uncovered_in_corridor[:5]
+
+        best_run_nodes = 0
+        best_run_m = 0.0
+        current_run: list[int] = []
+
+        for x_pos, nid in ordered:
+            if nid in covered_set:
+                if current_run:
+                    run_nodes = len(current_run)
+                    run_m = float(current_run[-1] - current_run[0])
+                    if run_nodes > best_run_nodes or (
+                        run_nodes == best_run_nodes and run_m > best_run_m
+                    ):
+                        best_run_nodes = run_nodes
+                        best_run_m = run_m
+                    current_run = []
+                continue
+            current_run.append(x_pos)
+
+        if current_run:
+            run_nodes = len(current_run)
+            run_m = float(current_run[-1] - current_run[0])
+            if run_nodes > best_run_nodes or (
+                run_nodes == best_run_nodes and run_m > best_run_m
+            ):
+                best_run_nodes = run_nodes
+                best_run_m = run_m
+
+        if best_run_nodes > longest_gap_nodes or (
+            best_run_nodes == longest_gap_nodes and best_run_m > longest_gap_m
+        ):
+            longest_gap_nodes = best_run_nodes
+            longest_gap_m = best_run_m
+            longest_gap_corridor = corridor_tag
+
+        corridor_coverage.append({
+            "corridor": corridor_tag,
+            "main_node_count": len(ordered),
+            "covered_count": sum(1 for _, nid in ordered if nid in covered_set),
+            "coverage_ratio": round(
+                sum(1 for _, nid in ordered if nid in covered_set) / len(ordered),
+                4,
+            ) if ordered else 0.0,
+            "longest_uncovered_run_nodes": best_run_nodes,
+            "longest_uncovered_run_m": round(best_run_m, 3),
+        })
+
     return {
         "siding_count": len(siding_nodes),
         "main_node_count": len(main_nodes),
         "main_nodes_with_adjacent_siding": len(covered),
         "coverage_ratio": coverage_ratio,
+        "longest_uncovered_run_nodes": longest_gap_nodes,
+        "longest_uncovered_run_m": round(longest_gap_m, 3),
+        "longest_uncovered_corridor": longest_gap_corridor,
+        "corridor_coverage": corridor_coverage,
+        "uncovered_main_node_samples": uncovered_samples,
     }
 
 

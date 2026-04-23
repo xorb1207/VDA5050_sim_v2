@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T45
+│   └── test_simulation.py     T1~T46
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -177,7 +177,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T45)
+## 테스트 구조 (T1~T46)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -215,6 +215,7 @@ T44:     AGV pickup/dropoff processing split 검증
 T45:     Head-on semantic regression — 생성 토폴로지 5종, 600s/12AGV, Phase 3 baseline
          A/C/D == 0 (메인 통로 단방향 + station/charger access node critical section)
          B < 400 / E < 300 (seed 고정 양방향 Phase 3 upper bound)
+T46:     Type B siding coverage diagnostics — coverage ratio / longest uncovered gap
 ```
 
 실행:

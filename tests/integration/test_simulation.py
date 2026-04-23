@@ -591,6 +591,26 @@ def test_kpi_headon_fields():
     run(_test_kpi_headon_fields())
 
 
+def test_type_b_siding_coverage_diagnostics():
+    print("\n[T46] Type B siding coverage diagnostics")
+    from src.application.usecases.experiment_runner import _build_siding_coverage_diagnostics
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B")
+    diag = _build_siding_coverage_diagnostics(graph)
+
+    assert_eq("siding count", diag["siding_count"], 15)
+    assert_true("coverage ratio < 1", diag["coverage_ratio"] < 1.0)
+    assert_true(
+        "longest uncovered siding gap >= 80m",
+        diag["longest_uncovered_run_m"] >= 80.0,
+    )
+    assert_true(
+        "uncovered main node sample exists",
+        len(diag["uncovered_main_node_samples"]) >= 1,
+    )
+
+
 def test_type_c_d_station_pair_reachability():
     print("\n[T28] Type C/D station pair reachability")
     from src.domain.map.topology_generator import MapTopologyGenerator
@@ -1318,6 +1338,7 @@ if __name__ == "__main__":
         # Diagnostics / KPI regression (T26~T27)
         test_task_generator_diagnostics,
         test_kpi_headon_fields,
+        test_type_b_siding_coverage_diagnostics,
         test_type_c_d_station_pair_reachability,
         test_type_a_routeable_task_selection,
         test_type_d_width_metadata,
@@ -1335,7 +1356,7 @@ if __name__ == "__main__":
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
-        # Head-on semantic regression (T45)
+        # Head-on / siding regression (T45~T46)
         test_headon_regression,
     ]
     passed = failed = 0
