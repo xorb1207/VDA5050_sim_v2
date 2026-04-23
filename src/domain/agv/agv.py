@@ -350,7 +350,10 @@ class AGV:
             # 크리프 속도로 진입 허용 (예약은 시도)
             pass
 
-        dist     = self._graph._calc_distance(src, dst) if (src in self._graph.nodes and dst in self._graph.nodes) else 1.0
+        edge     = self._find_edge(src, dst)
+        dist     = edge.distance if edge is not None else (
+            self._graph._calc_distance(src, dst) if (src in self._graph.nodes and dst in self._graph.nodes) else 1.0
+        )
         speed    = max(self._get_effective_speed(sim_time), 0.01)
         travel_t = dist / speed
         follow_on_headway_s = self._calc_follow_on_headway_s(src, dst, speed)
@@ -368,6 +371,10 @@ class AGV:
                 start_time=sim_time,
                 end_time=sim_time + travel_t,
                 same_direction_headway_s=follow_on_headway_s,
+                section_key=self._critical_section_key(edge) if edge is not None else "",
+                section_capacity=(
+                    self._critical_section_capacity(edge) if edge is not None else 1
+                ),
             )
 
         if ok:
@@ -588,7 +595,8 @@ class AGV:
     def _critical_section_key(self, edge) -> str:
         topology_type = getattr(self._graph, "_topology_type", "")
         if edge.access_type:
-            return f"access:{edge.access_type}:{edge.start_node_id}->{edge.end_node_id}"
+            facility_node_id = self._access_facility_node_id(edge)
+            return f"access:{edge.access_type}:{facility_node_id}"
         if edge.corridor == "bay":
             return f"bay:{edge.start_node_id.split('_')[-1]}"
         if edge.corridor == "siding":
@@ -605,6 +613,21 @@ class AGV:
         ):
             return f"lane:{edge.corridor}:{self._undirected_edge_key(edge)}"
         return ""
+
+    def _access_facility_node_id(self, edge) -> str:
+        for node_id in (edge.start_node_id, edge.end_node_id):
+            node = self._graph.nodes.get(node_id)
+            if not node:
+                continue
+            if edge.access_type == "station_access" and (
+                node.role == NodeRole.WORK or node.is_parking_spot
+            ):
+                return node_id
+            if edge.access_type == "charger_access" and (
+                node.role == NodeRole.CHARGER or node.is_charger
+            ):
+                return node_id
+        return self._undirected_edge_key(edge)
 
     @staticmethod
     def _critical_section_capacity(edge) -> int:

@@ -205,9 +205,12 @@ class TimeWindowScheduler:
         start_time: float,
         end_time: float,
         same_direction_headway_s: float = 0.0,
+        section_key: str = "",
+        section_capacity: int = 1,
     ) -> bool:
         """
         엣지 예약 시도.
+        - section_key가 있으면 동일 critical section 용량을 먼저 확인한다.
         - 역방향(dst→src) 활성 예약과 시간 겹침 시 head-on 차단.
         - 같은 방향(src→dst)은 진입 시각 간 headway를 만족해야 추종 허용.
         """
@@ -215,6 +218,21 @@ class TimeWindowScheduler:
         reverse_key = f"{dst_id}__{src_id}"
 
         async with self._lock:
+            if section_key:
+                section_active = [
+                    r for r in self._section_reservations[section_key]
+                    if not r.released and r.agv_id != agv_id
+                ]
+                if self._has_section_capacity_conflict(
+                    section_active,
+                    start_time,
+                    end_time,
+                    section_capacity,
+                ):
+                    self._section_conflict_counts[section_key] += 1
+                    self._reserve_failure += 1
+                    return False
+
             # head-on 충돌 확인 — 역방향 활성 예약
             reverse_active = [
                 r for r in self._edge_reservations[reverse_key]
@@ -253,6 +271,10 @@ class TimeWindowScheduler:
                 self._edge_retry_counts[edge_key] += 1
 
             # 예약 확정
+            if section_key:
+                self._section_reservations[section_key].append(
+                    Reservation(section_key, agv_id, start_time, end_time)
+                )
             self._edge_reservations[edge_key].append(
                 EdgeReservation(edge_key, agv_id, start_time, end_time)
             )

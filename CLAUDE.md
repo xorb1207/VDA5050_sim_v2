@@ -36,7 +36,7 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
 │   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T44
+│   └── test_simulation.py     T1~T45
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -144,7 +144,7 @@ _edge_retry_counts:  대기 중 재시도 횟수 (병목 강도 지표)
 _edge_congestion_counts: 합산 (하위호환)
 ```
 - `retry_total`은 진성 실패가 아닌 head-on 대기 중 polling 횟수
-- `headon_total < 1000` (AGV 20대, 1800초 기준) — regression 임계값
+- head-on regression 임계값과 deadlock==0 검증은 T45 (topology별 Phase 3 baseline) 기준으로 관리. T20은 FAB stress 완주/활동성 기준.
 
 ### DemandSet 비교 모드
 `src/application/scenario/demand.py`는 topology 비교용 deterministic demand sequence를 생성한다.
@@ -177,7 +177,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T44)
+## 테스트 구조 (T1~T45)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -186,12 +186,13 @@ T9~T10:  LocalMemoryBus — pub/sub, 와일드카드
 T11~T12: TaskGenerator + 풀 시뮬 (300s, AGV 3대)
 T13~T18: FAB 맵 (fab_nav_graph.yaml) — 노드 수, 경로, 단방향, 속도, 연결성
 T19:     FAB 풀 시뮬 (300s, AGV 5대)
-T20:     FAB 스트레스 (1800s, AGV 20대) — head-on regression
+T20:     FAB 스트레스 완주 (1800s, AGV 20대) — sim_time ≈ 1800s + 이동 + 태스크 완료
+         ※ head-on 상한은 T45로 분리. deadlock count는 fab 양방향 맵 특성상 assertion 제외.
 T21:     Topology Invariant 전체 검증
 T22:     Type E creep policy 주입 검증
-T23:     Type A head-on 엣지 쌍 없음
-T24:     Type C same-lane head-on 없음
-T25:     Type D same-lane head-on 없음
+T23:     Type A head-on 엣지 쌍 없음 (정적)
+T24:     Type C same-lane head-on 없음 (정적)
+T25:     Type D same-lane head-on 없음 (정적)
 T26:     TaskGenerator diagnostics 카운터 검증
 T27:     KPI head-on 필드 회귀 검증
 T28:     Type C/D station pair reachability 검증
@@ -211,6 +212,9 @@ T41:     Type D section capacity > Type C 검증
 T42:     Motion model acceleration 검증
 T43:     Restart delay accounting 검증
 T44:     AGV pickup/dropoff processing split 검증
+T45:     Head-on semantic regression — 생성 토폴로지 5종, 600s/12AGV, Phase 3 baseline
+         A/C/D == 0 (메인 통로 단방향 + station/charger access node critical section)
+         B < 400 / E < 300 (seed 고정 양방향 Phase 3 upper bound)
 ```
 
 실행:
@@ -239,7 +243,7 @@ python -m src.application.usecases.experiment_runner \
 
 ### 결과 해석 시 주의사항
 - **Type A 처리량 비선형**: AGV 과밀 시 available 스테이션 부족으로 태스크 생성 안 됨
-- **Type C/D 처리량 낮음**: 원인 분석 중 (스테이션 접근 구조 의심)
+- **Type C/D 처리량 정상화 완료**: 과거 L1-only 연결 버그 수정 후 처리량 B/E 수준으로 향상
 - **가동률 유사**: 교행 대기보다 스테이션 처리 시간(30~120s)이 지배적
 - **Type E 처리량 높음**: 크리프가 head-on 시에만 적용되므로 평균 속도는 1.5m/s에 가까움
 
@@ -276,10 +280,11 @@ python -m src.application.usecases.experiment_runner \
 ## 현재 남은 리스크 및 후속 작업
 
 ### 단기
-- [ ] Type C/D 처리량 낮은 원인 확정 (스테이션 L1 연결 구조)
+- [x] Type C/D 처리량 낮은 원인 확정 및 수정 (Bug #1: corridor 이름 불일치 → vacuous test pass, Bug #2: 스테이션/충전소 L1-only 연결 → L2 AGV 강제 U턴)
 - [x] `kpi.py`에 `get_headon_summary()` 연결
 - [ ] bottleneck_edges 정확도 개선 및 head-on 병목 해석 고도화
 - [ ] Type B siding 커버리지 분석 (베이 사이 중간 구간 siding 없음)
+- [x] station/charger access critical section을 설비 node 단위로 묶기
 - [x] DemandSet common/capability 생성 기반
 - [x] common demand lifecycle KPI 1차 연결
 - [x] dropoff 기준 실제 demand 완료 이벤트/KPI 연결
