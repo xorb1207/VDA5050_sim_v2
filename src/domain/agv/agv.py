@@ -400,7 +400,12 @@ class AGV:
             if self.collision_retry_count >= threshold:
                 # Type B: siding 먼저 탐색
                 if topology_type == "B":
-                    siding = self._find_siding_candidate(src, sim_time)
+                    goal = self._path[-1] if self._path else None
+                    siding = self._find_siding_candidate(
+                        src,
+                        goal,
+                        blocked_edge=(src, dst),
+                    )
                     if siding:
                         self._reroute_via_siding(siding, sim_time)
                         return
@@ -425,29 +430,77 @@ class AGV:
         self._motion.state.speed = 0.0
         return True
 
-    def _find_siding_candidate(self, near_node: str, sim_time: float) -> Optional[str]:
+    def _find_siding_candidate(
+        self,
+        near_node: str,
+        goal_node: Optional[str],
+        blocked_edge: Optional[tuple[str, str]] = None,
+    ) -> Optional[str]:
         """
-        근처 siding 노드 중:
-        - 현재 비점유
-        - 곧 예약되지 않음 (다음 10초 내 예약 없음)
-        - 재진입 가능 (siding → 메인통로 엣지 존재)
+        Type B reachable siding 탐색.
+        - 인접 siding만 보지 않고 현재 위치에서 도달 가능한 siding 전체를 후보로 본다.
+        - siding -> goal 재진입 경로가 존재해야 한다.
+        - blocked_edge가 있으면 현재 막힌 엣지를 경유하는 후보는 제외한다.
+        - 최단 path distance 기준으로 가장 가까운 siding을 선택한다.
         """
-        sidings = [
-            n for n in self._graph.get_neighbors(near_node)
-            if n.role == NodeRole.SIDING
-        ]
-        for siding_node in sidings:
-            sid = siding_node.node_id
-            # 비점유 확인
-            active = [r for r in self._sched._reservations.get(sid, [])
-                      if not r.released]
-            if active:
+        if goal_node is None:
+            return None
+
+        blocked_edges = {blocked_edge} if blocked_edge else None
+        best_sid: Optional[str] = None
+        best_distance = float("inf")
+        best_hops = float("inf")
+
+        for sid, node in self._graph.nodes.items():
+            if node.role != NodeRole.SIDING:
                 continue
-            # 재진입 가능 확인 (siding에서 메인통로로 나가는 엣지 존재)
-            neighbors = self._graph.get_neighbors(sid)
-            if any(n.role != NodeRole.SIDING for n in neighbors):
-                return sid
-        return None
+            if not self._is_siding_available(sid):
+                continue
+            if not self._has_siding_reentry(sid):
+                continue
+
+            path_to_siding = self._graph.get_path(
+                near_node,
+                sid,
+                blocked_edges=blocked_edges,
+            )
+            if not path_to_siding or len(path_to_siding) < 2:
+                continue
+
+            tail = self._graph.get_path(sid, goal_node)
+            if not tail or len(tail) < 2:
+                continue
+
+            distance = self._path_distance(path_to_siding)
+            hops = len(path_to_siding)
+            if distance < best_distance or (
+                distance == best_distance and hops < best_hops
+            ):
+                best_sid = sid
+                best_distance = distance
+                best_hops = hops
+
+        return best_sid
+
+    def _is_siding_available(self, siding_id: str) -> bool:
+        active = [
+            r for r in self._sched._reservations.get(siding_id, [])
+            if not r.released
+        ]
+        return not active
+
+    def _has_siding_reentry(self, siding_id: str) -> bool:
+        neighbors = self._graph.get_neighbors(siding_id)
+        return any(n.role != NodeRole.SIDING for n in neighbors)
+
+    def _path_distance(self, node_ids: list[str]) -> float:
+        total = 0.0
+        for src, dst in zip(node_ids, node_ids[1:]):
+            edge = self._find_edge(src, dst)
+            if edge is None:
+                return float("inf")
+            total += edge.distance
+        return total
 
     def _reroute_via_siding(self, siding_id: str, sim_time: float) -> None:
         """경로에 siding을 중간 경유지로 삽입."""

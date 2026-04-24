@@ -709,6 +709,37 @@ def test_bottleneck_edge_interpretation():
     assert_eq("dominant cause", top_edge["dominant_cause"], "section_conflict")
 
 
+def test_type_b_reachable_siding_candidate_beyond_adjacent():
+    print("\n[T49] Type B reachable siding candidate beyond adjacent")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="base")
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv.current_node_id = "WP_C_040"
+    agv._path = ["WP_C_040", "WP_C_080", "WP_C_120", "WP_C_160", "WP_C_200"]
+    agv._path_index = 1
+
+    adjacent_sidings = [
+        n.node_id for n in graph.get_neighbors("WP_C_040")
+        if n.role == NodeRole.SIDING
+    ]
+    assert_eq("adjacent siding 없음", len(adjacent_sidings), 0)
+
+    siding = agv._find_siding_candidate(
+        "WP_C_040",
+        "WP_C_200",
+        blocked_edge=("WP_C_040", "WP_C_080"),
+    )
+
+    assert_true("reachable siding candidate exists", siding is not None)
+    assert_true("candidate is siding node", graph.nodes[siding].role == NodeRole.SIDING)
+    assert_true("candidate not adjacent siding", siding not in adjacent_sidings)
+    assert_true(
+        "candidate has path to goal",
+        bool(graph.get_path(siding, "WP_C_200")),
+    )
+
+
 def test_type_c_d_station_pair_reachability():
     print("\n[T28] Type C/D station pair reachability")
     from src.domain.map.topology_generator import MapTopologyGenerator
@@ -1525,10 +1556,11 @@ if __name__ == "__main__":
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
-        # Head-on / siding / bottleneck regression (T45~T48)
+        # Head-on / siding / bottleneck regression (T45~T49)
         test_headon_regression,
         test_invalid_type_b_siding_placement_rejected,
         test_bottleneck_edge_interpretation,
+        test_type_b_reachable_siding_candidate_beyond_adjacent,
     ]
     passed = failed = 0
     for t in tests:

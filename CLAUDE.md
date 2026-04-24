@@ -37,7 +37,7 @@ vda5050_sim_v2/
 │   ├── fab_topology_full.yaml     전체 실험 (1800s, AGV 8~24)
 │   └── type_b_siding_sweep.yaml   Type B siding placement sweep (base/mid/dense × AGV 8~20)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T48
+│   └── test_simulation.py     T1~T49
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -178,7 +178,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T48)
+## 테스트 구조 (T1~T49)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -222,6 +222,7 @@ T46:     Type B siding placement sweep — base/mid/dense coverage 비교
          밀도 순서 단조 증가 검증 (mid >= base, dense >= mid)
 T47:     Invalid Type B siding placement 거부
 T48:     bottleneck edge 해석 — edge_type / section_key / dominant_cause 연결
+T49:     Type B reachable siding policy — 인접 siding이 없어도 도달 가능한 siding 선택
 ```
 
 실행:
@@ -325,7 +326,10 @@ python -m src.application.usecases.experiment_runner \
   - `bottleneck_edges`에 `edge_type`, `corridor`, `access_type`, `section_key`, `section_conflict_count`, `dominant_cause` 추가
   - shared corridor / lane / bay / siding / station_access / charger_access 분류
   - ranking/summary에서 Type B placement variant(`B/base`, `B/mid`, `B/dense`)를 분리 보존
-- [ ] Type B reachable siding policy 개선 — 인접 siding이 아닌 A* 경로 상 가장 가까운 siding으로 회피
+- [x] Type B reachable siding policy 개선 — 인접 siding이 아닌 A* 경로 상 가장 가까운 siding으로 회피
+  - `_find_siding_candidate()`가 인접 node 스캔 대신 reachable siding 전체 후보를 평가
+  - 현재 막힌 `blocked_edge`를 제외한 경로로 siding까지 도달 가능해야 함
+  - siding -> goal 재진입 경로 존재 + 최소 path distance 기준 후보 선택
 
 ### 운영 현실화 2차
 - [ ] battery/charging 모델 1차: SOC 소모, low-battery 충전 진입, charger dwell/queue
