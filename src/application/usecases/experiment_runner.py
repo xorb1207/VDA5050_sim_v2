@@ -50,6 +50,9 @@ class ExperimentConfig:
     demand_count: Optional[int] = None
     output_dir: str           = "outputs/experiments"
     run_id: Optional[str]     = None
+    # Type B siding placement sweep: ["base"], ["base","mid","dense"] 등
+    # types에 "B"가 포함될 때만 유효. 다른 타입에는 "base" 적용
+    siding_placements: list[str] = field(default_factory=lambda: ["base"])
 
     def __post_init__(self):
         if self.run_id is None:
@@ -67,6 +70,7 @@ class RunResult:
     n_agv: int
     random_seed: int = 42
     demand_mode: str = "generated"
+    siding_placement: str = "base"  # Type B 사이딩 배치 프리셋
     # KPI
     tasks_completed: int            = 0
     demands_completed: int          = 0
@@ -103,7 +107,7 @@ class RunResult:
 
 SUMMARY_COLUMNS = [
     "topology_type", "n_agv", "random_seed",
-    "demand_mode",
+    "demand_mode", "siding_placement",
     "tasks_completed", "demands_completed",
     "demand_completion_rate", "demand_throughput_per_hour",
     "throughput_tasks_per_hour",
@@ -138,19 +142,21 @@ async def _run_single(
     random_seed: int = 42,
     demand_mode: str = "generated",
     demand_count: int | None = None,
+    siding_placement: str = "base",
 ) -> RunResult:
     result = RunResult(
         topology_type=topology_type,
         n_agv=n_agv,
         random_seed=random_seed,
         demand_mode=demand_mode,
+        siding_placement=siding_placement,
     )
     t0 = time.perf_counter()
 
     try:
         random.seed(random_seed)
         gen_map = MapTopologyGenerator()
-        graph   = gen_map.generate(topology_type)
+        graph   = gen_map.generate(topology_type, siding_placement=siding_placement)
         bus     = LocalMemoryBus()
         sched   = TimeWindowScheduler()
         demand_set = _build_demand_set(
@@ -520,6 +526,14 @@ def _ranking_sort_key(row: dict) -> tuple:
     )
 
 
+def _topology_variant_label(row: dict) -> str:
+    topology_type = str(row.get("topology_type", ""))
+    siding_placement = str(row.get("siding_placement", "base") or "base")
+    if topology_type == "B":
+        return f"B/{siding_placement}"
+    return topology_type
+
+
 def _build_ranking_rows(results: list[RunResult]) -> list[dict]:
     rows = [_flatten_summary_row(r) for r in results]
     grouped: dict[tuple[int, int, str], list[dict]] = defaultdict(list)
@@ -544,9 +558,11 @@ def _build_ranking_rows(results: list[RunResult]) -> list[dict]:
                 "n_agv": n_agv,
                 "random_seed": seed,
                 "demand_mode": demand_mode,
+                "siding_placement": row.get("siding_placement", "base"),
                 "rank": current_rank,
                 "winner": current_rank == 1 and not row.get("error"),
                 "topology_type": row.get("topology_type", ""),
+                "topology_variant": _topology_variant_label(row),
                 "completion_rate": row.get("completion_rate", 0.0),
                 "task_acceptance_rate": row.get("task_acceptance_rate", 0.0),
                 "demands_completed": row.get("demands_completed", 0),
@@ -564,14 +580,21 @@ def _build_ranking_rows(results: list[RunResult]) -> list[dict]:
 def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
     grouped: dict[str, list[dict]] = defaultdict(list)
     for row in ranking_rows:
-        grouped[str(row["topology_type"])].append(row)
+        grouped[str(row["topology_variant"])].append(row)
 
     aggregate: list[dict] = []
-    for topology_type, rows in sorted(grouped.items()):
+    for topology_variant, rows in sorted(grouped.items()):
         valid = [r for r in rows if not r.get("error")]
+        topology_type = str(valid[0]["topology_type"] if valid else rows[0]["topology_type"])
+        siding_placement = str(
+            valid[0].get("siding_placement", "base")
+            if valid else rows[0].get("siding_placement", "base")
+        )
         if not valid:
             aggregate.append({
                 "topology_type": topology_type,
+                "topology_variant": topology_variant,
+                "siding_placement": siding_placement,
                 "evaluated_groups": 0,
                 "first_place_wins": 0,
                 "avg_rank": 0.0,
@@ -587,6 +610,8 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
         count = len(valid)
         aggregate.append({
             "topology_type": topology_type,
+            "topology_variant": topology_variant,
+            "siding_placement": siding_placement,
             "evaluated_groups": count,
             "first_place_wins": sum(1 for r in valid if r["winner"]),
             "avg_rank": round(sum(r["rank"] for r in valid) / count, 4),
@@ -635,11 +660,21 @@ class ExperimentRunner:
     def run(self) -> list[RunResult]:
         cfg = self.config
         seeds = cfg.random_seeds or [cfg.random_seed]
-        total = len(cfg.types) * len(cfg.agv_counts) * len(seeds)
+        siding_placements = cfg.siding_placements or ["base"]
+        # Type B: siding_placements 모두 실행. 다른 타입: "base" 고정
+        def _placements_for(t: str) -> list[str]:
+            return siding_placements if t == "B" else ["base"]
+
+        total = sum(
+            len(cfg.agv_counts) * len(seeds) * len(_placements_for(t))
+            for t in cfg.types
+        )
         print(f"\n{'='*56}")
         print(f"FAB Topology Experiment  run_id={cfg.run_id}")
         print(f"Types: {cfg.types}  AGV counts: {cfg.agv_counts}")
         print(f"Seeds: {seeds}")
+        if len(siding_placements) > 1:
+            print(f"Siding placements (Type B): {siding_placements}")
         print(f"Duration: {cfg.duration_s}s  Total runs: {total}")
         print(f"{'='*56}\n")
 
@@ -647,43 +682,51 @@ class ExperimentRunner:
         idx = 0
         for seed in seeds:
             for t in cfg.types:
-                for n in cfg.agv_counts:
-                    idx += 1
-                    print(
-                        f"[{idx:2d}/{total}] seed={seed}  Type-{t}  AGV={n:2d}  ...",
-                        end=" ",
-                        flush=True,
-                    )
-                    result = asyncio.run(
-                        _run_single(
-                            t,
-                            n,
-                            cfg.duration_s,
-                            cfg.task_interval_s,
-                            seed,
-                            cfg.demand_mode,
-                            cfg.demand_count,
-                        )
-                    )
-                    results.append(result)
-                    if result.error:
-                        print(f"ERROR: {result.error}")
-                    else:
+                for placement in _placements_for(t):
+                    for n in cfg.agv_counts:
+                        idx += 1
+                        label = f"Type-{t}" + (f"/{placement}" if t == "B" and len(siding_placements) > 1 else "")
                         print(
-                            f"demand_done={result.demands_completed:3d}  "
-                            f"demand_tph={result.demand_throughput_per_hour:6.1f}  "
-                            f"completion={result.demand_completion_rate:.3f}  "
-                            f"wait={result.total_wait_time_s:6.1f}s  "
-                            f"wall={result.wall_time_s:.1f}s"
+                            f"[{idx:2d}/{total}] seed={seed}  {label}  AGV={n:2d}  ...",
+                            end=" ",
+                            flush=True,
                         )
-                    self._save_single(result)
+                        result = asyncio.run(
+                            _run_single(
+                                t,
+                                n,
+                                cfg.duration_s,
+                                cfg.task_interval_s,
+                                seed,
+                                cfg.demand_mode,
+                                cfg.demand_count,
+                                siding_placement=placement,
+                            )
+                        )
+                        results.append(result)
+                        if result.error:
+                            print(f"ERROR: {result.error}")
+                        else:
+                            print(
+                                f"demand_done={result.demands_completed:3d}  "
+                                f"demand_tph={result.demand_throughput_per_hour:6.1f}  "
+                                f"completion={result.demand_completion_rate:.3f}  "
+                                f"wait={result.total_wait_time_s:6.1f}s  "
+                                f"wall={result.wall_time_s:.1f}s"
+                            )
+                        self._save_single(result)
 
         self._save_summary(results)
         self._print_matrix(results)
         return results
 
     def _save_single(self, r: RunResult) -> None:
-        d = self.out_dir / f"{r.topology_type}_{r.n_agv:02d}agv_seed{r.random_seed}"
+        placement_suffix = (
+            f"_siding{r.siding_placement}"
+            if r.topology_type == "B" and r.siding_placement != "base"
+            else ""
+        )
+        d = self.out_dir / f"{r.topology_type}{placement_suffix}_{r.n_agv:02d}agv_seed{r.random_seed}"
         d.mkdir(exist_ok=True)
         (d / "kpi_summary.json").write_text(
             json.dumps(asdict(r), ensure_ascii=False, indent=2)
@@ -706,8 +749,8 @@ class ExperimentRunner:
         ranking_rows = _build_ranking_rows(results)
         ranking_path = self.out_dir / "ranking.csv"
         ranking_columns = [
-            "n_agv", "random_seed", "demand_mode", "rank", "winner",
-            "topology_type", "completion_rate", "task_acceptance_rate",
+            "n_agv", "random_seed", "demand_mode", "siding_placement", "rank", "winner",
+            "topology_type", "topology_variant", "completion_rate", "task_acceptance_rate",
             "demands_completed", "demand_throughput_per_hour",
             "total_wait_time_s", "section_conflict_total",
             "followon_total", "headon_total",
@@ -738,119 +781,62 @@ class ExperimentRunner:
         """처리량 매트릭스 콘솔 출력."""
         cfg = self.config
         col_w = 10
+        siding_placements = cfg.siding_placements or ["base"]
+        # 출력 레이블: Type B는 placement별로 분리
+        def _type_labels() -> list[str]:
+            labels = []
+            for t in cfg.types:
+                if t == "B" and len(siding_placements) > 1:
+                    for p in siding_placements:
+                        labels.append(f"B/{p}")
+                else:
+                    labels.append(t)
+            return labels
 
-        def avg_for(topology_type: str, n_agv: int, attr: str) -> float | None:
+        def avg_for(label: str, n_agv: int, attr: str) -> float | None:
+            if "/" in label:
+                t, placement = label.split("/", 1)
+            else:
+                t, placement = label, None
             values = [
                 float(getattr(r, attr))
                 for r in results
-                if r.topology_type == topology_type and r.n_agv == n_agv and not r.error
+                if r.topology_type == t
+                and r.n_agv == n_agv
+                and not r.error
+                and (placement is None or r.siding_placement == placement)
             ]
             if not values:
                 return None
             return sum(values) / len(values)
 
+        type_labels = _type_labels()
+
+        def _print_matrix_section(title: str, attr: str, fmt: str) -> None:
+            print(f"\n{title}")
+            print(f"{'Type':10s}", end="")
+            for n in cfg.agv_counts:
+                print(f"{'AGV='+str(n):>{col_w}}", end="")
+            print()
+            print("─" * (10 + col_w * len(cfg.agv_counts)))
+            for lbl in type_labels:
+                print(f"{lbl:10s}", end="")
+                for n in cfg.agv_counts:
+                    value = avg_for(lbl, n, attr)
+                    if value is not None:
+                        print(f"{value:>{col_w}{fmt}}", end="")
+                    else:
+                        print(f"{'ERR':>{col_w}}", end="")
+                print()
+
         print(f"\n{'─'*56}")
-        print("실제 demand 처리량 (demands/hour) 매트릭스")
-        print(f"{'Type':6s}", end="")
-        for n in cfg.agv_counts:
-            print(f"{'AGV='+str(n):>{col_w}}", end="")
-        print()
-        print("─" * (6 + col_w * len(cfg.agv_counts)))
+        _print_matrix_section("실제 demand 처리량 (demands/hour) 매트릭스", "demand_throughput_per_hour", ".1f")
+        _print_matrix_section("실제 demand 완료율 매트릭스", "demand_completion_rate", ".4f")
+        _print_matrix_section("가동률 (agv_utilization) 매트릭스", "agv_utilization", ".4f")
+        _print_matrix_section("Head-on 충돌 횟수 매트릭스", "headon_total", ".1f")
+        _print_matrix_section("Same-direction follow-on 차단 횟수 매트릭스", "followon_total", ".1f")
 
-        for t in cfg.types:
-            print(f"{'Type '+t:6s}", end="")
-            for n in cfg.agv_counts:
-                value = avg_for(t, n, "demand_throughput_per_hour")
-                if value is not None:
-                    print(f"{value:>{col_w}.1f}", end="")
-                else:
-                    print(f"{'ERR':>{col_w}}", end="")
-            print()
-
-        print(f"\n실제 demand 완료율 매트릭스")
-        print(f"{'Type':6s}", end="")
-        for n in cfg.agv_counts:
-            print(f"{'AGV='+str(n):>{col_w}}", end="")
-        print()
-        print("─" * (6 + col_w * len(cfg.agv_counts)))
-
-        for t in cfg.types:
-            print(f"{'Type '+t:6s}", end="")
-            for n in cfg.agv_counts:
-                value = avg_for(t, n, "demand_completion_rate")
-                if value is not None:
-                    print(f"{value:>{col_w}.4f}", end="")
-                else:
-                    print(f"{'ERR':>{col_w}}", end="")
-            print()
-
-        print(f"\n가동률 (agv_utilization) 매트릭스")
-        print(f"{'Type':6s}", end="")
-        for n in cfg.agv_counts:
-            print(f"{'AGV='+str(n):>{col_w}}", end="")
-        print()
-        print("─" * (6 + col_w * len(cfg.agv_counts)))
-
-        for t in cfg.types:
-            print(f"{'Type '+t:6s}", end="")
-            for n in cfg.agv_counts:
-                value = avg_for(t, n, "agv_utilization")
-                if value is not None:
-                    print(f"{value:>{col_w}.4f}", end="")
-                else:
-                    print(f"{'ERR':>{col_w}}", end="")
-            print()
-
-        print(f"\nHead-on 충돌 횟수 매트릭스")
-        print(f"{'Type':6s}", end="")
-        for n in cfg.agv_counts:
-            print(f"{'AGV='+str(n):>{col_w}}", end="")
-        print()
-        print("─" * (6 + col_w * len(cfg.agv_counts)))
-
-        for t in cfg.types:
-            print(f"{'Type '+t:6s}", end="")
-            for n in cfg.agv_counts:
-                value = avg_for(t, n, "headon_total")
-                if value is not None:
-                    print(f"{value:>{col_w}.1f}", end="")
-                else:
-                    print(f"{'ERR':>{col_w}}", end="")
-            print()
-
-        print(f"\nSame-direction follow-on 차단 횟수 매트릭스")
-        print(f"{'Type':6s}", end="")
-        for n in cfg.agv_counts:
-            print(f"{'AGV='+str(n):>{col_w}}", end="")
-        print()
-        print("─" * (6 + col_w * len(cfg.agv_counts)))
-
-        for t in cfg.types:
-            print(f"{'Type '+t:6s}", end="")
-            for n in cfg.agv_counts:
-                value = avg_for(t, n, "followon_total")
-                if value is not None:
-                    print(f"{value:>{col_w}.1f}", end="")
-                else:
-                    print(f"{'ERR':>{col_w}}", end="")
-            print()
-
-        print(f"\nCritical section conflict 횟수 매트릭스")
-        print(f"{'Type':6s}", end="")
-        for n in cfg.agv_counts:
-            print(f"{'AGV='+str(n):>{col_w}}", end="")
-        print()
-        print("─" * (6 + col_w * len(cfg.agv_counts)))
-
-        for t in cfg.types:
-            print(f"{'Type '+t:6s}", end="")
-            for n in cfg.agv_counts:
-                value = avg_for(t, n, "section_conflict_total")
-                if value is not None:
-                    print(f"{value:>{col_w}.1f}", end="")
-                else:
-                    print(f"{'ERR':>{col_w}}", end="")
-            print()
+        _print_matrix_section("Critical section conflict 횟수 매트릭스", "section_conflict_total", ".1f")
         print(f"{'─'*56}\n")
 
         aggregate = _build_ranking_aggregate(_build_ranking_rows(results))
@@ -858,7 +844,7 @@ class ExperimentRunner:
             print("Topology ranking summary")
             for row in aggregate:
                 print(
-                    f"Type {row['topology_type']}: "
+                    f"Type {row['topology_variant']}: "
                     f"wins={row['first_place_wins']}/{row['evaluated_groups']}  "
                     f"avg_rank={row['avg_rank']:.2f}  "
                     f"avg_completion={row['avg_completion_rate']:.4f}  "
@@ -873,6 +859,7 @@ def load_from_yaml(path: str) -> ExperimentConfig:
     with open(path) as f:
         raw = yaml.safe_load(f)
     random_seeds = raw.get("random_seeds")
+    siding_placements = raw.get("siding_placements")
     return ExperimentConfig(
         types          = raw.get("types", ["A","B","C","D","E"]),
         agv_counts     = raw.get("agv_counts", [3, 5, 8, 12]),
@@ -889,6 +876,10 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         ),
         output_dir     = raw.get("output_dir", "outputs/experiments"),
         run_id         = raw.get("run_id", None),
+        siding_placements = (
+            [str(p) for p in siding_placements]
+            if siding_placements is not None else ["base"]
+        ),
     )
 
 

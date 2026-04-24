@@ -33,10 +33,11 @@ vda5050_sim_v2/
 │   ├── sample_fab.json    10노드 테스트용 (T1~T12)
 │   └── fab_nav_graph.yaml 실제 FAB 맵 (82노드, Open-RMF 포맷)
 ├── experiments/
-│   ├── fab_topology.yaml      빠른 실험 (600s, AGV 8~20)
-│   └── fab_topology_full.yaml 전체 실험 (1800s, AGV 8~24)
+│   ├── fab_topology.yaml          빠른 실험 (600s, AGV 8~20)
+│   ├── fab_topology_full.yaml     전체 실험 (1800s, AGV 8~24)
+│   └── type_b_siding_sweep.yaml   Type B siding placement sweep (base/mid/dense × AGV 8~20)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T46
+│   └── test_simulation.py     T1~T48
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -177,7 +178,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T46)
+## 테스트 구조 (T1~T48)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -215,7 +216,12 @@ T44:     AGV pickup/dropoff processing split 검증
 T45:     Head-on semantic regression — 생성 토폴로지 5종, 600s/12AGV, Phase 3 baseline
          A/C/D == 0 (메인 통로 단방향 + station/charger access node critical section)
          B < 400 / E < 300 (seed 고정 양방향 Phase 3 upper bound)
-T46:     Type B siding coverage diagnostics — coverage ratio / longest uncovered gap
+T46:     Type B siding placement sweep — base/mid/dense coverage 비교
+         coverage ratio / longest uncovered gap / siding count per placement
+         dense → coverage_ratio=1.0, longest_uncovered_run_m=0.0 보장
+         밀도 순서 단조 증가 검증 (mid >= base, dense >= mid)
+T47:     Invalid Type B siding placement 거부
+T48:     bottleneck edge 해석 — edge_type / section_key / dominant_cause 연결
 ```
 
 실행:
@@ -280,11 +286,9 @@ python -m src.application.usecases.experiment_runner \
 
 ## 현재 남은 리스크 및 후속 작업
 
-### 단기
+### 완료된 기반
 - [x] Type C/D 처리량 낮은 원인 확정 및 수정 (Bug #1: corridor 이름 불일치 → vacuous test pass, Bug #2: 스테이션/충전소 L1-only 연결 → L2 AGV 강제 U턴)
 - [x] `kpi.py`에 `get_headon_summary()` 연결
-- [ ] bottleneck_edges 정확도 개선 및 head-on 병목 해석 고도화
-- [ ] Type B siding 커버리지 분석 (베이 사이 중간 구간 siding 없음)
 - [x] station/charger access critical section을 설비 node 단위로 묶기
 - [x] DemandSet common/capability 생성 기반
 - [x] common demand lifecycle KPI 1차 연결
@@ -298,18 +302,47 @@ python -m src.application.usecases.experiment_runner \
 - [x] 가감속 / 재출발 지연 1차 반영
 - [x] pickup/dropoff processing randomness 분리
 
-### 중기 (Phase 3 완성)
+### 지금 당장 (비교 설명력 강화)
+- [x] Type B siding 커버리지 분석 완료 및 개선 후보 정리
+  - 현재 Type B는 corridor별 `17개 main node 중 5개`만 siding 인접 (`coverage_ratio=0.2941`)
+  - 모든 corridor(N/C/S)에서 `longest_uncovered_run_m=80.0`로 동일한 회피 공백 반복
+  - 현재 siding은 bay x 위치 기준 15개로 배치되어 중간 구간(`WP_*_040`, `080`, `160`, `200`, `240` 등) 공백이 큼
+  - 개선 후보 1: 긴 공백 구간 우선 증설하는 `placement sweep (base/mid/dense)`
+  - 개선 후보 2: 인접 siding만 찾지 않고 가까운 reachable siding을 탐색하는 `reroute policy 개선`
+- [x] **Type B siding placement sweep 구현 및 실험 (base/mid/dense)**
+  - `topology_generator.py`에 `SIDING_POSITIONS` dict 추가 (base/mid/dense 프리셋)
+  - `_add_sidings(placement)`, `generate(siding_placement)`, `_build_type_b(siding_placement)` 파라미터화
+  - T46을 3-placement sweep 검증으로 확장 (dense → coverage_ratio=1.0, gap=0 보장)
+  - `experiment_runner.py`: `siding_placements` 파라미터 추가, `type_b_siding_sweep.yaml` 실험 파일 생성
+  - **주요 결과 (seed=42/100/200 평균, 300s)**:
+    | placement | AGV=16 headon | AGV=16 wait | AGV=20 headon | AGV=20 wait |
+    |-----------|--------------|-------------|--------------|-------------|
+    | base  (15 sidings) | 37.3 | 111.5s | 366.7 | 121.2s |
+    | mid   (27 sidings) | 86.3 | 135.8s | 383.7 | 173.9s |
+    | dense (51 sidings) | 0.0  | 132.3s | 414.7 | 236.0s |
+  - **인사이트**: 단순 밀도 증가가 선형적 개선을 보장하지 않음. 중부하(AGV=16)에서 dense는 head-on을 완전 제거하지만 대기시간 증가. 포화(AGV=20)에서는 dense가 오히려 최악. 개선 방향은 **reachable siding policy** (후보 2)가 더 우선.
+- [x] bottleneck_edges 정확도 개선 및 head-on/follow-on/section 병목 해석 고도화
+  - `bottleneck_edges`에 `edge_type`, `corridor`, `access_type`, `section_key`, `section_conflict_count`, `dominant_cause` 추가
+  - shared corridor / lane / bay / siding / station_access / charger_access 분류
+  - ranking/summary에서 Type B placement variant(`B/base`, `B/mid`, `B/dense`)를 분리 보존
+- [ ] Type B reachable siding policy 개선 — 인접 siding이 아닌 A* 경로 상 가장 가까운 siding으로 회피
+
+### 운영 현실화 2차
+- [ ] battery/charging 모델 1차: SOC 소모, low-battery 충전 진입, charger dwell/queue
+- [ ] charging reservation/policy 1차: 충전소 점유 경쟁, 충전 우선 dispatch, starvation 방지
+- [ ] **critical section 세분화**: priority/release timing 고도화
+- [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
+- [ ] **물리 모델 고도화 2차**: head-on 해소 후 재출발 시간, 회전/곡선 감속 반영
+- [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
+
+### Phase 3 완료 항목
 - [x] **경로 전체 사전 예약 (pre-reservation) 1차**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약
 - [x] **critical section 예약 1차**: 교차로/좁은 bay/양방향 lane을 section 단위로 묶어 예약
 - [x] **critical section capacity 1차**: lane width 기반 section capacity 반영
-- [ ] **critical section 세분화**: priority/release timing 고도화
-- [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
 - [x] **물리 모델 고도화 1차**: 가감속 구간, processing 이후 재출발 시간 반영
-- [ ] **물리 모델 고도화 2차**: head-on 해소 후 재출발 시간, 회전/곡선 감속 반영
 - [x] **station processing randomness 1차**: seed 기반 pickup/dropoff 처리시간 분리
-- [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
 
-### 장기
+### 확장 / 장기
 - [ ] 시각화: 맵 위 AGV 실시간 이동, head-on 발생 엣지 하이라이트
 - [ ] 통로별 조합 실험 (북=B, 중=A, 남=E 등 혼합 시나리오)
 

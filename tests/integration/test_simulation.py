@@ -592,23 +592,121 @@ def test_kpi_headon_fields():
 
 
 def test_type_b_siding_coverage_diagnostics():
-    print("\n[T46] Type B siding coverage diagnostics")
+    print("\n[T46] Type B siding coverage diagnostics — placement sweep (base/mid/dense)")
     from src.application.usecases.experiment_runner import _build_siding_coverage_diagnostics
+    from src.domain.map.topology_generator import MapTopologyGenerator, SIDING_POSITIONS
+
+    gen = MapTopologyGenerator()
+
+    results = {}
+    for placement in ("base", "mid", "dense"):
+        graph = gen.generate("B", siding_placement=placement)
+        diag = _build_siding_coverage_diagnostics(graph)
+        expected_siding_count = len(SIDING_POSITIONS[placement]) * 3  # N/C/S 3개 코리도
+        assert_eq(
+            f"[{placement}] siding count",
+            diag["siding_count"],
+            expected_siding_count,
+        )
+        assert_true(
+            f"[{placement}] coverage ratio <= 1",
+            diag["coverage_ratio"] <= 1.0,
+        )
+        results[placement] = diag
+        print(
+            f"  {placement:6s}: siding={diag['siding_count']:3d}  "
+            f"coverage={diag['coverage_ratio']:.4f}  "
+            f"longest_gap={diag['longest_uncovered_run_m']:.1f}m"
+        )
+
+    # base placement: 원래 5 x-pos × 3 corridors = 15 sidings
+    assert_eq("base siding count", results["base"]["siding_count"], 15)
+    assert_true("base coverage ratio < 1", results["base"]["coverage_ratio"] < 1.0)
+    assert_true(
+        "base longest uncovered gap >= 80m",
+        results["base"]["longest_uncovered_run_m"] >= 80.0,
+    )
+    assert_true(
+        "base uncovered main node sample exists",
+        len(results["base"]["uncovered_main_node_samples"]) >= 1,
+    )
+
+    # 배치 밀도가 높아질수록 coverage 개선 / gap 감소
+    assert_true(
+        "mid coverage >= base coverage",
+        results["mid"]["coverage_ratio"] >= results["base"]["coverage_ratio"],
+    )
+    assert_true(
+        "dense coverage >= mid coverage",
+        results["dense"]["coverage_ratio"] >= results["mid"]["coverage_ratio"],
+    )
+    assert_true(
+        "mid gap <= base gap",
+        results["mid"]["longest_uncovered_run_m"] <= results["base"]["longest_uncovered_run_m"],
+    )
+    assert_true(
+        "dense gap <= mid gap",
+        results["dense"]["longest_uncovered_run_m"] <= results["mid"]["longest_uncovered_run_m"],
+    )
+
+    # dense: WP 전체 커버 → coverage == 1.0
+    assert_true(
+        "dense coverage == 1.0 (모든 WP에 siding 인접)",
+        results["dense"]["coverage_ratio"] == 1.0,
+    )
+    assert_eq(
+        "dense longest uncovered gap == 0.0",
+        results["dense"]["longest_uncovered_run_m"],
+        0.0,
+    )
+
+
+def test_invalid_type_b_siding_placement_rejected():
+    print("\n[T47] Invalid Type B siding placement rejected")
     from src.domain.map.topology_generator import MapTopologyGenerator
 
-    graph = MapTopologyGenerator().generate("B")
-    diag = _build_siding_coverage_diagnostics(graph)
+    try:
+        MapTopologyGenerator().generate("B", siding_placement="bad-placement")
+    except ValueError as exc:
+        assert_true("invalid placement mentioned", "bad-placement" in str(exc))
+        assert_true("valid values mentioned", "base" in str(exc) and "dense" in str(exc))
+    else:
+        raise AssertionError("invalid siding placement should raise ValueError")
 
-    assert_eq("siding count", diag["siding_count"], 15)
-    assert_true("coverage ratio < 1", diag["coverage_ratio"] < 1.0)
-    assert_true(
-        "longest uncovered siding gap >= 80m",
-        diag["longest_uncovered_run_m"] >= 80.0,
+
+def test_bottleneck_edge_interpretation():
+    print("\n[T48] Bottleneck edge interpretation")
+    from src.analytics.kpi import KPICalculator
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="base")
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    agv = AGV("AGV_001", bus, graph, sched)
+
+    shared_edge = next(e for e in graph.edges.values() if e.corridor == "north")
+    edge_key = f"{shared_edge.start_node_id}__{shared_edge.end_node_id}"
+    agv._edge_time[edge_key] = 12.0
+
+    section_key = (
+        f"shared_corridor:{shared_edge.corridor}:"
+        f"{'<->'.join(sorted([shared_edge.start_node_id, shared_edge.end_node_id]))}"
     )
-    assert_true(
-        "uncovered main node sample exists",
-        len(diag["uncovered_main_node_samples"]) >= 1,
-    )
+    sched._edge_headon_counts[edge_key] = 2
+    sched._edge_followon_counts[edge_key] = 1
+    sched._edge_retry_counts[edge_key] = 3
+    sched._section_conflict_counts[section_key] = 5
+
+    results = KPICalculator().compute({"AGV_001": agv}, sched, sim_time_s=60.0)
+    top_edge = results["bottleneck_edges"][0]
+
+    assert_eq("edge id preserved", top_edge["edge_id"], edge_key)
+    assert_eq("graph edge id present", top_edge["graph_edge_id"], shared_edge.edge_id)
+    assert_eq("edge type classified", top_edge["edge_type"], "shared_corridor")
+    assert_eq("corridor preserved", top_edge["corridor"], "north")
+    assert_eq("section key linked", top_edge["section_key"], section_key)
+    assert_eq("section conflict count linked", top_edge["section_conflict_count"], 5)
+    assert_eq("dominant cause", top_edge["dominant_cause"], "section_conflict")
 
 
 def test_type_c_d_station_pair_reachability():
@@ -891,6 +989,76 @@ def test_topology_ranking_summary():
     assert_eq("seed별 winner", winners, [(42, "B"), (43, "A")])
     assert_eq("aggregate row count", len(aggregate), 2)
     assert_eq("aggregate first row wins", aggregate[0]["first_place_wins"], 1)
+
+
+def test_type_b_siding_placement_ranking_grouping():
+    print("\n[T34-2] Type B siding placement ranking grouping")
+    from src.application.usecases.experiment_runner import (
+        RunResult,
+        _build_ranking_aggregate,
+        _build_ranking_rows,
+    )
+
+    results = [
+        RunResult(
+            topology_type="B",
+            siding_placement="base",
+            n_agv=8,
+            random_seed=42,
+            demand_mode="generated",
+            demands_completed=10,
+            demand_throughput_per_hour=100.0,
+            total_wait_time_s=20.0,
+        ),
+        RunResult(
+            topology_type="B",
+            siding_placement="mid",
+            n_agv=8,
+            random_seed=42,
+            demand_mode="generated",
+            demands_completed=12,
+            demand_throughput_per_hour=120.0,
+            total_wait_time_s=18.0,
+        ),
+        RunResult(
+            topology_type="B",
+            siding_placement="dense",
+            n_agv=8,
+            random_seed=42,
+            demand_mode="generated",
+            demands_completed=8,
+            demand_throughput_per_hour=80.0,
+            total_wait_time_s=30.0,
+        ),
+    ]
+
+    for result in results:
+        result.diagnostics = {
+            "task_generation": {
+                "tasks_requested": 12,
+                "tasks_dispatched": result.demands_completed,
+                "tasks_rejected_unreachable": 0,
+                "tasks_backlogged": 12 - result.demands_completed,
+                "demands_completed": result.demands_completed,
+            },
+            "station_access": {},
+            "siding_coverage": {},
+        }
+
+    ranking_rows = _build_ranking_rows(results)
+    aggregate = _build_ranking_aggregate(ranking_rows)
+
+    assert_eq("ranking row count", len(ranking_rows), 3)
+    assert_eq(
+        "ranking variants preserved",
+        [row["topology_variant"] for row in ranking_rows],
+        ["B/mid", "B/base", "B/dense"],
+    )
+    assert_eq(
+        "aggregate variants separated",
+        [row["topology_variant"] for row in aggregate],
+        ["B/mid", "B/base", "B/dense"],
+    )
 
 
 async def _test_follow_on_headway_blocks_close_entry():
@@ -1346,6 +1514,7 @@ if __name__ == "__main__":
         test_common_demand_lifecycle_metrics,
         test_real_demand_completion_metrics,
         test_topology_ranking_summary,
+        test_type_b_siding_placement_ranking_grouping,
         test_follow_on_headway_blocks_close_entry,
         test_type_d_follow_on_headway_shorter_than_c,
         test_itinerary_reservation_atomic_conflict,
@@ -1356,8 +1525,10 @@ if __name__ == "__main__":
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
-        # Head-on / siding regression (T45~T46)
+        # Head-on / siding / bottleneck regression (T45~T48)
         test_headon_regression,
+        test_invalid_type_b_siding_placement_rejected,
+        test_bottleneck_edge_interpretation,
     ]
     passed = failed = 0
     for t in tests:

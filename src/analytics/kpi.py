@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from src.domain.agv.agv import AGV
     from src.domain.reservation.scheduler import TimeWindowScheduler
+    from src.domain.map.graph import Edge, MapGraph
 
 
 class KPICalculator:
@@ -13,6 +14,95 @@ class KPICalculator:
     AGV 인스턴스와 Scheduler에서 수집된 통계를 받아 계산.
     엔진 / AGV 내부 로직과 완전히 분리.
     """
+
+    @staticmethod
+    def _find_graph_edge(graph: "MapGraph", edge_key: str) -> Optional["Edge"]:
+        if "__" not in edge_key:
+            return None
+        src_id, dst_id = edge_key.split("__", 1)
+        for eid in graph._out_edges.get(src_id, []):
+            edge = graph.edges.get(eid)
+            if edge and edge.end_node_id == dst_id:
+                return edge
+        return None
+
+    @staticmethod
+    def _edge_section_key(edge: Optional["Edge"], topology_type: str) -> str:
+        if edge is None:
+            return ""
+        if edge.access_type:
+            facility_node_id = edge.end_node_id
+            if edge.access_type == "station_access":
+                if edge.start_node_id.startswith("ST_"):
+                    facility_node_id = edge.start_node_id
+                elif edge.end_node_id.startswith("ST_"):
+                    facility_node_id = edge.end_node_id
+            elif edge.access_type == "charger_access":
+                if edge.start_node_id.startswith("CH_"):
+                    facility_node_id = edge.start_node_id
+                elif edge.end_node_id.startswith("CH_"):
+                    facility_node_id = edge.end_node_id
+            return f"access:{edge.access_type}:{facility_node_id}"
+        if edge.corridor == "bay":
+            return f"bay:{edge.start_node_id.split('_')[-1]}"
+        if edge.corridor == "siding":
+            return f"siding:{edge.start_node_id}->{edge.end_node_id}"
+        if topology_type in ("B", "E") and edge.corridor in ("north", "center", "south"):
+            a, b = sorted([edge.start_node_id, edge.end_node_id])
+            return f"shared_corridor:{edge.corridor}:{a}<->{b}"
+        if edge.corridor in (
+            "north_l1",
+            "north_l2",
+            "center_l1",
+            "center_l2",
+            "south_l1",
+            "south_l2",
+        ):
+            a, b = sorted([edge.start_node_id, edge.end_node_id])
+            return f"lane:{edge.corridor}:{a}<->{b}"
+        return ""
+
+    @staticmethod
+    def _edge_type(edge: Optional["Edge"], topology_type: str) -> str:
+        if edge is None:
+            return "unknown"
+        if edge.access_type == "station_access":
+            return "station_access"
+        if edge.access_type == "charger_access":
+            return "charger_access"
+        if edge.corridor == "bay":
+            return "bay"
+        if edge.corridor == "siding":
+            return "siding"
+        if topology_type in ("B", "E") and edge.corridor in ("north", "center", "south"):
+            return "shared_corridor"
+        if edge.corridor in (
+            "north_l1",
+            "north_l2",
+            "center_l1",
+            "center_l2",
+            "south_l1",
+            "south_l2",
+        ):
+            return "lane"
+        return "main_corridor"
+
+    @staticmethod
+    def _dominant_edge_cause(
+        *,
+        headon_count: int,
+        followon_count: int,
+        section_conflict_count: int,
+        retry_count: int,
+    ) -> str:
+        candidates = [
+            ("section_conflict", section_conflict_count),
+            ("headon", headon_count),
+            ("followon", followon_count),
+            ("retry", retry_count),
+        ]
+        label, value = max(candidates, key=lambda item: item[1])
+        return label if value > 0 else "occupancy"
 
     def compute(
         self,
@@ -91,15 +181,38 @@ class KPICalculator:
 
         # edge: 점유 시간 기준 Top N
         edge_scores = scheduler.get_all_edge_scores()
-        bottleneck_edges = [
-            {"edge_id": eid, "occupancy_time_s": round(t, 2),
-             "occupancy_rate": round(t / sim_time_s, 4),
-             "congestion_score": edge_scores.get(eid, 0.0),
-             "headon_count": scheduler._edge_headon_counts.get(eid, 0),
-             "followon_count": scheduler._edge_followon_counts.get(eid, 0),
-             "retry_count": scheduler._edge_retry_counts.get(eid, 0)}
-            for eid, t in sorted(edge_times.items(), key=lambda x: x[1], reverse=True)
-        ][:5]
+        sample_agv = next(iter(agvs.values()), None)
+        graph = sample_agv._graph if sample_agv is not None else None
+        topology_type = getattr(graph, "_topology_type", "") if graph is not None else ""
+        bottleneck_edges = []
+        for eid, t in sorted(edge_times.items(), key=lambda x: x[1], reverse=True)[:5]:
+            edge = self._find_graph_edge(graph, eid) if graph is not None else None
+            section_key = self._edge_section_key(edge, topology_type)
+            section_conflict_count = scheduler._section_conflict_counts.get(section_key, 0)
+            headon_count = scheduler._edge_headon_counts.get(eid, 0)
+            followon_count = scheduler._edge_followon_counts.get(eid, 0)
+            retry_count = scheduler._edge_retry_counts.get(eid, 0)
+            bottleneck_edges.append({
+                "edge_id": eid,
+                "graph_edge_id": edge.edge_id if edge is not None else "",
+                "edge_type": self._edge_type(edge, topology_type),
+                "corridor": edge.corridor if edge is not None else "",
+                "access_type": edge.access_type if edge is not None else "",
+                "section_key": section_key,
+                "occupancy_time_s": round(t, 2),
+                "occupancy_rate": round(t / sim_time_s, 4),
+                "congestion_score": edge_scores.get(eid, 0.0),
+                "headon_count": headon_count,
+                "followon_count": followon_count,
+                "section_conflict_count": section_conflict_count,
+                "retry_count": retry_count,
+                "dominant_cause": self._dominant_edge_cause(
+                    headon_count=headon_count,
+                    followon_count=followon_count,
+                    section_conflict_count=section_conflict_count,
+                    retry_count=retry_count,
+                ),
+            })
 
         headon_summary = scheduler.get_headon_summary()
 

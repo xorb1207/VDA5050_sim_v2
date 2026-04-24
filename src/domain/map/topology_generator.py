@@ -40,6 +40,16 @@ WIDTH_ACCESS_M = 1.2
 
 TopologyType = Literal["A", "B", "C", "D", "E"]
 
+# ── Type B 사이딩 배치 프리셋 ──────────────────────────────────
+# base:  bay 위치만 (5개, 160m 간격)
+# mid:   80m 간격 (9개)
+# dense: 40m 간격 = WP 전체 (17개)
+SIDING_POSITIONS: dict[str, list[int]] = {
+    "base":  BAY_X,                                 # [0, 160, 320, 480, 640]
+    "mid":   list(range(0, FAB_WIDTH_M + 1, 80)),   # [0, 80, 160, ..., 640]
+    "dense": WP_X,                                  # [0, 40, 80, ..., 640]
+}
+
 
 # ── Invariant 검증 결과 ────────────────────────────────────────
 @dataclass
@@ -55,18 +65,35 @@ class InvariantResult:
 
 class MapTopologyGenerator:
 
-    def generate(self, type_code: TopologyType) -> MapGraph:
-        builders = {
-            "A": self._build_type_a,
-            "B": self._build_type_b,
-            "C": self._build_type_c,
-            "D": self._build_type_d,
-            "E": self._build_type_e,
-        }
-        if type_code not in builders:
-            raise ValueError(f"Unknown topology type: {type_code}")
-        g = builders[type_code]()
+    @staticmethod
+    def _validate_siding_placement(placement: str) -> str:
+        if placement not in SIDING_POSITIONS:
+            valid = ", ".join(sorted(SIDING_POSITIONS))
+            raise ValueError(
+                f"Unknown siding placement: {placement!r}. Valid values: {valid}"
+            )
+        return placement
+
+    def generate(
+        self,
+        type_code: TopologyType,
+        siding_placement: str = "base",
+    ) -> MapGraph:
+        if type_code == "B":
+            siding_placement = self._validate_siding_placement(siding_placement)
+            g = self._build_type_b(siding_placement=siding_placement)
+        else:
+            builders = {
+                "A": self._build_type_a,
+                "C": self._build_type_c,
+                "D": self._build_type_d,
+                "E": self._build_type_e,
+            }
+            if type_code not in builders:
+                raise ValueError(f"Unknown topology type: {type_code}")
+            g = builders[type_code]()
         g._topology_type = type_code  # 메타데이터 태그
+        g._siding_placement = siding_placement  # 사이딩 배치 프리셋 태그
         return g
 
     # ── Type A ────────────────────────────────────────────────
@@ -85,13 +112,13 @@ class MapTopologyGenerator:
         return g
 
     # ── Type B ────────────────────────────────────────────────
-    def _build_type_b(self) -> MapGraph:
+    def _build_type_b(self, siding_placement: str = "base") -> MapGraph:
         g = MapGraph()
         self._add_corridor(g, Y_NORTH,  "N", bidirectional=True, corridor="north")
         self._add_corridor(g, Y_CENTER, "C", bidirectional=True, corridor="center",
                            role=NodeRole.APPROACH)
         self._add_corridor(g, Y_SOUTH,  "S", bidirectional=True, corridor="south")
-        self._add_sidings(g)
+        self._add_sidings(g, placement=siding_placement)
         self._add_bays(g)
         self._add_stations(g)
         self._add_chargers(g)
@@ -421,15 +448,31 @@ class MapTopologyGenerator:
                                      max_speed=SPEED_CHARGER_MS, access_type="charger_access"))
 
     # ── Type B 전용: siding ────────────────────────────────────
-    def _add_sidings(self, g: MapGraph) -> None:
+    def _add_sidings(self, g: MapGraph, placement: str = "base") -> None:
+        """
+        placement:
+          "base"  — bay 위치만 (5개 x 축)
+          "mid"   — 80m 간격 (9개 x 축)
+          "dense" — 40m 간격, WP 전체 (17개 x 축)
+        각 x 위치마다 N/C/S 3개 코리도에 siding 추가.
+        siding 노드는 WP 노드 옆 오프셋 위치에 배치하고 bidirectional 엣지로 연결.
+        """
+        x_positions = SIDING_POSITIONS[self._validate_siding_placement(placement)]
         sid = 1
-        for bx in BAY_X:
+        for bx in x_positions:
             for y, tag in [(Y_NORTH, "N"), (Y_CENTER, "C"), (Y_SOUTH, "S")]:
-                sx = bx - 20 if bx > 0 else bx + 20
+                # siding 물리 위치: WP 기준 ±20m 오프셋 (FAB 경계 처리)
+                if bx == 0:
+                    sx = bx + 20
+                elif bx == FAB_WIDTH_M:
+                    sx = bx - 20
+                else:
+                    sx = bx - 20  # 왼쪽 오프셋 기본
                 nid = f"SD_{tag}_{bx:03d}_{sid:02d}"
                 g._add_node(Node(node_id=nid, x=float(sx), y=float(y),
                                  role=NodeRole.SIDING))
-                wp_x = max(0, min(FAB_WIDTH_M, sx // WP_STEP * WP_STEP))
+                # WP 연결: bx 위치의 WP 노드에 직접 연결 (snap to WP grid)
+                wp_x = max(0, min(FAB_WIDTH_M, (bx // WP_STEP) * WP_STEP))
                 wp_nid = f"WP_{tag}_{int(wp_x):03d}"
                 if wp_nid in g.nodes:
                     g._add_edge(Edge(
