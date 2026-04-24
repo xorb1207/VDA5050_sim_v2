@@ -53,8 +53,12 @@ REROUTE_THRESHOLD_BY_TYPE = {
 
 class AGV:
 
-    BATTERY_DRAIN_PER_METER: float = 0.01
-    CHARGE_TRIGGER_PCT:      float = 35.0
+    BATTERY_BASE_DRAIN_PCT_PER_HOUR: float = 8.0
+    BATTERY_LOADED_DRAIN_PCT_PER_HOUR: float = 12.0
+    CHARGE_BAND_ENTRY_PCT:   float = 40.0
+    CHARGE_ASSIGN_PCT:       float = 30.0
+    CHARGE_TARGET_PCT:       float = 90.0
+    CHARGE_RATE_PCT_PER_S:   float = 1.0
 
     def __init__(
         self,
@@ -87,6 +91,7 @@ class AGV:
         self._current_pickup_node_id: Optional[str] = None
         self._current_dropoff_node_id: Optional[str] = None
         self._processing_node_id: Optional[str] = None
+        self._payload_loaded: bool = False
 
         # Conflict Resolution
         self.collision_retry_count: int   = 0
@@ -107,6 +112,45 @@ class AGV:
         self._task_start_time:   float = 0.0
         self._edge_time:         dict[str, float] = {}
         self._reroute_count:     int = 0
+        self._battery_enabled: bool = bool(
+            getattr(graph, "_battery_enabled", BATTERY_ENABLED)
+        )
+        self._battery_pct: float = float(
+            getattr(graph, "_battery_initial_pct", 100.0)
+        )
+        self._min_battery_pct: float = self._battery_pct
+        self._battery_base_drain_pct_per_hour: float = float(
+            getattr(
+                graph,
+                "_battery_base_drain_pct_per_hour",
+                self.BATTERY_BASE_DRAIN_PCT_PER_HOUR,
+            )
+        )
+        self._battery_loaded_drain_pct_per_hour: float = float(
+            getattr(
+                graph,
+                "_battery_loaded_drain_pct_per_hour",
+                self.BATTERY_LOADED_DRAIN_PCT_PER_HOUR,
+            )
+        )
+        self._charge_band_entry_pct: float = float(
+            getattr(graph, "_battery_charge_band_entry_pct", self.CHARGE_BAND_ENTRY_PCT)
+        )
+        self._charge_assign_pct: float = float(
+            getattr(graph, "_battery_charge_assign_pct", self.CHARGE_ASSIGN_PCT)
+        )
+        self._charge_target_pct: float = float(
+            getattr(graph, "_battery_charge_target_pct", self.CHARGE_TARGET_PCT)
+        )
+        self._charge_rate_pct_per_s: float = float(
+            getattr(graph, "_battery_charge_rate_pct_per_s", self.CHARGE_RATE_PCT_PER_S)
+        )
+        self._charging_sessions: int = 0
+        self._charging_time_s: float = 0.0
+        self._low_battery_charge_requests: int = 0
+        self._charge_request_active: bool = False
+        self._charging_goal_node_id: Optional[str] = None
+        self._held_charge_edge: Optional[tuple[str, str]] = None
 
     @property
     def state(self) -> AGVState:
@@ -146,6 +190,7 @@ class AGV:
         self._processing_node_id = None
         self._pre_reserved_edges.clear()
         self._pre_reserved_edge_starts.clear()
+        self._payload_loaded = False
         if self._path and self._fsm.state == AGVState.IDLE:
             dispatch_time = float(payload.get("dispatchTimeS", 0.0))
             await self._pre_reserve_itinerary(dispatch_time)
@@ -169,7 +214,10 @@ class AGV:
         s = self._fsm.state
         self._state_time[s.value] = self._state_time.get(s.value, 0.0) + dt
 
-        if s == AGVState.NAVIGATING:
+        if s == AGVState.IDLE:
+            await self._maybe_enter_charging_flow(sim_time)
+
+        elif s == AGVState.NAVIGATING:
             await self._tick_navigating(dt, sim_time)
 
         elif s == AGVState.WAITING_RESERVATION:
@@ -203,13 +251,35 @@ class AGV:
                 if self._task_start_time > 0:
                     self._task_completion_times.append(sim_time - self._task_start_time)
                     self._task_start_time = 0.0
+                if self._is_current_demand_pickup_complete():
+                    self._payload_loaded = True
                 if self._is_current_demand_dropoff_complete():
+                    self._payload_loaded = False
                     await self._publish_demand_completed(sim_time)
                     self._clear_demand_context()
                 self._processing_node_id = None
                 self._restart_delay_remaining = RESTART_DELAY_S
                 self._fsm.force(AGVState.IDLE)
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
+
+        elif s == AGVState.CHARGING:
+            self._charging_time_s += dt
+            self._battery_pct = min(
+                100.0,
+                self._battery_pct + self._charge_rate_pct_per_s * dt,
+            )
+            if self._battery_pct >= self._charge_target_pct:
+                self._battery_pct = min(100.0, self._charge_target_pct)
+                if self._held_charge_edge is not None:
+                    src, dst = self._held_charge_edge
+                    await self._sched.release_edge(src, dst, self.agv_id)
+                    self._held_charge_edge = None
+                self._charge_request_active = False
+                self._charging_goal_node_id = None
+                self._fsm.force(AGVState.IDLE)
+
+        self._min_battery_pct = min(self._min_battery_pct, self._battery_pct)
+        self._apply_battery_drain(dt)
 
         await self._publish_state()
 
@@ -245,26 +315,43 @@ class AGV:
 
         dist_moved, arrived = self._motion.update(dt, t.x, t.y)
         self._travel_distance_m += dist_moved
-
         if arrived:
             prev = self.current_node_id
             self.current_node_id = self.target_node_id
             self.target_node_id  = None
 
-            if prev and self.current_node_id:
+            hold_charge_edge = (
+                prev is not None
+                and self.current_node_id is not None
+                and self._charge_request_active
+                and self._is_charger_node(self.current_node_id)
+            )
+            if prev and self.current_node_id and not hold_charge_edge:
                 await self._sched.release_edge(prev, self.current_node_id, self.agv_id)
+            elif hold_charge_edge:
+                self._held_charge_edge = (prev, self.current_node_id)
             if prev:
                 asyncio.create_task(self._sched.release(prev, self.agv_id))
 
             self._sched.clear_waiting(self.agv_id)
             self.collision_retry_count = 0  # 도착 시 retry 초기화
 
-            if t.role.value in ("work", "station") or t.is_parking_spot:
+            if self._charge_request_active and self._is_charger_node(self.current_node_id):
+                self._charging_sessions += 1
+                self._fsm.force(AGVState.CHARGING)
+            elif t.role.value in ("work", "station") or t.is_parking_spot:
                 self._processing_node_id = self.current_node_id
                 self._process_remaining = self._processing_time_for_current_node()
                 self._fsm.force(AGVState.PROCESSING)
             else:
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
+
+    def _is_current_demand_pickup_complete(self) -> bool:
+        return (
+            self._current_demand_id is not None
+            and self._current_pickup_node_id is not None
+            and self._processing_node_id == self._current_pickup_node_id
+        )
 
     def _is_current_demand_dropoff_complete(self) -> bool:
         return (
@@ -290,6 +377,7 @@ class AGV:
         self._current_demand_id = None
         self._current_pickup_node_id = None
         self._current_dropoff_node_id = None
+        self._payload_loaded = False
 
     def _processing_time_for_current_node(self) -> float:
         if (
@@ -419,6 +507,102 @@ class AGV:
                 return  # ← 같은 틱에서 WAITING 재진입 방지
             else:
                 self._fsm.force(AGVState.WAITING_RESERVATION)
+
+    async def _maybe_enter_charging_flow(self, sim_time: float) -> None:
+        if not self._battery_enabled or not self.current_node_id:
+            return
+        if self._current_demand_id is not None:
+            return
+
+        current_node = self._graph.nodes.get(self.current_node_id)
+        if current_node is None:
+            return
+
+        if self._is_charger_node(self.current_node_id) and (
+            self._charge_request_active or self._battery_pct <= self._charge_band_entry_pct
+        ):
+            self._charge_request_active = True
+            self._charging_sessions += 1
+            self._fsm.force(AGVState.CHARGING)
+            return
+
+        if self._is_charger_node(self.current_node_id) and self._battery_pct < self._charge_target_pct:
+            self._charge_request_active = True
+            self._charging_sessions += 1
+            self._fsm.force(AGVState.CHARGING)
+            return
+
+        if self._charge_request_active:
+            return
+
+        if self._battery_pct > self._charge_band_entry_pct:
+            return
+
+        charger_path = self._find_nearest_charger_path(self.current_node_id)
+        if not charger_path or len(charger_path) < 2:
+            return
+
+        self._low_battery_charge_requests += 1
+        self._charge_request_active = True
+        self._charging_goal_node_id = charger_path[-1]
+        self._path = charger_path
+        self._path_index = 0
+        self._pending_edge_src = None
+        self._pending_edge_dst = None
+        await self._navigate_to_next_node(sim_time)
+
+    def _find_nearest_charger_path(self, start_node_id: str) -> list[str]:
+        best_path: list[str] = []
+        best_distance = float("inf")
+        charger_ids = [
+            node_id
+            for node_id, node in self._graph.nodes.items()
+            if node.is_charger or node.role == NodeRole.CHARGER
+        ]
+        for charger_id in charger_ids:
+            path = self._graph.get_path(start_node_id, charger_id)
+            if not path or len(path) < 2:
+                continue
+            distance = self._path_distance(path)
+            if distance < best_distance:
+                best_distance = distance
+                best_path = path
+        return best_path
+
+    def is_available_for_dispatch(self) -> bool:
+        if self.state != AGVState.IDLE or not self.current_node_id:
+            return False
+        if self._charge_request_active:
+            return False
+        if not self._battery_enabled:
+            return True
+        current_node = self._graph.nodes.get(self.current_node_id)
+        if current_node and self._is_charger_node(self.current_node_id) and self._battery_pct < self._charge_target_pct:
+            return False
+        return self._battery_pct > self._charge_band_entry_pct
+
+    def should_assign_charge(self) -> bool:
+        return self._battery_enabled and self._battery_pct <= self._charge_assign_pct
+
+    def _battery_drain_rate_pct_per_hour(self) -> float:
+        if self._payload_loaded:
+            return self._battery_loaded_drain_pct_per_hour
+        return self._battery_base_drain_pct_per_hour
+
+    def _apply_battery_drain(self, dt: float) -> None:
+        if not self._battery_enabled:
+            return
+        if self.state == AGVState.CHARGING:
+            return
+        drain = self._battery_drain_rate_pct_per_hour() * (dt / 3600.0)
+        if drain <= 0.0:
+            return
+        self._battery_pct = max(0.0, self._battery_pct - drain)
+        self._min_battery_pct = min(self._min_battery_pct, self._battery_pct)
+
+    def _is_charger_node(self, node_id: str) -> bool:
+        node = self._graph.nodes.get(node_id)
+        return bool(node and (node.is_charger or node.role == NodeRole.CHARGER))
 
     def _tick_restart_delay(self, dt: float) -> bool:
         if self._restart_delay_remaining <= 0.0:
@@ -773,7 +957,7 @@ class AGV:
                 "x":            round(self._motion.state.x, 3),
                 "y":            round(self._motion.state.y, 3),
                 "heading":      round(self._motion.state.heading, 3),
-                "battery_pct":  100.0,
+                "battery_pct":  round(self._battery_pct, 2),
                 "current_node": self.current_node_id,
             },
         )

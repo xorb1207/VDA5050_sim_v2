@@ -1,0 +1,32 @@
+# Type B battery-enabled saturation curve experiment
+#
+# Goal:
+#   - compare post-battery ceiling against pre-battery baseline
+#   - representative Type B configuration: mid placement + reachable siding policy
+#
+# 실행:
+#   python -m src.application.usecases.experiment_runner \
+#     --experiment experiments/type_b_mid_reachable_battery_saturation.yaml
+
+types: [B]
+agv_counts: [20, 24, 28]
+duration_s: 600
+task_interval_s: 5.0
+random_seeds: [42, 100, 200, 300, 400]
+demand_mode: common_demand
+demand_count: 30
+type_b_variants:
+  - name: mid_reachable
+    siding_placement: mid
+    siding_policy: reachable
+
+battery_enabled: true
+battery_initial_pct: 100.0
+battery_charge_band_entry_pct: 40.0
+battery_charge_assign_pct: 30.0
+battery_charge_target_pct: 90.0
+battery_charge_rate_pct_per_s: 1.0
+battery_base_drain_pct_per_hour: 8.0
+battery_loaded_drain_pct_per_hour: 12.0
+
+output_dir: outputs/experiments

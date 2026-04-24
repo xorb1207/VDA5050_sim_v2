@@ -133,6 +133,19 @@ class KPICalculator:
         total_wait   = sum(a._wait_time_s for a in agvs.values())
         avg_wait     = round(total_wait / n_agv, 2)
         total_restart_delay = sum(a._restart_delay_time_s for a in agvs.values())
+        charging_sessions = sum(a._charging_sessions for a in agvs.values())
+        total_charging_time = sum(a._charging_time_s for a in agvs.values())
+        low_battery_charge_requests = sum(
+            a._low_battery_charge_requests for a in agvs.values()
+        )
+        avg_battery_pct = round(
+            sum(a._battery_pct for a in agvs.values()) / n_agv,
+            2,
+        )
+        min_battery_pct = round(
+            min((a._min_battery_pct for a in agvs.values()), default=100.0),
+            2,
+        )
 
         # ── 3. Traffic Efficiency ──────────────────────────────────
         total_attempts = scheduler._reserve_success + scheduler._reserve_failure
@@ -234,6 +247,11 @@ class KPICalculator:
             "avg_wait_time_s":             avg_wait,
             "total_wait_time_s":           round(total_wait, 2),
             "total_restart_delay_s":       round(total_restart_delay, 2),
+            "charging_sessions":           charging_sessions,
+            "total_charging_time_s":       round(total_charging_time, 2),
+            "low_battery_charge_requests": low_battery_charge_requests,
+            "avg_battery_pct":             avg_battery_pct,
+            "min_battery_pct":             min_battery_pct,
 
             # 3. Traffic Efficiency
             "reservation_failure_rate":    reservation_failure_rate,

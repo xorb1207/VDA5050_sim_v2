@@ -764,6 +764,155 @@ def test_type_b_adjacent_vs_reachable_siding_policy():
     assert_true("reachable policy finds siding", reachable is not None)
 
 
+async def _test_battery_low_soc_enters_charging():
+    print("\n[T51] Battery low SOC enters charging")
+    graph = make_graph()
+    graph._battery_enabled = True
+    graph._battery_initial_pct = 20.0
+    graph._battery_charge_band_entry_pct = 40.0
+    graph._battery_charge_assign_pct = 30.0
+    graph._battery_charge_target_pct = 25.0
+    graph._battery_charge_rate_pct_per_s = 10.0
+
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv.current_node_id = "node_charger_01"
+    agv.physics.x = graph.nodes["node_charger_01"].x
+    agv.physics.y = graph.nodes["node_charger_01"].y
+
+    await agv.tick(0.1, 0.0)
+    assert_eq("low SOC at charger -> CHARGING", agv.state, AGVState.CHARGING)
+    assert_true("charging session count", agv._charging_sessions >= 1)
+
+
+def test_battery_low_soc_enters_charging():
+    run(_test_battery_low_soc_enters_charging())
+
+
+async def _test_battery_charging_recovers_to_target():
+    print("\n[T52] Battery charging recovers to target")
+    graph = make_graph()
+    graph._battery_enabled = True
+    graph._battery_initial_pct = 20.0
+    graph._battery_charge_band_entry_pct = 40.0
+    graph._battery_charge_assign_pct = 30.0
+    graph._battery_charge_target_pct = 25.0
+    graph._battery_charge_rate_pct_per_s = 10.0
+
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv.current_node_id = "node_charger_01"
+    agv.physics.x = graph.nodes["node_charger_01"].x
+    agv.physics.y = graph.nodes["node_charger_01"].y
+
+    await agv.tick(0.1, 0.0)   # IDLE -> CHARGING
+    await agv.tick(1.0, 0.1)   # charge to target
+
+    assert_eq("charging complete -> IDLE", agv.state, AGVState.IDLE)
+    assert_eq("battery recovered to target", round(agv._battery_pct, 2), 25.0)
+    assert_true("charging time accumulated", agv._charging_time_s > 0.0)
+
+
+def test_battery_charging_recovers_to_target():
+    run(_test_battery_charging_recovers_to_target())
+
+
+async def _test_battery_low_soc_routes_to_charger():
+    print("\n[T53] Battery low SOC routes to charger")
+    graph = make_graph()
+    graph._battery_enabled = True
+    graph._battery_initial_pct = 20.0
+    graph._battery_charge_band_entry_pct = 40.0
+    graph._battery_charge_assign_pct = 30.0
+    graph._battery_charge_target_pct = 60.0
+
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv.current_node_id = "node_approach_01"
+    agv.physics.x = graph.nodes["node_approach_01"].x
+    agv.physics.y = graph.nodes["node_approach_01"].y
+
+    await agv.tick(0.1, 0.0)
+
+    assert_true("charge request active", agv._charge_request_active)
+    assert_eq("charging goal node", agv._charging_goal_node_id, "node_charger_01")
+    assert_true("path targets charger", "node_charger_01" in agv._path)
+
+
+def test_battery_low_soc_routes_to_charger():
+    run(_test_battery_low_soc_routes_to_charger())
+
+
+async def _test_task_generator_skips_low_battery_agv():
+    print("\n[T54] TaskGenerator skips low-battery AGV")
+    graph = make_graph()
+    graph._battery_enabled = True
+    graph._battery_initial_pct = 100.0
+    graph._battery_charge_band_entry_pct = 40.0
+    graph._battery_charge_assign_pct = 30.0
+    bus = LocalMemoryBus()
+    gen = TaskGenerator(graph, bus, task_interval_s=0.0)
+
+    published = []
+
+    async def capture(payload: dict):
+        published.append(payload)
+
+    await bus.subscribe("uagv/v2/NEXT/#", capture)
+
+    agv_low = AGV("AGV_LOW", bus, graph, TimeWindowScheduler())
+    agv_low.current_node_id = "node_charger_01"
+    agv_low.physics.x = graph.nodes["node_charger_01"].x
+    agv_low.physics.y = graph.nodes["node_charger_01"].y
+    agv_low._battery_pct = 20.0
+
+    agv_high = AGV("AGV_HIGH", bus, graph, TimeWindowScheduler())
+    agv_high.current_node_id = "node_charger_02"
+    agv_high.physics.x = graph.nodes["node_charger_02"].x
+    agv_high.physics.y = graph.nodes["node_charger_02"].y
+    agv_high._battery_pct = 100.0
+
+    await gen.step(sim_time=0.0, agvs={
+        "AGV_LOW": agv_low,
+        "AGV_HIGH": agv_high,
+    })
+
+    assert_eq("one order published", len(published), 1)
+    assert_eq("high battery AGV selected", published[0]["agvId"], "AGV_HIGH")
+
+
+def test_task_generator_skips_low_battery_agv():
+    run(_test_task_generator_skips_low_battery_agv())
+
+
+async def _test_battery_payload_drain_rate_split():
+    print("\n[T55] Battery payload drain rate split")
+    graph = make_graph()
+    graph._battery_enabled = True
+    graph._battery_initial_pct = 100.0
+    graph._battery_base_drain_pct_per_hour = 8.0
+    graph._battery_loaded_drain_pct_per_hour = 12.0
+
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv.current_node_id = "node_charger_01"
+    agv.physics.x = graph.nodes["node_charger_01"].x
+    agv.physics.y = graph.nodes["node_charger_01"].y
+
+    agv._apply_battery_drain(3600.0)
+    unloaded_pct = agv._battery_pct
+
+    agv._battery_pct = 100.0
+    agv._min_battery_pct = 100.0
+    agv._payload_loaded = True
+    agv._apply_battery_drain(3600.0)
+    loaded_pct = agv._battery_pct
+
+    assert_eq("unloaded 1h drain", round(unloaded_pct, 1), 92.0)
+    assert_eq("loaded 1h drain", round(loaded_pct, 1), 88.0)
+    assert_true("loaded drains more", loaded_pct < unloaded_pct)
+
+
+def test_battery_payload_drain_rate_split():
+    run(_test_battery_payload_drain_rate_split())
+
+
 def test_type_c_d_station_pair_reachability():
     print("\n[T28] Type C/D station pair reachability")
     from src.domain.map.topology_generator import MapTopologyGenerator
@@ -1582,12 +1731,17 @@ if __name__ == "__main__":
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
-        # Head-on / siding / bottleneck regression (T45~T50)
+        # Head-on / siding / bottleneck / battery regression (T45~T55)
         test_headon_regression,
         test_invalid_type_b_siding_placement_rejected,
         test_bottleneck_edge_interpretation,
         test_type_b_reachable_siding_candidate_beyond_adjacent,
         test_type_b_adjacent_vs_reachable_siding_policy,
+        test_battery_low_soc_enters_charging,
+        test_battery_charging_recovers_to_target,
+        test_battery_low_soc_routes_to_charger,
+        test_task_generator_skips_low_battery_agv,
+        test_battery_payload_drain_rate_split,
     ]
     passed = failed = 0
     for t in tests:

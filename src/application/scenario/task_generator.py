@@ -158,7 +158,7 @@ class TaskGenerator:
 
         idle_agvs = [
             agv for agv in agvs.values()
-            if agv.state.value == "IDLE" and agv.current_node_id
+            if agv.is_available_for_dispatch()
         ]
         if not idle_agvs:
             self._diagnostics.no_idle_agv += 1
@@ -312,8 +312,7 @@ class TaskGenerator:
     ) -> bool:
         idle_agvs = [
             agv for agv in agvs.values()
-            if agv.state.value == "IDLE"
-            and agv.current_node_id
+            if agv.is_available_for_dispatch()
             and self._graph.get_path(agv.current_node_id, demand.pickup_node_id)
         ]
         if not idle_agvs:

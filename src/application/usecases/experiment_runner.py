@@ -57,6 +57,14 @@ class ExperimentConfig:
     type_b_siding_policies: list[str] = field(default_factory=lambda: ["reachable"])
     # Type B custom variants: placement/policy cross product 대신 이 목록만 실행
     type_b_variants: list[dict[str, str]] | None = None
+    battery_enabled: bool = False
+    battery_initial_pct: float = 100.0
+    battery_charge_band_entry_pct: float = 40.0
+    battery_charge_assign_pct: float = 30.0
+    battery_charge_target_pct: float = 90.0
+    battery_charge_rate_pct_per_s: float = 1.0
+    battery_base_drain_pct_per_hour: float = 8.0
+    battery_loaded_drain_pct_per_hour: float = 12.0
 
     def __post_init__(self):
         if self.run_id is None:
@@ -77,6 +85,7 @@ class RunResult:
     siding_placement: str = "base"  # Type B 사이딩 배치 프리셋
     siding_policy: str = "reachable"
     type_b_variant: str = ""
+    battery_enabled: bool = False
     # KPI
     tasks_completed: int            = 0
     demands_completed: int          = 0
@@ -87,6 +96,11 @@ class RunResult:
     avg_wait_time_s: float          = 0.0
     total_wait_time_s: float        = 0.0
     total_restart_delay_s: float    = 0.0
+    charging_sessions: int          = 0
+    total_charging_time_s: float    = 0.0
+    low_battery_charge_requests: int = 0
+    avg_battery_pct: float          = 0.0
+    min_battery_pct: float          = 0.0
     reservation_failure_rate: float = 0.0
     reroute_count: int              = 0
     node_occupancy_rate: float      = 0.0
@@ -114,11 +128,14 @@ class RunResult:
 SUMMARY_COLUMNS = [
     "topology_type", "n_agv", "random_seed",
     "demand_mode", "siding_placement", "siding_policy", "type_b_variant",
+    "battery_enabled",
     "tasks_completed", "demands_completed",
     "demand_completion_rate", "demand_throughput_per_hour",
     "throughput_tasks_per_hour",
     "avg_task_completion_time_s", "avg_wait_time_s", "total_wait_time_s",
     "total_restart_delay_s",
+    "charging_sessions", "total_charging_time_s",
+    "low_battery_charge_requests", "avg_battery_pct", "min_battery_pct",
     "reservation_failure_rate", "reroute_count",
     "node_occupancy_rate", "edge_occupancy_rate", "agv_utilization",
     "total_travel_distance_m", "max_queue_length",
@@ -151,6 +168,14 @@ async def _run_single(
     siding_placement: str = "base",
     siding_policy: str = "reachable",
     type_b_variant: str = "",
+    battery_enabled: bool = False,
+    battery_initial_pct: float = 100.0,
+    battery_charge_band_entry_pct: float = 40.0,
+    battery_charge_assign_pct: float = 30.0,
+    battery_charge_target_pct: float = 90.0,
+    battery_charge_rate_pct_per_s: float = 1.0,
+    battery_base_drain_pct_per_hour: float = 8.0,
+    battery_loaded_drain_pct_per_hour: float = 12.0,
 ) -> RunResult:
     result = RunResult(
         topology_type=topology_type,
@@ -160,6 +185,7 @@ async def _run_single(
         siding_placement=siding_placement,
         siding_policy=siding_policy,
         type_b_variant=type_b_variant,
+        battery_enabled=battery_enabled,
     )
     t0 = time.perf_counter()
 
@@ -168,6 +194,14 @@ async def _run_single(
         gen_map = MapTopologyGenerator()
         graph   = gen_map.generate(topology_type, siding_placement=siding_placement)
         graph._type_b_siding_policy = siding_policy
+        graph._battery_enabled = battery_enabled
+        graph._battery_initial_pct = battery_initial_pct
+        graph._battery_charge_band_entry_pct = battery_charge_band_entry_pct
+        graph._battery_charge_assign_pct = battery_charge_assign_pct
+        graph._battery_charge_target_pct = battery_charge_target_pct
+        graph._battery_charge_rate_pct_per_s = battery_charge_rate_pct_per_s
+        graph._battery_base_drain_pct_per_hour = battery_base_drain_pct_per_hour
+        graph._battery_loaded_drain_pct_per_hour = battery_loaded_drain_pct_per_hour
         bus     = LocalMemoryBus()
         sched   = TimeWindowScheduler()
         demand_set = _build_demand_set(
@@ -217,6 +251,11 @@ async def _run_single(
         result.avg_wait_time_s             = kpis.get("avg_wait_time_s", 0.0)
         result.total_wait_time_s           = kpis.get("total_wait_time_s", 0.0)
         result.total_restart_delay_s       = kpis.get("total_restart_delay_s", 0.0)
+        result.charging_sessions           = kpis.get("charging_sessions", 0)
+        result.total_charging_time_s       = kpis.get("total_charging_time_s", 0.0)
+        result.low_battery_charge_requests = kpis.get("low_battery_charge_requests", 0)
+        result.avg_battery_pct             = kpis.get("avg_battery_pct", 0.0)
+        result.min_battery_pct             = kpis.get("min_battery_pct", 0.0)
         result.reservation_failure_rate    = kpis.get("reservation_failure_rate", 0.0)
         result.reroute_count               = kpis.get("reroute_count", 0)
         result.node_occupancy_rate         = kpis.get("node_occupancy_rate", 0.0)
@@ -761,6 +800,14 @@ class ExperimentRunner:
                                 siding_placement=variant["siding_placement"],
                                 siding_policy=variant["siding_policy"],
                                 type_b_variant=variant["name"],
+                                battery_enabled=cfg.battery_enabled,
+                                battery_initial_pct=cfg.battery_initial_pct,
+                                battery_charge_band_entry_pct=cfg.battery_charge_band_entry_pct,
+                                battery_charge_assign_pct=cfg.battery_charge_assign_pct,
+                                battery_charge_target_pct=cfg.battery_charge_target_pct,
+                                battery_charge_rate_pct_per_s=cfg.battery_charge_rate_pct_per_s,
+                                battery_base_drain_pct_per_hour=cfg.battery_base_drain_pct_per_hour,
+                                battery_loaded_drain_pct_per_hour=cfg.battery_loaded_drain_pct_per_hour,
                             )
                         )
                         results.append(result)
@@ -976,6 +1023,14 @@ def load_from_yaml(path: str) -> ExperimentConfig:
             ]
             if type_b_variants is not None else None
         ),
+        battery_enabled = bool(raw.get("battery_enabled", False)),
+        battery_initial_pct = float(raw.get("battery_initial_pct", 100.0)),
+        battery_charge_band_entry_pct = float(raw.get("battery_charge_band_entry_pct", 40.0)),
+        battery_charge_assign_pct = float(raw.get("battery_charge_assign_pct", 30.0)),
+        battery_charge_target_pct = float(raw.get("battery_charge_target_pct", 90.0)),
+        battery_charge_rate_pct_per_s = float(raw.get("battery_charge_rate_pct_per_s", 1.0)),
+        battery_base_drain_pct_per_hour = float(raw.get("battery_base_drain_pct_per_hour", 8.0)),
+        battery_loaded_drain_pct_per_hour = float(raw.get("battery_loaded_drain_pct_per_hour", 12.0)),
     )
 
 

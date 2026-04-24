@@ -40,12 +40,14 @@ vda5050_sim_v2/
 │                                Type B common-demand policy 비교
 │   ├── type_b_mid_reachable_saturation.yaml
 │                                Type B 대표안 포화 곡선 (20/24/28)
+│   ├── type_b_mid_reachable_battery_saturation.yaml
+│                                Type B battery saturation (운영 SOC 규칙 1차)
 │   ├── topology_cd_saturation_common_demand.yaml
 │                                C/D 재정의 후 포화 곡선 비교
 │   └── topology_saturation_common_demand.yaml
 │                                A/B/C/D/E 포화 곡선 비교 (B=mid/reachable)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T50
+│   └── test_simulation.py     T1~T55
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -232,6 +234,11 @@ T47:     Invalid Type B siding placement 거부
 T48:     bottleneck edge 해석 — edge_type / section_key / dominant_cause 연결
 T49:     Type B reachable siding policy — 인접 siding이 없어도 도달 가능한 siding 선택
 T50:     Type B policy switch — adjacent vs reachable 결과 분기 검증
+T51:     Battery low SOC at charger -> CHARGING 진입
+T52:     Battery charging target recovery
+T53:     Battery low SOC charger reroute
+T54:     TaskGenerator skips low-battery AGV
+T55:     Battery payload drain rate split (8%/h vs 12%/h)
 ```
 
 실행:
@@ -400,7 +407,11 @@ python -m src.application.usecases.experiment_runner \
     - 예전처럼 capacity 차이로 벌어지는 모델이 아니라, 의도대로 "총 통로폭에 따른 safety/headway 차이" 중심 비교로 복구됨
 
 ### 운영 현실화 2차
-- [ ] battery/charging 모델 1차: SOC 소모, low-battery 충전 진입, charger dwell/queue
+- [x] battery/charging 모델 1차: SOC 소모, low-battery 충전 진입, charger dwell/queue
+  - 시간 기반 SOC 감소: unloaded `8%/h`, loaded `12%/h`
+  - 운영 SOC band: entry `40%`, target `90%`, charge assign 기준 `30%`
+  - low-battery AGV는 dispatch 대상에서 제외하고, nearest charger로 진입 후 `CHARGING` 상태에서 dwell
+  - KPI 추가: `charging_sessions`, `total_charging_time_s`, `low_battery_charge_requests`, `avg_battery_pct`, `min_battery_pct`
 - [ ] charging reservation/policy 1차: 충전소 점유 경쟁, 충전 우선 dispatch, starvation 방지
 - [ ] **critical section 세분화**: priority/release timing 고도화
 - [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
@@ -408,10 +419,13 @@ python -m src.application.usecases.experiment_runner \
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
 
 ### 다음으로 해야할 일
-- [ ] **battery/charging 1차 + 포화 곡선 2차**: 현재 pre-battery baseline 위에 SOC/charging을 얹어 ceiling 하락폭 확인
-  - 우선 대상: `B/mid/reachable`, 이후 필요시 `C`, `D`
-  - 질문: 충전 제약을 넣으면 `24 -> 28` 구간에서 throughput이 얼마나 더 빨리 꺾이는가
-  - 목적: 교통 병목 vs 에너지 운영 병목을 분리
+- [x] **battery/charging 1차 + 포화 곡선 2차**: 현재 pre-battery baseline 위에 SOC/charging을 얹어 ceiling 하락폭 확인
+  - `type_b_mid_reachable_battery_saturation.yaml`로 600s common-demand sweep 재실행
+  - **결론**: 현재 운영값(`8%/h`, `12%/h`, `40~90%`, `30% assign`) 기준으로는 `600s`에서도 `1800s` spot-check에서도 charging 개입이 거의 없음
+  - 예: `1800s / 24 AGV / seed 42`에서 `charging_sessions=0`, `min_battery_pct=94.1`
+  - 해석: 현재 목적(토폴로지/교통 비교)에서는 battery가 아직 2차 요인이고, ranking을 흔드는 주축은 여전히 topology/traffic 구조
+- [ ] **charging reservation/policy 1차**: 충전소 점유 경쟁, 충전 우선 dispatch, starvation 방지
+  - battery 영향이 작더라도 multi-charger contention 모델은 별도 축으로 남음
 - [ ] **reachable siding policy 정밀화 (후순위)**: 탐색 반경 상한 등으로 wait 증가를 억제하는 미세 조정
   - 현재는 `B/mid/reachable`가 대표안으로 충분히 경쟁력이 있어, battery baseline 확보 후 들어가는 편이 낫다
 - [ ] **세부 공간 설계 최적화는 후순위**: node spacing / edge 세부 배치 최적화는 공간 해상도 모델을 높인 뒤 진행
