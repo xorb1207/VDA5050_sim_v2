@@ -33,8 +33,10 @@ SPEED_CHARGER_MS = 0.3
 SPEED_CREEP_MS   = 0.3
 LANE_OFFSET = 2
 WIDTH_SINGLE_LANE_M = 1.5
-WIDTH_NARROW_LANE_M = 1.5
-WIDTH_WIDE_LANE_M = 2.0
+WIDTH_NARROW_CORRIDOR_M = 2.0
+WIDTH_WIDE_CORRIDOR_M = 3.0
+WIDTH_NARROW_LANE_M = WIDTH_NARROW_CORRIDOR_M / 2.0
+WIDTH_WIDE_LANE_M = WIDTH_WIDE_CORRIDOR_M / 2.0
 WIDTH_BAY_M = 1.5
 WIDTH_ACCESS_M = 1.2
 
@@ -128,6 +130,7 @@ class MapTopologyGenerator:
     def _build_type_c(self) -> MapGraph:
         g = MapGraph()
         g._lane_width_m = WIDTH_NARROW_LANE_M
+        g._corridor_total_width_m = WIDTH_NARROW_CORRIDOR_M
         g._safety_model = "narrow_one_way"
         for y_base, tag in [(Y_NORTH, "N"), (Y_CENTER, "C"), (Y_SOUTH, "S")]:
             corr = "center" if tag == "C" else ("north" if tag == "N" else "south")
@@ -153,6 +156,7 @@ class MapTopologyGenerator:
     def _build_type_d(self) -> MapGraph:
         g = MapGraph()
         g._lane_width_m = WIDTH_WIDE_LANE_M
+        g._corridor_total_width_m = WIDTH_WIDE_CORRIDOR_M
         g._safety_model = "wide_one_way"
         for y_base, tag in [(Y_NORTH, "N"), (Y_CENTER, "C"), (Y_SOUTH, "S")]:
             corr = "center" if tag == "C" else ("north" if tag == "N" else "south")

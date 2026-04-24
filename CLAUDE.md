@@ -40,6 +40,8 @@ vda5050_sim_v2/
 │                                Type B common-demand policy 비교
 │   ├── type_b_mid_reachable_saturation.yaml
 │                                Type B 대표안 포화 곡선 (20/24/28)
+│   ├── topology_cd_saturation_common_demand.yaml
+│                                C/D 재정의 후 포화 곡선 비교
 │   └── topology_saturation_common_demand.yaml
 │                                A/B/C/D/E 포화 곡선 비교 (B=mid/reachable)
 ├── tests/integration/
@@ -76,7 +78,7 @@ vda5050_sim_v2/
 | A | 1차선 | 단방향 (순환) | 없음 | head-on 구조적 불가 |
 | B | 1차선 | 양방향 | siding 대피 | head-on 발생, siding으로 해소 |
 | C | 2차선 | 단방향 (L1/L2 분리) | 없음 | same-lane head-on 불가 |
-| D | 2차선 | 단방향 (L1:동→서, L2:서→동) | 없음 | C와 방향 구조 동일, lane width=2.0m의 wide safety 모델 |
+| D | 2차선 | 단방향 (L1:동→서, L2:서→동) | 없음 | C와 방향 구조 동일, 총 통로폭 3.0m의 wide safety 모델 |
 | E | 1차선 | 양방향 | 크리프 감속 (0.3m/s) | _lane_mode 태그로 자동 적용 |
 
 ### 베이 통로 (전 타입 공통)
@@ -107,7 +109,7 @@ nav graph YAML         fab_nav_graph.yaml
 엣지 예약: 이동 중 교행(head-on) 감지
   - reserve_edge(src, dst): 역방향 활성 예약 있으면 False
   - follow-on(같은 방향)은 진입 headway로 안전거리 제어
-  - Type D wide lane은 Type C보다 짧은 follow-on headway를 사용
+  - Type D wide corridor(총 3.0m)는 Type C(총 2.0m)보다 짧은 follow-on headway를 사용
 Itinerary 예약:
   - reserve_itinerary([...segments]): 전체 path의 node/edge time-window를 atomic 예약
   - 실패 시 아무 segment도 추가하지 않음
@@ -115,7 +117,7 @@ Critical section 예약:
   - bay / siding / station_access / charger_access / B,E shared corridor를 section_key로 묶음
   - 같은 section time-window가 capacity를 초과해 겹치면 itinerary를 atomic reject
   - bay/access/siding은 capacity=1
-  - Type D wide lane(width=2.0m)은 capacity=2, Type C narrow lane(width=1.5m)은 capacity=1
+  - Type C/D lane section capacity는 동일하게 1이며, 차이는 총 통로폭에 따른 follow-on headway 모델에 둔다
 ```
 
 ### Conflict Resolution 정책
@@ -204,18 +206,18 @@ T26:     TaskGenerator diagnostics 카운터 검증
 T27:     KPI head-on 필드 회귀 검증
 T28:     Type C/D station pair reachability 검증
 T29:     Type A routeable task selection 검증
-T30:     Type D width metadata 검증
+T30:     Type C/D width metadata 검증
 T31:     DemandSet common/capability 생성 검증
 T32:     Common demand lifecycle metrics 검증
 T33:     Real demand completion event/KPI 검증
 T34:     Topology ranking summary 검증
 T35:     Same-direction follow-on headway 차단 검증
-T36:     Type D wide lane follow-on headway 축소 검증
+T36:     Type D wide corridor follow-on headway 축소 검증
 T37:     Itinerary reservation atomic conflict 검증
 T38:     Critical section conflict 검증
 T39:     Critical section key generation 검증
 T40:     Critical section capacity 검증
-T41:     Type D section capacity > Type C 검증
+T41:     Type C/D lane section capacity 동일 검증
 T42:     Motion model acceleration 검증
 T43:     Restart delay accounting 검증
 T44:     AGV pickup/dropoff processing split 검증
@@ -372,12 +374,12 @@ python -m src.application.usecases.experiment_runner \
     | A | 0.2067 / 37.2 | 0.1866 / 33.6 | 0.2133 / 38.4 |
     | B(mid/reachable) | 0.3000 / 54.0 | 0.3800 / 68.4 | 0.4000 / 72.0 |
     | C | 0.2467 / 44.4 | 0.2933 / 52.8 | 0.3733 / 67.2 |
-    | D | 0.2333 / 42.0 | 0.3000 / 54.0 | 0.3933 / 70.8 |
+    | D | 0.2400 / 43.2 | 0.3133 / 56.4 | 0.3867 / 69.6 |
     | E | 0.1067 / 19.2 | 0.0867 / 15.6 | 0.1000 / 18.0 |
   - **Topology ranking summary**:
     - `B/mid/reachable`: `avg_rank=1.47`, `avg_completion=0.3600`, `avg_demand_tph=64.8`
     - `C`: `avg_rank=2.20`, `avg_completion=0.3045`, `avg_demand_tph=54.8`
-    - `D`: `avg_rank=2.53`, `avg_completion=0.3089`, `avg_demand_tph=55.6`
+    - `D`: `avg_rank=2.53`, `avg_completion=0.3133`, `avg_demand_tph=56.4`
     - `A`: `avg_rank=3.93`, `avg_completion=0.2022`, `avg_demand_tph=36.4`
     - `E`: `avg_rank=4.87`, `avg_completion=0.0978`, `avg_demand_tph=17.6`
   - **해석**:
@@ -385,6 +387,17 @@ python -m src.application.usecases.experiment_runner \
     - `C/D`는 `B`보다 throughput은 낮지만 wait와 section conflict를 훨씬 낮게 유지
     - `A`는 head-on이 없지만 20대 이후 completion이 거의 늘지 않아 조기 포화
     - `E`는 교행보다 section conflict가 지배적이라 고밀도에서 가장 약함
+- [x] C/D 총 통로폭 재정의 후 포화 곡선 재검증
+  - `topology_cd_saturation_common_demand.yaml` 추가: AGV `20/24/28`, 600s, 5 seeds
+  - 정의 수정: `C=총 통로폭 2.0m`, `D=총 통로폭 3.0m`, lane section capacity는 둘 다 `1`
+  - **재실험 결과**:
+    | Type | AGV=20 | AGV=24 | AGV=28 |
+    |------|--------|--------|--------|
+    | C | 0.2467 / 44.4 | 0.2933 / 52.8 | 0.3733 / 67.2 |
+    | D | 0.2400 / 43.2 | 0.3133 / 56.4 | 0.3867 / 69.6 |
+  - **해석**:
+    - 수정 후 `C/D`는 거의 비슷한 scaling을 보이고, `D`는 더 넓은 통로폭 덕분에 follow-on 차단이 더 적다
+    - 예전처럼 capacity 차이로 벌어지는 모델이 아니라, 의도대로 "총 통로폭에 따른 safety/headway 차이" 중심 비교로 복구됨
 
 ### 운영 현실화 2차
 - [ ] battery/charging 모델 1차: SOC 소모, low-battery 충전 진입, charger dwell/queue

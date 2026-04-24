@@ -1,0 +1,18 @@
+# Type C/D saturation curve experiment after corridor-width model correction
+#
+# Goal:
+#   - re-run only C/D after redefining their difference as total corridor width
+#   - compare scaling without rerunning A/B/E
+#
+# 실행:
+#   python -m src.application.usecases.experiment_runner \
+#     --experiment experiments/topology_cd_saturation_common_demand.yaml
+
+types: [C, D]
+agv_counts: [20, 24, 28]
+duration_s: 600
+task_interval_s: 5.0
+random_seeds: [42, 100, 200, 300, 400]
+demand_mode: common_demand
+demand_count: 30
+output_dir: outputs/experiments

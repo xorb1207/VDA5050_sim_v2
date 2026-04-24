@@ -702,8 +702,6 @@ class AGV:
     def _critical_section_capacity(edge) -> int:
         if edge.access_type or edge.corridor in ("bay", "siding"):
             return 1
-        if edge.width_m >= 2.0:
-            return 2
         return max(1, int(edge.capacity))
 
     @staticmethod
@@ -725,6 +723,12 @@ class AGV:
     def _calc_follow_on_headway_s(self, src: str, dst: str, speed_mps: float) -> float:
         edge = self._find_edge(src, dst)
         width_m = edge.width_m if edge else 1.5
+        if edge and edge.safety_model in ("narrow_one_way", "wide_one_way"):
+            width_m = getattr(
+                self._graph,
+                "_corridor_total_width_m",
+                width_m * 2.0,
+            )
         width_factor = 1.5 / max(width_m, 0.1)
         following_distance_m = BASE_FOLLOWING_DISTANCE_M * width_factor
         return max(MIN_FOLLOW_ON_HEADWAY_S, following_distance_m / max(speed_mps, 0.01))

@@ -811,7 +811,7 @@ def test_type_a_routeable_task_selection():
 
 
 def test_type_d_width_metadata():
-    print("\n[T30] Type D width metadata")
+    print("\n[T30] Type C/D width metadata")
     from src.domain.map.topology_generator import MapTopologyGenerator
 
     gen = MapTopologyGenerator()
@@ -827,8 +827,10 @@ def test_type_d_width_metadata():
         if e.corridor in ("north_l1", "north_l2", "center_l1", "center_l2", "south_l1", "south_l2")
     }
 
-    assert_eq("Type C lane width", c_widths, {1.5})
-    assert_eq("Type D lane width", d_widths, {2.0})
+    assert_eq("Type C lane width", c_widths, {1.0})
+    assert_eq("Type D lane width", d_widths, {1.5})
+    assert_eq("Type C total corridor width", type_c._corridor_total_width_m, 2.0)
+    assert_eq("Type D total corridor width", type_d._corridor_total_width_m, 3.0)
     assert_true("Type D wider than Type C", min(d_widths) > max(c_widths))
 
 
@@ -1403,8 +1405,8 @@ def test_critical_section_capacity_allows_overlap_until_limit():
     run(_test_critical_section_capacity_allows_overlap_until_limit())
 
 
-def test_type_d_section_capacity_higher_than_c():
-    print("\n[T41] Type D section capacity higher than C")
+def test_type_c_d_section_capacity_same():
+    print("\n[T41] Type C/D lane section capacity same")
     from src.domain.map.topology_generator import MapTopologyGenerator
 
     gen = MapTopologyGenerator()
@@ -1418,7 +1420,7 @@ def test_type_d_section_capacity_higher_than_c():
     assert_true("Type C lane section key", agv_c._critical_section_key(edge_c).startswith("lane:"))
     assert_true("Type D lane section key", agv_d._critical_section_key(edge_d).startswith("lane:"))
     assert_eq("Type C section capacity", agv_c._critical_section_capacity(edge_c), 1)
-    assert_eq("Type D section capacity", agv_d._critical_section_capacity(edge_d), 2)
+    assert_eq("Type D section capacity", agv_d._critical_section_capacity(edge_d), 1)
 
 
 def test_motion_model_acceleration():
@@ -1576,7 +1578,7 @@ if __name__ == "__main__":
         test_critical_section_conflict_blocks_itinerary,
         test_critical_section_key_generation,
         test_critical_section_capacity_allows_overlap_until_limit,
-        test_type_d_section_capacity_higher_than_c,
+        test_type_c_d_section_capacity_same,
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
