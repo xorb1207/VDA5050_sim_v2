@@ -36,8 +36,12 @@ vda5050_sim_v2/
 │   ├── fab_topology.yaml          빠른 실험 (600s, AGV 8~20)
 │   ├── fab_topology_full.yaml     전체 실험 (1800s, AGV 8~24)
 │   ├── type_b_siding_sweep.yaml   Type B siding placement sweep (base/mid/dense × AGV 8~20)
-│   └── type_b_common_demand_policy_sweep.yaml
+│   ├── type_b_common_demand_policy_sweep.yaml
 │                                Type B common-demand policy 비교
+│   ├── type_b_mid_reachable_saturation.yaml
+│                                Type B 대표안 포화 곡선 (20/24/28)
+│   └── topology_saturation_common_demand.yaml
+│                                A/B/C/D/E 포화 곡선 비교 (B=mid/reachable)
 ├── tests/integration/
 │   └── test_simulation.py     T1~T50
 └── outputs/experiments/       실험 결과 CSV/JSON
@@ -348,6 +352,39 @@ python -m src.application.usecases.experiment_runner \
     - `base -> mid`는 completion/throughput을 소폭 올리고 section conflict를 줄이지만, head-on과 wait는 증가
     - `mid/adjacent -> mid/reachable`는 head-on/section conflict를 크게 줄이고, wait 증가를 감수하는 trade-off
     - 현재 Type B 대표 개선안은 `mid/reachable`
+- [x] Type B 대표안 포화 곡선 확인 (`mid/reachable`, common_demand, 600s, 5 seeds)
+  - `type_b_mid_reachable_saturation.yaml` 추가: AGV `20/24/28`
+  - **주요 결과**:
+    | AGV | demands_completed | completion | demand_tph | total_wait_s |
+    |-----|-------------------|------------|------------|--------------|
+    | 20  | 9.0 | 0.3000 | 54.0 | 242.9 |
+    | 24  | 11.4 | 0.3800 | 68.4 | 308.1 |
+    | 28  | 12.0 | 0.4000 | 72.0 | 379.4 |
+  - **해석**:
+    - `20 -> 24`는 유의미한 상승으로, 아직 fleet 부족 구간
+    - `24 -> 28`은 completion/throughput 증가폭이 작아져 ceiling 진입 신호
+    - wait/section conflict는 계속 증가하므로 28대부터는 교통 병목 비용이 빠르게 커짐
+- [x] A/B/C/D/E common-demand 포화 곡선 비교 (pre-battery baseline)
+  - `topology_saturation_common_demand.yaml` 추가: AGV `20/24/28`, 600s, 5 seeds, `B=mid/reachable`
+  - **주요 결과 (avg_completion / avg_demand_tph)**:
+    | Type | AGV=20 | AGV=24 | AGV=28 |
+    |------|--------|--------|--------|
+    | A | 0.2067 / 37.2 | 0.1866 / 33.6 | 0.2133 / 38.4 |
+    | B(mid/reachable) | 0.3000 / 54.0 | 0.3800 / 68.4 | 0.4000 / 72.0 |
+    | C | 0.2467 / 44.4 | 0.2933 / 52.8 | 0.3733 / 67.2 |
+    | D | 0.2333 / 42.0 | 0.3000 / 54.0 | 0.3933 / 70.8 |
+    | E | 0.1067 / 19.2 | 0.0867 / 15.6 | 0.1000 / 18.0 |
+  - **Topology ranking summary**:
+    - `B/mid/reachable`: `avg_rank=1.47`, `avg_completion=0.3600`, `avg_demand_tph=64.8`
+    - `C`: `avg_rank=2.20`, `avg_completion=0.3045`, `avg_demand_tph=54.8`
+    - `D`: `avg_rank=2.53`, `avg_completion=0.3089`, `avg_demand_tph=55.6`
+    - `A`: `avg_rank=3.93`, `avg_completion=0.2022`, `avg_demand_tph=36.4`
+    - `E`: `avg_rank=4.87`, `avg_completion=0.0978`, `avg_demand_tph=17.6`
+  - **해석**:
+    - 현재 모델 기준 스케일링 강도는 `B > C ≈ D >> A >> E`
+    - `C/D`는 `B`보다 throughput은 낮지만 wait와 section conflict를 훨씬 낮게 유지
+    - `A`는 head-on이 없지만 20대 이후 completion이 거의 늘지 않아 조기 포화
+    - `E`는 교행보다 section conflict가 지배적이라 고밀도에서 가장 약함
 
 ### 운영 현실화 2차
 - [ ] battery/charging 모델 1차: SOC 소모, low-battery 충전 진입, charger dwell/queue
@@ -358,15 +395,12 @@ python -m src.application.usecases.experiment_runner \
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
 
 ### 다음으로 해야할 일
-- [ ] **Fleet saturation / ceiling 확인**: `B/mid/reachable`, `common_demand`, `demand_count=30` 고정 후 AGV `20/24/28` 스윕
-  - 목적: 현재 completion ceiling이 교통 제어 한계인지, fleet 대수 부족인지 분리
-  - 해석 기준: `demands_completed`, `completion_rate`, `demand_throughput_per_hour` 곡선이 어디서 꺾이는지 확인
-  - 이 결과에 따라 `battery/charging` 구현 우선순위를 조정
-- [ ] **A/B/C/D/E 스케일링 비교 재개**: 각 topology 대표 정책을 하나씩 고정하고 common-demand saturation curve 비교
-  - 현재 시뮬레이터가 가장 잘 답하는 질문은 "어떤 토폴로지 구조가 대수 증가에 강한가"
-  - topology 선택이 목적이면 포화 곡선 실험을 우선
+- [ ] **battery/charging 1차 + 포화 곡선 2차**: 현재 pre-battery baseline 위에 SOC/charging을 얹어 ceiling 하락폭 확인
+  - 우선 대상: `B/mid/reachable`, 이후 필요시 `C`, `D`
+  - 질문: 충전 제약을 넣으면 `24 -> 28` 구간에서 throughput이 얼마나 더 빨리 꺾이는가
+  - 목적: 교통 병목 vs 에너지 운영 병목을 분리
 - [ ] **reachable siding policy 정밀화 (후순위)**: 탐색 반경 상한 등으로 wait 증가를 억제하는 미세 조정
-  - 현재는 좋은 후보 정책이 확보된 상태라, ceiling 확인 후 들어가는 편이 정보량이 큼
+  - 현재는 `B/mid/reachable`가 대표안으로 충분히 경쟁력이 있어, battery baseline 확보 후 들어가는 편이 낫다
 - [ ] **세부 공간 설계 최적화는 후순위**: node spacing / edge 세부 배치 최적화는 공간 해상도 모델을 높인 뒤 진행
   - 현재 모델은 토폴로지 구조 비교와 스케일링 비교에는 강하지만, 20m vs 40m spacing 같은 세부 layout 최적화 결론엔 아직 해상도가 부족
 

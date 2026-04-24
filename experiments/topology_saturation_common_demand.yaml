@@ -1,0 +1,29 @@
+# Topology saturation curve experiment (pre-battery baseline)
+# Goal: compare A/B/C/D/E scaling strength before battery/charging realism.
+#
+# Baseline:
+#   - common_demand
+#   - demand_count = 30
+#   - 600s horizon
+#   - 5 seeds
+#
+# Representative variants:
+#   - A / C / D / E: default topology behavior
+#   - B: mid placement + reachable siding policy
+#
+# 실행:
+#   python -m src.application.usecases.experiment_runner \
+#     --experiment experiments/topology_saturation_common_demand.yaml
+
+types: [A, B, C, D, E]
+agv_counts: [20, 24, 28]
+duration_s: 600
+task_interval_s: 5.0
+random_seeds: [42, 100, 200, 300, 400]
+demand_mode: common_demand
+demand_count: 30
+type_b_variants:
+  - name: mid_reachable
+    siding_placement: mid
+    siding_policy: reachable
+output_dir: outputs/experiments

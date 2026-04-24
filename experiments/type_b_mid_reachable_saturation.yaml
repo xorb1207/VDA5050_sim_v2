@@ -1,0 +1,30 @@
+# Type B saturation curve experiment
+# Goal: identify whether completion ceiling is driven by fleet count
+# or traffic/control limits before adding battery/charging realism.
+#
+# Fixed baseline:
+#   - topology: B
+#   - siding placement: mid
+#   - siding policy: reachable
+#   - demand mode: common_demand
+#
+# Sweep:
+#   - AGV: 20 / 24 / 28
+#   - seeds: 42 / 100 / 200 / 300 / 400
+#
+# 실행:
+#   python -m src.application.usecases.experiment_runner \
+#     --experiment experiments/type_b_mid_reachable_saturation.yaml
+
+types: [B]
+agv_counts: [20, 24, 28]
+duration_s: 600
+task_interval_s: 5.0
+random_seeds: [42, 100, 200, 300, 400]
+demand_mode: common_demand
+demand_count: 30
+type_b_variants:
+  - name: mid_reachable
+    siding_placement: mid
+    siding_policy: reachable
+output_dir: outputs/experiments
