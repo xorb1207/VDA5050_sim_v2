@@ -1,0 +1,15 @@
+# Type B siding placement sweep experiment
+# base / mid / dense 배치별 처리량/head-on 비교
+#
+# 실행:
+#   python -m src.application.usecases.experiment_runner \
+#     --experiment experiments/type_b_siding_sweep.yaml
+
+types: [B]
+agv_counts: [8, 12, 16, 20]
+duration_s: 600
+task_interval_s: 5.0
+random_seeds: [42, 100, 200]
+siding_placements: [base, mid, dense]
+demand_mode: generated
+output_dir: outputs/experiments

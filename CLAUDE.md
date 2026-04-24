@@ -35,9 +35,11 @@ vda5050_sim_v2/
 ├── experiments/
 │   ├── fab_topology.yaml          빠른 실험 (600s, AGV 8~20)
 │   ├── fab_topology_full.yaml     전체 실험 (1800s, AGV 8~24)
-│   └── type_b_siding_sweep.yaml   Type B siding placement sweep (base/mid/dense × AGV 8~20)
+│   ├── type_b_siding_sweep.yaml   Type B siding placement sweep (base/mid/dense × AGV 8~20)
+│   └── type_b_common_demand_policy_sweep.yaml
+│                                Type B common-demand policy 비교
 ├── tests/integration/
-│   └── test_simulation.py     T1~T49
+│   └── test_simulation.py     T1~T50
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -223,6 +225,7 @@ T46:     Type B siding placement sweep — base/mid/dense coverage 비교
 T47:     Invalid Type B siding placement 거부
 T48:     bottleneck edge 해석 — edge_type / section_key / dominant_cause 연결
 T49:     Type B reachable siding policy — 인접 siding이 없어도 도달 가능한 siding 선택
+T50:     Type B policy switch — adjacent vs reachable 결과 분기 검증
 ```
 
 실행:
@@ -330,6 +333,21 @@ python -m src.application.usecases.experiment_runner \
   - `_find_siding_candidate()`가 인접 node 스캔 대신 reachable siding 전체 후보를 평가
   - 현재 막힌 `blocked_edge`를 제외한 경로로 siding까지 도달 가능해야 함
   - siding -> goal 재진입 경로 존재 + 최소 path distance 기준 후보 선택
+  - `graph._type_b_siding_policy` 플래그로 `adjacent` / `reachable` 정책 전환 가능
+- [x] Type B common-demand policy 비교 프레임 정리
+  - `type_b_common_demand_policy_sweep.yaml` 추가: `base/adjacent`, `mid/adjacent`, `mid/reachable`
+  - 스모크 테스트(`12 AGV / 300s / seed 42 / common_demand`)로 lifecycle이 실제로 닫히는지 먼저 확인
+  - `300s`는 adjacent 정책에 짧아 `demands_completed=0`이 나올 수 있어, 본 실험은 `600s / 5 seeds`로 상향
+  - **주요 결과 (600s, demand_count=30, seeds=42/100/200/300/400 평균)**:
+    | variant | avg_rank | avg_completion | avg_demand_tph |
+    |---------|----------|----------------|----------------|
+    | B/base/adjacent | 2.10 | 0.1583 | 28.5 |
+    | B/mid/adjacent | 2.00 | 0.1683 | 30.3 |
+    | B/mid/reachable | 1.70 | 0.1733 | 31.2 |
+  - **해석**:
+    - `base -> mid`는 completion/throughput을 소폭 올리고 section conflict를 줄이지만, head-on과 wait는 증가
+    - `mid/adjacent -> mid/reachable`는 head-on/section conflict를 크게 줄이고, wait 증가를 감수하는 trade-off
+    - 현재 Type B 대표 개선안은 `mid/reachable`
 
 ### 운영 현실화 2차
 - [ ] battery/charging 모델 1차: SOC 소모, low-battery 충전 진입, charger dwell/queue
@@ -338,6 +356,19 @@ python -m src.application.usecases.experiment_runner \
 - [ ] **priority-based reservation**: 배터리/태스크 우선순위 기반 예약 순서
 - [ ] **물리 모델 고도화 2차**: head-on 해소 후 재출발 시간, 회전/곡선 감속 반영
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
+
+### 다음으로 해야할 일
+- [ ] **Fleet saturation / ceiling 확인**: `B/mid/reachable`, `common_demand`, `demand_count=30` 고정 후 AGV `20/24/28` 스윕
+  - 목적: 현재 completion ceiling이 교통 제어 한계인지, fleet 대수 부족인지 분리
+  - 해석 기준: `demands_completed`, `completion_rate`, `demand_throughput_per_hour` 곡선이 어디서 꺾이는지 확인
+  - 이 결과에 따라 `battery/charging` 구현 우선순위를 조정
+- [ ] **A/B/C/D/E 스케일링 비교 재개**: 각 topology 대표 정책을 하나씩 고정하고 common-demand saturation curve 비교
+  - 현재 시뮬레이터가 가장 잘 답하는 질문은 "어떤 토폴로지 구조가 대수 증가에 강한가"
+  - topology 선택이 목적이면 포화 곡선 실험을 우선
+- [ ] **reachable siding policy 정밀화 (후순위)**: 탐색 반경 상한 등으로 wait 증가를 억제하는 미세 조정
+  - 현재는 좋은 후보 정책이 확보된 상태라, ceiling 확인 후 들어가는 편이 정보량이 큼
+- [ ] **세부 공간 설계 최적화는 후순위**: node spacing / edge 세부 배치 최적화는 공간 해상도 모델을 높인 뒤 진행
+  - 현재 모델은 토폴로지 구조 비교와 스케일링 비교에는 강하지만, 20m vs 40m spacing 같은 세부 layout 최적화 결론엔 아직 해상도가 부족
 
 ### Phase 3 완료 항목
 - [x] **경로 전체 사전 예약 (pre-reservation) 1차**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약

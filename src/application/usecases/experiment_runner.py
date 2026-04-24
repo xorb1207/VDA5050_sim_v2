@@ -53,6 +53,10 @@ class ExperimentConfig:
     # Type B siding placement sweep: ["base"], ["base","mid","dense"] 등
     # types에 "B"가 포함될 때만 유효. 다른 타입에는 "base" 적용
     siding_placements: list[str] = field(default_factory=lambda: ["base"])
+    # Type B siding policy preset: ["adjacent"], ["reachable"] 등
+    type_b_siding_policies: list[str] = field(default_factory=lambda: ["reachable"])
+    # Type B custom variants: placement/policy cross product 대신 이 목록만 실행
+    type_b_variants: list[dict[str, str]] | None = None
 
     def __post_init__(self):
         if self.run_id is None:
@@ -71,6 +75,8 @@ class RunResult:
     random_seed: int = 42
     demand_mode: str = "generated"
     siding_placement: str = "base"  # Type B 사이딩 배치 프리셋
+    siding_policy: str = "reachable"
+    type_b_variant: str = ""
     # KPI
     tasks_completed: int            = 0
     demands_completed: int          = 0
@@ -107,7 +113,7 @@ class RunResult:
 
 SUMMARY_COLUMNS = [
     "topology_type", "n_agv", "random_seed",
-    "demand_mode", "siding_placement",
+    "demand_mode", "siding_placement", "siding_policy", "type_b_variant",
     "tasks_completed", "demands_completed",
     "demand_completion_rate", "demand_throughput_per_hour",
     "throughput_tasks_per_hour",
@@ -143,6 +149,8 @@ async def _run_single(
     demand_mode: str = "generated",
     demand_count: int | None = None,
     siding_placement: str = "base",
+    siding_policy: str = "reachable",
+    type_b_variant: str = "",
 ) -> RunResult:
     result = RunResult(
         topology_type=topology_type,
@@ -150,6 +158,8 @@ async def _run_single(
         random_seed=random_seed,
         demand_mode=demand_mode,
         siding_placement=siding_placement,
+        siding_policy=siding_policy,
+        type_b_variant=type_b_variant,
     )
     t0 = time.perf_counter()
 
@@ -157,6 +167,7 @@ async def _run_single(
         random.seed(random_seed)
         gen_map = MapTopologyGenerator()
         graph   = gen_map.generate(topology_type, siding_placement=siding_placement)
+        graph._type_b_siding_policy = siding_policy
         bus     = LocalMemoryBus()
         sched   = TimeWindowScheduler()
         demand_set = _build_demand_set(
@@ -529,8 +540,9 @@ def _ranking_sort_key(row: dict) -> tuple:
 def _topology_variant_label(row: dict) -> str:
     topology_type = str(row.get("topology_type", ""))
     siding_placement = str(row.get("siding_placement", "base") or "base")
+    siding_policy = str(row.get("siding_policy", "reachable") or "reachable")
     if topology_type == "B":
-        return f"B/{siding_placement}"
+        return f"B/{siding_placement}/{siding_policy}"
     return topology_type
 
 
@@ -559,6 +571,8 @@ def _build_ranking_rows(results: list[RunResult]) -> list[dict]:
                 "random_seed": seed,
                 "demand_mode": demand_mode,
                 "siding_placement": row.get("siding_placement", "base"),
+                "siding_policy": row.get("siding_policy", "reachable"),
+                "type_b_variant": row.get("type_b_variant", ""),
                 "rank": current_rank,
                 "winner": current_rank == 1 and not row.get("error"),
                 "topology_type": row.get("topology_type", ""),
@@ -590,11 +604,16 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
             valid[0].get("siding_placement", "base")
             if valid else rows[0].get("siding_placement", "base")
         )
+        siding_policy = str(
+            valid[0].get("siding_policy", "reachable")
+            if valid else rows[0].get("siding_policy", "reachable")
+        )
         if not valid:
             aggregate.append({
                 "topology_type": topology_type,
                 "topology_variant": topology_variant,
                 "siding_placement": siding_placement,
+                "siding_policy": siding_policy,
                 "evaluated_groups": 0,
                 "first_place_wins": 0,
                 "avg_rank": 0.0,
@@ -612,6 +631,7 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
             "topology_type": topology_type,
             "topology_variant": topology_variant,
             "siding_placement": siding_placement,
+            "siding_policy": siding_policy,
             "evaluated_groups": count,
             "first_place_wins": sum(1 for r in valid if r["winner"]),
             "avg_rank": round(sum(r["rank"] for r in valid) / count, 4),
@@ -661,20 +681,53 @@ class ExperimentRunner:
         cfg = self.config
         seeds = cfg.random_seeds or [cfg.random_seed]
         siding_placements = cfg.siding_placements or ["base"]
-        # Type B: siding_placements 모두 실행. 다른 타입: "base" 고정
-        def _placements_for(t: str) -> list[str]:
-            return siding_placements if t == "B" else ["base"]
+        siding_policies = cfg.type_b_siding_policies or ["reachable"]
+
+        def _type_b_variants() -> list[dict[str, str]]:
+            if cfg.type_b_variants:
+                return [
+                    {
+                        "name": str(v.get("name", "")),
+                        "siding_placement": str(v.get("siding_placement", "base")),
+                        "siding_policy": str(v.get("siding_policy", "reachable")),
+                    }
+                    for v in cfg.type_b_variants
+                ]
+            variants = []
+            for placement in siding_placements:
+                for policy in siding_policies:
+                    variants.append({
+                        "name": f"{placement}_{policy}",
+                        "siding_placement": placement,
+                        "siding_policy": policy,
+                    })
+            return variants
+
+        def _variants_for(t: str) -> list[dict[str, str]]:
+            if t == "B":
+                return _type_b_variants()
+            return [{
+                "name": "base",
+                "siding_placement": "base",
+                "siding_policy": "reachable",
+            }]
 
         total = sum(
-            len(cfg.agv_counts) * len(seeds) * len(_placements_for(t))
+            len(cfg.agv_counts) * len(seeds) * len(_variants_for(t))
             for t in cfg.types
         )
         print(f"\n{'='*56}")
         print(f"FAB Topology Experiment  run_id={cfg.run_id}")
         print(f"Types: {cfg.types}  AGV counts: {cfg.agv_counts}")
         print(f"Seeds: {seeds}")
-        if len(siding_placements) > 1:
-            print(f"Siding placements (Type B): {siding_placements}")
+        if "B" in cfg.types:
+            print(
+                "Type B variants: "
+                + ", ".join(
+                    f"{v['siding_placement']}/{v['siding_policy']}"
+                    for v in _type_b_variants()
+                )
+            )
         print(f"Duration: {cfg.duration_s}s  Total runs: {total}")
         print(f"{'='*56}\n")
 
@@ -682,10 +735,15 @@ class ExperimentRunner:
         idx = 0
         for seed in seeds:
             for t in cfg.types:
-                for placement in _placements_for(t):
+                for variant in _variants_for(t):
                     for n in cfg.agv_counts:
                         idx += 1
-                        label = f"Type-{t}" + (f"/{placement}" if t == "B" and len(siding_placements) > 1 else "")
+                        label = f"Type-{t}"
+                        if t == "B":
+                            label += (
+                                f"/{variant['siding_placement']}"
+                                f"/{variant['siding_policy']}"
+                            )
                         print(
                             f"[{idx:2d}/{total}] seed={seed}  {label}  AGV={n:2d}  ...",
                             end=" ",
@@ -700,7 +758,9 @@ class ExperimentRunner:
                                 seed,
                                 cfg.demand_mode,
                                 cfg.demand_count,
-                                siding_placement=placement,
+                                siding_placement=variant["siding_placement"],
+                                siding_policy=variant["siding_policy"],
+                                type_b_variant=variant["name"],
                             )
                         )
                         results.append(result)
@@ -726,7 +786,14 @@ class ExperimentRunner:
             if r.topology_type == "B" and r.siding_placement != "base"
             else ""
         )
-        d = self.out_dir / f"{r.topology_type}{placement_suffix}_{r.n_agv:02d}agv_seed{r.random_seed}"
+        policy_suffix = (
+            f"_policy{r.siding_policy}"
+            if r.topology_type == "B" and r.siding_policy != "reachable"
+            else ""
+        )
+        d = self.out_dir / (
+            f"{r.topology_type}{placement_suffix}{policy_suffix}_{r.n_agv:02d}agv_seed{r.random_seed}"
+        )
         d.mkdir(exist_ok=True)
         (d / "kpi_summary.json").write_text(
             json.dumps(asdict(r), ensure_ascii=False, indent=2)
@@ -749,7 +816,8 @@ class ExperimentRunner:
         ranking_rows = _build_ranking_rows(results)
         ranking_path = self.out_dir / "ranking.csv"
         ranking_columns = [
-            "n_agv", "random_seed", "demand_mode", "siding_placement", "rank", "winner",
+            "n_agv", "random_seed", "demand_mode", "siding_placement", "siding_policy",
+            "type_b_variant", "rank", "winner",
             "topology_type", "topology_variant", "completion_rate", "task_acceptance_rate",
             "demands_completed", "demand_throughput_per_hour",
             "total_wait_time_s", "section_conflict_total",
@@ -782,22 +850,32 @@ class ExperimentRunner:
         cfg = self.config
         col_w = 10
         siding_placements = cfg.siding_placements or ["base"]
+        siding_policies = cfg.type_b_siding_policies or ["reachable"]
         # 출력 레이블: Type B는 placement별로 분리
         def _type_labels() -> list[str]:
             labels = []
             for t in cfg.types:
-                if t == "B" and len(siding_placements) > 1:
-                    for p in siding_placements:
-                        labels.append(f"B/{p}")
+                if t == "B":
+                    if cfg.type_b_variants:
+                        for v in cfg.type_b_variants:
+                            labels.append(
+                                f"B/{v.get('siding_placement', 'base')}/{v.get('siding_policy', 'reachable')}"
+                            )
+                    elif len(siding_placements) > 1 or len(siding_policies) > 1:
+                        for p in siding_placements:
+                            for policy in siding_policies:
+                                labels.append(f"B/{p}/{policy}")
+                    else:
+                        labels.append("B")
                 else:
                     labels.append(t)
             return labels
 
         def avg_for(label: str, n_agv: int, attr: str) -> float | None:
-            if "/" in label:
-                t, placement = label.split("/", 1)
-            else:
-                t, placement = label, None
+            parts = label.split("/")
+            t = parts[0]
+            placement = parts[1] if len(parts) > 1 else None
+            policy = parts[2] if len(parts) > 2 else None
             values = [
                 float(getattr(r, attr))
                 for r in results
@@ -805,6 +883,7 @@ class ExperimentRunner:
                 and r.n_agv == n_agv
                 and not r.error
                 and (placement is None or r.siding_placement == placement)
+                and (policy is None or r.siding_policy == policy)
             ]
             if not values:
                 return None
@@ -860,6 +939,8 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         raw = yaml.safe_load(f)
     random_seeds = raw.get("random_seeds")
     siding_placements = raw.get("siding_placements")
+    type_b_siding_policies = raw.get("type_b_siding_policies")
+    type_b_variants = raw.get("type_b_variants")
     return ExperimentConfig(
         types          = raw.get("types", ["A","B","C","D","E"]),
         agv_counts     = raw.get("agv_counts", [3, 5, 8, 12]),
@@ -879,6 +960,21 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         siding_placements = (
             [str(p) for p in siding_placements]
             if siding_placements is not None else ["base"]
+        ),
+        type_b_siding_policies = (
+            [str(p) for p in type_b_siding_policies]
+            if type_b_siding_policies is not None else ["reachable"]
+        ),
+        type_b_variants = (
+            [
+                {
+                    "name": str(v.get("name", "")),
+                    "siding_placement": str(v.get("siding_placement", "base")),
+                    "siding_policy": str(v.get("siding_policy", "reachable")),
+                }
+                for v in type_b_variants
+            ]
+            if type_b_variants is not None else None
         ),
     )
 

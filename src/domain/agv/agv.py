@@ -443,6 +443,9 @@ class AGV:
         - blocked_edge가 있으면 현재 막힌 엣지를 경유하는 후보는 제외한다.
         - 최단 path distance 기준으로 가장 가까운 siding을 선택한다.
         """
+        policy = getattr(self._graph, "_type_b_siding_policy", "reachable")
+        if policy == "adjacent":
+            return self._find_adjacent_siding_candidate(near_node)
         if goal_node is None:
             return None
 
@@ -481,6 +484,19 @@ class AGV:
                 best_hops = hops
 
         return best_sid
+
+    def _find_adjacent_siding_candidate(self, near_node: str) -> Optional[str]:
+        sidings = [
+            n for n in self._graph.get_neighbors(near_node)
+            if n.role == NodeRole.SIDING
+        ]
+        for siding_node in sidings:
+            sid = siding_node.node_id
+            if not self._is_siding_available(sid):
+                continue
+            if self._has_siding_reentry(sid):
+                return sid
+        return None
 
     def _is_siding_available(self, siding_id: str) -> bool:
         active = [

@@ -740,6 +740,30 @@ def test_type_b_reachable_siding_candidate_beyond_adjacent():
     )
 
 
+def test_type_b_adjacent_vs_reachable_siding_policy():
+    print("\n[T50] Type B adjacent vs reachable siding policy")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="base")
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+
+    graph._type_b_siding_policy = "adjacent"
+    adjacent = agv._find_siding_candidate(
+        "WP_C_040",
+        "WP_C_200",
+        blocked_edge=("WP_C_040", "WP_C_080"),
+    )
+    assert_eq("adjacent policy returns none", adjacent, None)
+
+    graph._type_b_siding_policy = "reachable"
+    reachable = agv._find_siding_candidate(
+        "WP_C_040",
+        "WP_C_200",
+        blocked_edge=("WP_C_040", "WP_C_080"),
+    )
+    assert_true("reachable policy finds siding", reachable is not None)
+
+
 def test_type_c_d_station_pair_reachability():
     print("\n[T28] Type C/D station pair reachability")
     from src.domain.map.topology_generator import MapTopologyGenerator
@@ -1083,12 +1107,12 @@ def test_type_b_siding_placement_ranking_grouping():
     assert_eq(
         "ranking variants preserved",
         [row["topology_variant"] for row in ranking_rows],
-        ["B/mid", "B/base", "B/dense"],
+        ["B/mid/reachable", "B/base/reachable", "B/dense/reachable"],
     )
     assert_eq(
         "aggregate variants separated",
         [row["topology_variant"] for row in aggregate],
-        ["B/mid", "B/base", "B/dense"],
+        ["B/mid/reachable", "B/base/reachable", "B/dense/reachable"],
     )
 
 
@@ -1556,11 +1580,12 @@ if __name__ == "__main__":
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
-        # Head-on / siding / bottleneck regression (T45~T49)
+        # Head-on / siding / bottleneck regression (T45~T50)
         test_headon_regression,
         test_invalid_type_b_siding_placement_rejected,
         test_bottleneck_edge_interpretation,
         test_type_b_reachable_siding_candidate_beyond_adjacent,
+        test_type_b_adjacent_vs_reachable_siding_policy,
     ]
     passed = failed = 0
     for t in tests:

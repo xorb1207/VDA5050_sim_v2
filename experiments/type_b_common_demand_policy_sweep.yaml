@@ -1,0 +1,30 @@
+# Type B common-demand policy comparison
+# Compare placement upgrade vs reachable siding policy
+#
+# Variants:
+#   1) base / adjacent   = 기존 base 정책
+#   2) mid  / adjacent   = 배치만 개선
+#   3) mid  / reachable  = 배치 + reachable siding policy
+#
+# 실행:
+#   python -m src.application.usecases.experiment_runner \
+#     --experiment experiments/type_b_common_demand_policy_sweep.yaml
+
+types: [B]
+agv_counts: [8, 12, 16, 20]
+duration_s: 600
+task_interval_s: 5.0
+random_seeds: [42, 100, 200, 300, 400]
+demand_mode: common_demand
+demand_count: 30
+type_b_variants:
+  - name: base_adjacent
+    siding_placement: base
+    siding_policy: adjacent
+  - name: mid_adjacent
+    siding_placement: mid
+    siding_policy: adjacent
+  - name: mid_reachable
+    siding_placement: mid
+    siding_policy: reachable
+output_dir: outputs/experiments
