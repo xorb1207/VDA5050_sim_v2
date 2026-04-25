@@ -1267,6 +1267,155 @@ def test_type_b_siding_placement_ranking_grouping():
     )
 
 
+def test_report_json_schema_builder():
+    print("\n[T34-3] Report JSON schema builder")
+    from src.application.usecases.experiment_runner import (
+        ExperimentConfig,
+        RunResult,
+        _build_report,
+    )
+
+    config = ExperimentConfig(
+        types=["A", "B"],
+        agv_counts=[8, 12],
+        duration_s=600.0,
+        task_interval_s=5.0,
+        random_seeds=[42, 43],
+        demand_mode="common_demand",
+        demand_count=20,
+    )
+    results = [
+        RunResult(
+            topology_type="A",
+            n_agv=8,
+            random_seed=42,
+            demand_mode="common_demand",
+            demands_completed=8,
+            demand_completion_rate=0.4,
+            demand_throughput_per_hour=48.0,
+            total_wait_time_s=100.0,
+            section_conflict_total=20,
+            headon_total=3,
+        ),
+        RunResult(
+            topology_type="A",
+            n_agv=12,
+            random_seed=43,
+            demand_mode="common_demand",
+            demands_completed=10,
+            demand_completion_rate=0.5,
+            demand_throughput_per_hour=60.0,
+            total_wait_time_s=140.0,
+            section_conflict_total=25,
+            headon_total=5,
+        ),
+        RunResult(
+            topology_type="B",
+            n_agv=8,
+            random_seed=42,
+            demand_mode="common_demand",
+            siding_placement="mid",
+            siding_policy="reachable",
+            type_b_variant="mid_reachable",
+            demands_completed=10,
+            demand_completion_rate=0.5,
+            demand_throughput_per_hour=60.0,
+            total_wait_time_s=120.0,
+            section_conflict_total=18,
+            headon_total=1,
+        ),
+        RunResult(
+            topology_type="B",
+            n_agv=12,
+            random_seed=43,
+            demand_mode="common_demand",
+            siding_placement="mid",
+            siding_policy="reachable",
+            type_b_variant="mid_reachable",
+            demands_completed=12,
+            demand_completion_rate=0.6,
+            demand_throughput_per_hour=72.0,
+            total_wait_time_s=150.0,
+            section_conflict_total=21,
+            headon_total=1,
+        ),
+    ]
+
+    for result in results:
+        requested = 20
+        result.diagnostics = {
+            "task_generation": {
+                "tasks_requested": requested,
+                "tasks_dispatched": result.demands_completed,
+                "tasks_rejected_unreachable": 0,
+                "tasks_backlogged": requested - result.demands_completed,
+                "demands_completed": result.demands_completed,
+            },
+            "station_access": {},
+            "siding_coverage": {},
+        }
+        result.sim_time_s = 600.0
+
+    report = _build_report(config, results)
+
+    assert_eq("overview winner", report["overview"]["top_winner"], "B/mid/reachable")
+    assert_true("per_topology populated", len(report["per_topology"]) == 2)
+    assert_eq("comparison count", len(report["comparisons"]), 1)
+    assert_eq("report language default", report["overview"]["input_parameters"]["report_language"], "ko")
+    assert_eq(
+        "comparison rhs",
+        report["comparisons"][0]["rhs"],
+        "A",
+    )
+    assert_true(
+        "comparison interpretation reads naturally in Korean",
+        "B/mid/reachable 대비 A는" in report["comparisons"][0]["interpretation"]
+        and "완료율이 나빠졌습니다" in report["comparisons"][0]["interpretation"]
+        and "대기시간이 줄었습니다" in report["comparisons"][0]["interpretation"],
+    )
+    assert_true(
+        "overview summary in Korean",
+        "전체 1위입니다" in report["overview"]["summary"][0]
+        and "랭킹은 완료율과 처리량을 우선하고" in report["overview"]["summary"][-1],
+    )
+    assert_true(
+        "overview includes topology lines",
+        any("B/mid/reachable:" in line for line in report["overview"]["summary"])
+        and any("지배 병목" in line for line in report["overview"]["summary"]),
+    )
+    completion_series = report["chart_series"]["completion_by_agv"]
+    assert_eq("completion series variants", len(completion_series), 2)
+    assert_true(
+        "B completion points exist",
+        any(
+            series["topology_variant"] == "B/mid/reachable"
+            and len(series["points"]) == 2
+            for series in completion_series
+        ),
+    )
+
+    en_config = ExperimentConfig(
+        types=["A", "B"],
+        agv_counts=[8, 12],
+        duration_s=600.0,
+        task_interval_s=5.0,
+        random_seeds=[42, 43],
+        demand_mode="common_demand",
+        demand_count=20,
+        report_language="en",
+    )
+    en_report = _build_report(en_config, results)
+    assert_eq(
+        "english comparison rendering",
+        en_report["comparisons"][0]["interpretation"].startswith("Against B/mid/reachable, A"),
+        True,
+    )
+    assert_true(
+        "english overview topology line",
+        any("dominant bottleneck" in line for line in en_report["overview"]["summary"]),
+    )
+
+
 async def _test_follow_on_headway_blocks_close_entry():
     print("\n[T35] Same-direction follow-on headway")
     s = TimeWindowScheduler()
@@ -1731,7 +1880,7 @@ if __name__ == "__main__":
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
-        # Head-on / siding / bottleneck / battery regression (T45~T55)
+        # Head-on / siding / bottleneck / battery / reporting regression (T45~T56)
         test_headon_regression,
         test_invalid_type_b_siding_placement_rejected,
         test_bottleneck_edge_interpretation,
@@ -1742,6 +1891,7 @@ if __name__ == "__main__":
         test_battery_low_soc_routes_to_charger,
         test_task_generator_skips_low_battery_agv,
         test_battery_payload_drain_rate_split,
+        test_report_json_schema_builder,
     ]
     passed = failed = 0
     for t in tests:

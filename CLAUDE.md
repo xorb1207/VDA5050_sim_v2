@@ -47,7 +47,7 @@ vda5050_sim_v2/
 │   └── topology_saturation_common_demand.yaml
 │                                A/B/C/D/E 포화 곡선 비교 (B=mid/reachable)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T55
+│   └── test_simulation.py     T1~T56
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -167,7 +167,7 @@ _edge_congestion_counts: 합산 (하위호환)
 - `tasks_completed`는 AGV station processing 완료 횟수이며, 실제 물류 수요 완료는 dropoff processing 종료 시 발행되는 `demandCompleted` 이벤트의 `demands_completed`를 기준으로 한다.
 
 ### Ranking 기준
-`experiment_runner.py`는 seed/AGV 대수별로 Type A-E를 정렬하고, topology별 승패를 `ranking.csv`, `ranking.json`, `ranking_aggregate.json`으로 저장한다.
+`experiment_runner.py`는 seed/AGV 대수별로 Type A-E를 정렬하고, topology별 승패를 `ranking.csv`, `ranking.json`, `ranking_aggregate.json`, `report.json`으로 저장한다.
 정렬 우선순위는 `completion_rate` desc → `task_acceptance_rate` desc → `demand_throughput_per_hour` desc → `total_wait_time_s` asc → `headon_total` asc → `retry_total` asc.
 
 ---
@@ -188,7 +188,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T49)
+## 테스트 구조 (T1~T56)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -239,6 +239,7 @@ T52:     Battery charging target recovery
 T53:     Battery low SOC charger reroute
 T54:     TaskGenerator skips low-battery AGV
 T55:     Battery payload drain rate split (8%/h vs 12%/h)
+T56:     report.json schema builder — overview / per_topology / comparisons / chart_series
 ```
 
 실행:
@@ -264,6 +265,7 @@ python -m src.application.usecases.experiment_runner \
 - `outputs/experiments/{run_id}/summary.csv`: seed별 raw KPI
 - `outputs/experiments/{run_id}/ranking.csv`: n_AGV/seed별 Type A-E rank
 - `outputs/experiments/{run_id}/ranking_aggregate.json`: topology별 wins/avg_rank 자동 요약
+- `outputs/experiments/{run_id}/report.json`: 의사결정/시각화용 structured analytics layer
 
 ### 결과 해석 시 주의사항
 - **Type A 처리량 비선형**: AGV 과밀 시 available 스테이션 부족으로 태스크 생성 안 됨
@@ -419,6 +421,12 @@ python -m src.application.usecases.experiment_runner \
 - [ ] **wait_time 현실화**: 엣지 예약 대기 + 물리 감속 시간 통합
 
 ### 다음으로 해야할 일
+- [x] **result interpretation/reporting layer 1차**: `report.json`으로 overview / per_topology / comparisons / chart_series 출력
+  - 목적: 제3자가 입력 조건과 결과를 함께 보고 winner, trade-off, chart data를 바로 해석할 수 있게 함
+  - `overview`: 실험 조건, ranking 정책, winner, 핵심 요약
+  - `per_topology`: topology_variant별 aggregate KPI, strengths/weaknesses, bottleneck, use case
+  - `comparisons`: winner 대비 delta KPI 자동 생성
+  - `chart_series`: completion/throughput/wait/headon/followon/section_conflict/battery chart용 집계
 - [x] **battery/charging 1차 + 포화 곡선 2차**: 현재 pre-battery baseline 위에 SOC/charging을 얹어 ceiling 하락폭 확인
   - `type_b_mid_reachable_battery_saturation.yaml`로 600s common-demand sweep 재실행
   - **결론**: 현재 운영값(`8%/h`, `12%/h`, `40~90%`, `30% assign`) 기준으로는 `600s`에서도 `1800s` spot-check에서도 charging 개입이 거의 없음

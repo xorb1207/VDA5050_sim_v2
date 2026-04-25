@@ -20,6 +20,7 @@ import asyncio
 import csv
 import json
 import random
+import statistics
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
@@ -65,6 +66,7 @@ class ExperimentConfig:
     battery_charge_rate_pct_per_s: float = 1.0
     battery_base_drain_pct_per_hour: float = 8.0
     battery_loaded_drain_pct_per_hour: float = 12.0
+    report_language: str = "ko"
 
     def __post_init__(self):
         if self.run_id is None:
@@ -73,6 +75,8 @@ class ExperimentConfig:
             self.random_seeds = [self.random_seed]
         elif not self.random_seeds:
             raise ValueError("random_seeds must not be empty")
+        if self.report_language not in {"ko", "en"}:
+            raise ValueError("report_language must be 'ko' or 'en'")
 
 
 # ── 단일 실험 결과 ─────────────────────────────────────────────
@@ -709,6 +713,538 @@ def _build_ranking_aggregate(ranking_rows: list[dict]) -> list[dict]:
     )
 
 
+def _avg(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return round(sum(values) / len(values), 4)
+
+
+def _stddev(values: list[float]) -> float:
+    if len(values) <= 1:
+        return 0.0
+    return round(statistics.pstdev(values), 4)
+
+
+def _ranking_policy() -> dict:
+    return {
+        "primary_metrics": [
+            "completion_rate",
+            "task_acceptance_rate",
+            "demand_throughput_per_hour",
+        ],
+        "secondary_metrics": [
+            "total_wait_time_s",
+            "section_conflict_total",
+            "followon_total",
+            "headon_total",
+            "retry_total",
+        ],
+        "sort_direction": {
+            "completion_rate": "desc",
+            "task_acceptance_rate": "desc",
+            "demand_throughput_per_hour": "desc",
+            "total_wait_time_s": "asc",
+            "section_conflict_total": "asc",
+            "followon_total": "asc",
+            "headon_total": "asc",
+            "retry_total": "asc",
+        },
+    }
+
+
+def _tr(locale: str, key: str, **kwargs) -> str:
+    templates = {
+        "ko": {
+            "highest_completion": "완료율 우세",
+            "highest_throughput": "처리량 우세",
+            "lowest_wait": "대기시간 우세",
+            "lowest_headon": "정면 교행 충돌 최소",
+            "lowest_section_conflict": "구간 충돌 최소",
+            "lowest_completion": "완료율 열세",
+            "lowest_throughput": "처리량 열세",
+            "highest_wait": "대기시간 부담 큼",
+            "highest_headon": "정면 교행 충돌 부담 큼",
+            "highest_section_conflict": "구간 충돌 부담 큼",
+            "consistently_top_ranked": "상위권 순위 일관",
+            "early_saturation_risk": "조기 포화 위험",
+            "throughput_constrained": "처리량 제한 뚜렷",
+            "high_density_use_case": "고밀도 처리량 중심 운영",
+            "stability_use_case": "안정성 중심 운영",
+            "limited_use_case": "저밀도/제한 수요 운영에 적합",
+            "moderate_use_case": "중간 밀도 일반 운영에 적합",
+            "tradeoff_high_throughput": "처리량은 높지만 대기 비용이 크고, 지배 병목은 {bottleneck}입니다.",
+            "tradeoff_balanced_stable": "처리량과 안정성의 균형이 좋고, 지배 병목은 {bottleneck}입니다.",
+            "tradeoff_balanced_low_congestion": "혼잡 부담이 비교적 낮은 균형형이며, 지배 병목은 {bottleneck}입니다.",
+            "tradeoff_low_completion": "완료율이 낮아 혼잡 지표가 과소평가될 수 있으며, 지배 병목은 {bottleneck}입니다.",
+            "tradeoff_constrained": "처리량이 충분히 올라가기 전에 제한이 걸리며, 지배 병목은 {bottleneck}입니다.",
+            "against": "{baseline} 대비 {target}는 {phrases}.",
+            "flat_perf": "완료율과 처리량이 거의 동일합니다",
+            "improved_completion": "완료율이 좋아졌습니다 ({value:+.4f})",
+            "worsened_completion": "완료율이 나빠졌습니다 ({value:+.4f})",
+            "improved_throughput": "처리량이 좋아졌습니다 ({value:+.3f}/h)",
+            "worsened_throughput": "처리량이 나빠졌습니다 ({value:+.3f}/h)",
+            "improved_wait": "대기시간이 줄었습니다 ({value:+.3f}s)",
+            "worsened_wait": "대기시간이 늘었습니다 ({value:+.3f}s)",
+            "improved_section": "구간 충돌이 줄었습니다 ({value:+.3f})",
+            "worsened_section": "구간 충돌이 늘었습니다 ({value:+.3f})",
+            "improved_headon": "정면 교행 충돌이 줄었습니다 ({value:+.3f})",
+            "worsened_headon": "정면 교행 충돌이 늘었습니다 ({value:+.3f})",
+            "winner_summary": "{winner}가 전체 1위입니다. 완료율 {completion:.4f}, 처리량 {throughput:.1f}/h를 유지하면서 처리량 1위 대비 충돌 비용을 더 낮게 억제했습니다.",
+            "runner_up_summary": "차상위는 {runner_up}이며 평균 순위 {avg_rank:.2f}를 기록했습니다.",
+            "throughput_leader_summary": "{leader}는 최고 처리량({throughput:.1f}/h)을 냈지만 대기/충돌 비용이 더 컸습니다.",
+            "ranking_policy_summary": "랭킹은 완료율과 처리량을 우선하고, 그 다음 대기와 충돌 비용을 패널티로 반영합니다.",
+            "topology_line": "{variant}: 완료율 {completion:.4f}, 처리량 {throughput:.1f}/h, 대기 {wait:.1f}s, 지배 병목 {bottleneck}.",
+        },
+        "en": {
+            "highest_completion": "highest completion",
+            "highest_throughput": "highest throughput",
+            "lowest_wait": "lowest wait",
+            "lowest_headon": "lowest headon",
+            "lowest_section_conflict": "lowest section conflict",
+            "lowest_completion": "lowest completion",
+            "lowest_throughput": "lowest throughput",
+            "highest_wait": "highest wait",
+            "highest_headon": "highest headon",
+            "highest_section_conflict": "highest section conflict",
+            "consistently_top_ranked": "consistently top-ranked",
+            "early_saturation_risk": "early saturation risk",
+            "throughput_constrained": "throughput-constrained",
+            "high_density_use_case": "High-density throughput-oriented operation",
+            "stability_use_case": "Stability-oriented operation with lower conflict tolerance",
+            "limited_use_case": "Low-density or limited-demand operation only",
+            "moderate_use_case": "Moderate-density operation where simpler routing is preferred",
+            "tradeoff_high_throughput": "High throughput with a noticeable wait cost; dominant bottleneck is {bottleneck}.",
+            "tradeoff_balanced_stable": "Balanced throughput and stability; dominant bottleneck is {bottleneck}.",
+            "tradeoff_balanced_low_congestion": "Balanced profile with lower congestion pressure; dominant bottleneck is {bottleneck}.",
+            "tradeoff_low_completion": "Low completion keeps congestion metrics deceptively low; dominant bottleneck is {bottleneck}.",
+            "tradeoff_constrained": "Throughput is constrained before full demand recovery; dominant bottleneck is {bottleneck}.",
+            "against": "Against {baseline}, {target} {phrases}.",
+            "flat_perf": "kept completion and throughput essentially flat",
+            "improved_completion": "improved completion ({value:+.4f})",
+            "worsened_completion": "worsened completion ({value:+.4f})",
+            "improved_throughput": "improved throughput ({value:+.3f}/h)",
+            "worsened_throughput": "worsened throughput ({value:+.3f}/h)",
+            "improved_wait": "improved wait ({value:+.3f}s)",
+            "worsened_wait": "worsened wait ({value:+.3f}s)",
+            "improved_section": "improved section conflict ({value:+.3f})",
+            "worsened_section": "worsened section conflict ({value:+.3f})",
+            "improved_headon": "improved headon ({value:+.3f})",
+            "worsened_headon": "worsened headon ({value:+.3f})",
+            "winner_summary": "{winner} ranked first overall because it balanced completion {completion:.4f}, throughput {throughput:.1f}/h, and lower conflict cost than the throughput leader.",
+            "runner_up_summary": "Runner-up {runner_up} posted avg rank {avg_rank:.2f}.",
+            "throughput_leader_summary": "{leader} delivered the highest throughput ({throughput:.1f}/h) but paid more in wait/conflict.",
+            "ranking_policy_summary": "Ranking prioritizes completion and throughput first, then penalizes wait and conflict costs.",
+            "topology_line": "{variant}: completion {completion:.4f}, throughput {throughput:.1f}/h, wait {wait:.1f}s, dominant bottleneck {bottleneck}.",
+        },
+    }
+    return templates[locale][key].format(**kwargs)
+
+
+def _build_input_parameters(config: ExperimentConfig, results: list[RunResult]) -> dict:
+    type_variants: dict[str, list[str]] = defaultdict(list)
+    for result in results:
+        label = _topology_variant_label(asdict(result))
+        if label not in type_variants[result.topology_type]:
+            type_variants[result.topology_type].append(label)
+    return {
+        "types": config.types,
+        "type_variants": dict(type_variants),
+        "mixed_topology": None,
+        "agv_counts": config.agv_counts,
+        "duration_s": config.duration_s,
+        "task_interval_s": config.task_interval_s,
+        "demand_mode": config.demand_mode,
+        "demand_count": config.demand_count,
+        "random_seeds": config.random_seeds or [config.random_seed],
+        "battery": {
+            "enabled": config.battery_enabled,
+            "initial_pct": config.battery_initial_pct,
+            "charge_band_entry_pct": config.battery_charge_band_entry_pct,
+            "charge_assign_pct": config.battery_charge_assign_pct,
+            "charge_target_pct": config.battery_charge_target_pct,
+            "charge_rate_pct_per_s": config.battery_charge_rate_pct_per_s,
+            "base_drain_pct_per_hour": config.battery_base_drain_pct_per_hour,
+            "loaded_drain_pct_per_hour": config.battery_loaded_drain_pct_per_hour,
+        },
+        "map_resolution": {
+            "wp_step_m": getattr(MapTopologyGenerator, "WP_STEP", None),
+        },
+        "report_language": config.report_language,
+    }
+
+
+def _series_points(
+    rows: list[dict],
+    topology_variant: str,
+    metric: str,
+) -> list[dict]:
+    grouped: dict[int, list[float]] = defaultdict(list)
+    for row in rows:
+        if row.get("error"):
+            continue
+        if _topology_variant_label(row) != topology_variant:
+            continue
+        grouped[int(row.get("n_agv", 0))].append(float(row.get(metric, 0.0)))
+    points: list[dict] = []
+    for agv_count in sorted(grouped):
+        values = grouped[agv_count]
+        points.append({
+            "agv_count": agv_count,
+            "mean": _avg(values),
+            "stddev": _stddev(values),
+            "min": round(min(values), 4),
+            "max": round(max(values), 4),
+            "sample_count": len(values),
+        })
+    return points
+
+
+def _build_chart_series(rows: list[dict], aggregate: list[dict]) -> dict:
+    metrics = [
+        ("completion_by_agv", "completion_rate"),
+        ("throughput_by_agv", "demand_throughput_per_hour"),
+        ("wait_by_agv", "total_wait_time_s"),
+        ("headon_by_agv", "headon_total"),
+        ("followon_by_agv", "followon_total"),
+        ("section_conflict_by_agv", "section_conflict_total"),
+        ("battery_min_pct_by_agv", "min_battery_pct"),
+    ]
+    chart_series: dict[str, list[dict]] = {}
+    for key, metric in metrics:
+        chart_series[key] = [
+            {
+                "topology_variant": agg["topology_variant"],
+                "topology_type": agg["topology_type"],
+                "points": _series_points(rows, agg["topology_variant"], metric),
+            }
+            for agg in aggregate
+        ]
+    return chart_series
+
+
+def _metric_leaders(aggregate: list[dict], field: str, reverse: bool) -> tuple[str, str]:
+    ranked = sorted(
+        aggregate,
+        key=lambda row: float(row.get(field, 0.0)),
+        reverse=reverse,
+    )
+    return ranked[0]["topology_variant"], ranked[-1]["topology_variant"]
+
+
+def _build_strengths_and_weaknesses(
+    row: dict,
+    aggregate: list[dict],
+    locale: str,
+) -> tuple[list[str], list[str]]:
+    strengths: list[str] = []
+    weaknesses: list[str] = []
+    best_completion, worst_completion = _metric_leaders(
+        aggregate, "avg_completion_rate", reverse=True
+    )
+    best_throughput, worst_throughput = _metric_leaders(
+        aggregate, "avg_demand_throughput_per_hour", reverse=True
+    )
+    best_wait, worst_wait = _metric_leaders(
+        aggregate, "avg_total_wait_time_s", reverse=False
+    )
+    best_headon, worst_headon = _metric_leaders(
+        aggregate, "avg_headon_total", reverse=False
+    )
+    best_section, worst_section = _metric_leaders(
+        aggregate, "avg_section_conflict_total", reverse=False
+    )
+
+    variant = row["topology_variant"]
+    completion = float(row.get("avg_completion_rate", 0.0))
+    throughput = float(row.get("avg_demand_throughput_per_hour", 0.0))
+    if variant == best_completion:
+        strengths.append(_tr(locale, "highest_completion"))
+    if variant == best_throughput:
+        strengths.append(_tr(locale, "highest_throughput"))
+    if variant == best_wait and completion >= 0.2:
+        strengths.append(_tr(locale, "lowest_wait"))
+    if variant == best_headon:
+        strengths.append(_tr(locale, "lowest_headon"))
+    if variant == best_section and completion >= 0.2:
+        strengths.append(_tr(locale, "lowest_section_conflict"))
+
+    if variant == worst_completion:
+        weaknesses.append(_tr(locale, "lowest_completion"))
+    if variant == worst_throughput:
+        weaknesses.append(_tr(locale, "lowest_throughput"))
+    if variant == worst_wait:
+        weaknesses.append(_tr(locale, "highest_wait"))
+    if variant == worst_headon:
+        weaknesses.append(_tr(locale, "highest_headon"))
+    if variant == worst_section:
+        weaknesses.append(_tr(locale, "highest_section_conflict"))
+
+    if row["avg_rank"] <= 1.5 and completion >= 0.2 and _tr(locale, "highest_completion") not in strengths:
+        strengths.append(_tr(locale, "consistently_top_ranked"))
+    if row["avg_rank"] >= max((r["avg_rank"] for r in aggregate), default=0.0) and _tr(locale, "lowest_completion") not in weaknesses:
+        weaknesses.append(_tr(locale, "early_saturation_risk"))
+    if completion < 0.15 or throughput < 25.0:
+        weaknesses.append(_tr(locale, "throughput_constrained"))
+
+    return strengths[:3], weaknesses[:3]
+
+
+def _dominant_bottleneck(row: dict) -> str:
+    costs = {
+        "section_conflict": float(row.get("avg_section_conflict_total", 0.0)),
+        "followon": float(row.get("avg_followon_total", 0.0)),
+        "headon": float(row.get("avg_headon_total", 0.0)),
+        "wait": float(row.get("avg_total_wait_time_s", 0.0)),
+    }
+    dominant = max(costs.items(), key=lambda item: item[1])[0]
+    return dominant
+
+
+def _localized_bottleneck(row: dict, locale: str) -> str:
+    name = _dominant_bottleneck(row)
+    if locale == "ko":
+        mapping = {
+            "section_conflict": "구간 충돌",
+            "followon": "동일 방향 추종 차단",
+            "headon": "정면 교행 충돌",
+            "wait": "대기시간",
+        }
+        return mapping.get(name, name)
+    return name.replace("_", " ")
+
+
+def _tradeoff_summary(row: dict, locale: str) -> str:
+    bottleneck = _localized_bottleneck(row, locale)
+    completion = float(row.get("avg_completion_rate", 0.0))
+    throughput = float(row.get("avg_demand_throughput_per_hour", 0.0))
+    wait = float(row.get("avg_total_wait_time_s", 0.0))
+    headon = float(row.get("avg_headon_total", 0.0))
+    if completion >= 0.3 and throughput >= 50.0 and wait >= 200.0:
+        return _tr(locale, "tradeoff_high_throughput", bottleneck=bottleneck)
+    if completion >= 0.25 and headon <= 1.0 and wait < 180.0:
+        return _tr(locale, "tradeoff_balanced_stable", bottleneck=bottleneck)
+    if completion >= 0.25 and wait < 150.0:
+        return _tr(locale, "tradeoff_balanced_low_congestion", bottleneck=bottleneck)
+    if completion < 0.15:
+        return _tr(locale, "tradeoff_low_completion", bottleneck=bottleneck)
+    return _tr(locale, "tradeoff_constrained", bottleneck=bottleneck)
+
+
+def _recommended_use_case(row: dict, locale: str) -> str:
+    completion = float(row.get("avg_completion_rate", 0.0))
+    wait = float(row.get("avg_total_wait_time_s", 0.0))
+    headon = float(row.get("avg_headon_total", 0.0))
+    throughput = float(row.get("avg_demand_throughput_per_hour", 0.0))
+    if completion < 0.15 or throughput < 25.0:
+        return _tr(locale, "limited_use_case")
+    if completion >= 0.3 and wait >= 200.0:
+        return _tr(locale, "high_density_use_case")
+    if headon <= 1.0 and wait < 180.0:
+        return _tr(locale, "stability_use_case")
+    return _tr(locale, "moderate_use_case")
+
+
+def _build_per_topology(rows: list[dict], aggregate: list[dict], locale: str) -> list[dict]:
+    per_topology: list[dict] = []
+    for agg in aggregate:
+        strengths, weaknesses = _build_strengths_and_weaknesses(agg, aggregate, locale)
+        per_topology.append({
+            "topology_type": agg["topology_type"],
+            "topology_variant": agg["topology_variant"],
+            "siding_placement": agg.get("siding_placement", "base"),
+            "siding_policy": agg.get("siding_policy", "reachable"),
+            "aggregate_metrics": {
+                "avg_rank": agg["avg_rank"],
+                "wins": agg["first_place_wins"],
+                "evaluated_groups": agg["evaluated_groups"],
+                "avg_completion_rate": agg["avg_completion_rate"],
+                "avg_demand_throughput_per_hour": agg["avg_demand_throughput_per_hour"],
+                "avg_total_wait_time_s": agg["avg_total_wait_time_s"],
+                "avg_headon_total": agg["avg_headon_total"],
+                "avg_followon_total": agg["avg_followon_total"],
+                "avg_section_conflict_total": agg["avg_section_conflict_total"],
+            },
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "dominant_bottleneck": _localized_bottleneck(agg, locale),
+            "tradeoff_summary": _tradeoff_summary(agg, locale),
+            "recommended_use_case": _recommended_use_case(agg, locale),
+        })
+    return per_topology
+
+
+def _build_comparisons(aggregate: list[dict], locale: str) -> list[dict]:
+    if not aggregate:
+        return []
+    baseline = aggregate[0]
+    comparisons: list[dict] = []
+    for row in aggregate[1:]:
+        delta_completion = round(
+            row["avg_completion_rate"] - baseline["avg_completion_rate"], 4
+        )
+        delta_throughput = round(
+            row["avg_demand_throughput_per_hour"] - baseline["avg_demand_throughput_per_hour"],
+            3,
+        )
+        delta_wait = round(
+            row["avg_total_wait_time_s"] - baseline["avg_total_wait_time_s"],
+            3,
+        )
+        delta_headon = round(
+            row["avg_headon_total"] - baseline["avg_headon_total"], 3
+        )
+        delta_section = round(
+            row["avg_section_conflict_total"] - baseline["avg_section_conflict_total"], 3
+        )
+        def _direction(metric_delta: float, better_when_lower: bool = False) -> str:
+            if abs(metric_delta) < 1e-9:
+                return "unchanged"
+            improved = metric_delta < 0 if better_when_lower else metric_delta > 0
+            return "improved" if improved else "worsened"
+
+        completion_state = _direction(delta_completion)
+        throughput_state = _direction(delta_throughput)
+        wait_state = _direction(delta_wait, better_when_lower=True)
+        section_state = _direction(delta_section, better_when_lower=True)
+        headon_state = _direction(delta_headon, better_when_lower=True)
+
+        phrases: list[str] = []
+        if completion_state == "unchanged" and throughput_state == "unchanged":
+            phrases.append(_tr(locale, "flat_perf"))
+        else:
+            perf_bits: list[str] = []
+            if completion_state != "unchanged":
+                perf_bits.append(_tr(locale, f"{completion_state}_completion", value=delta_completion))
+            if throughput_state != "unchanged":
+                perf_bits.append(_tr(locale, f"{throughput_state}_throughput", value=delta_throughput))
+            if perf_bits:
+                phrases.append(", ".join(perf_bits))
+
+        cost_bits: list[str] = []
+        if wait_state != "unchanged":
+            cost_bits.append(_tr(locale, f"{wait_state}_wait", value=delta_wait))
+        if section_state != "unchanged":
+            cost_bits.append(_tr(locale, f"{section_state}_section", value=delta_section))
+        if headon_state != "unchanged":
+            cost_bits.append(_tr(locale, f"{headon_state}_headon", value=delta_headon))
+        if cost_bits:
+            if locale == "ko":
+                phrases.append("대신 " + ", ".join(cost_bits))
+            else:
+                phrases.append("while " + ", ".join(cost_bits))
+
+        phrase_text = "; ".join(phrases) if phrases else (
+            "유의미한 KPI 변화가 없습니다" if locale == "ko" else "showed no material KPI change"
+        )
+        interpretation = _tr(
+            locale,
+            "against",
+            baseline=baseline["topology_variant"],
+            target=row["topology_variant"],
+            phrases=phrase_text,
+        )
+        comparisons.append({
+            "lhs": baseline["topology_variant"],
+            "rhs": row["topology_variant"],
+            "delta_metrics": {
+                "completion_rate": delta_completion,
+                "demand_throughput_per_hour": delta_throughput,
+                "total_wait_time_s": delta_wait,
+                "headon_total": delta_headon,
+                "section_conflict_total": delta_section,
+            },
+            "interpretation": interpretation,
+        })
+    return comparisons
+
+
+def _build_report(config: ExperimentConfig, results: list[RunResult]) -> dict:
+    locale = config.report_language
+    rows = [_flatten_summary_row(r) for r in results]
+    ranking_rows = _build_ranking_rows(results)
+    aggregate = _build_ranking_aggregate(ranking_rows)
+    winner = aggregate[0]["topology_variant"] if aggregate else ""
+    overview_summary: list[str] = []
+    if aggregate:
+        top = aggregate[0]
+        throughput_leader = max(
+            aggregate,
+            key=lambda row: float(row.get("avg_demand_throughput_per_hour", 0.0)),
+        )
+        overview_summary.append(
+            _tr(
+                locale,
+                "winner_summary",
+                winner=top["topology_variant"],
+                completion=top["avg_completion_rate"],
+                throughput=top["avg_demand_throughput_per_hour"],
+            )
+        )
+        if len(aggregate) > 1:
+            runner_up = aggregate[1]
+            overview_summary.append(
+                _tr(
+                    locale,
+                    "runner_up_summary",
+                    runner_up=runner_up["topology_variant"],
+                    avg_rank=runner_up["avg_rank"],
+                )
+            )
+        if throughput_leader["topology_variant"] != top["topology_variant"]:
+            overview_summary.append(
+                _tr(
+                    locale,
+                    "throughput_leader_summary",
+                    leader=throughput_leader["topology_variant"],
+                    throughput=throughput_leader["avg_demand_throughput_per_hour"],
+                )
+            )
+        if len(aggregate) >= 2:
+            gap = round(
+                float(aggregate[0]["avg_completion_rate"])
+                - float(aggregate[-1]["avg_completion_rate"]),
+                4,
+            )
+            if locale == "ko":
+                overview_summary.append(
+                    f"이번 샘플에서는 1위와 최하위의 완료율 차이가 {gap:.4f}로 벌어져 스케일링 차이가 분명하게 드러났습니다."
+                )
+            else:
+                overview_summary.append(
+                    f"In this sample, the completion gap between the top and bottom variants was {gap:.4f}, indicating a clear scaling difference."
+                )
+        for row in aggregate[: min(3, len(aggregate))]:
+            overview_summary.append(
+                _tr(
+                    locale,
+                    "topology_line",
+                    variant=row["topology_variant"],
+                    completion=row["avg_completion_rate"],
+                    throughput=row["avg_demand_throughput_per_hour"],
+                    wait=row["avg_total_wait_time_s"],
+                    bottleneck=_localized_bottleneck(row, locale),
+                )
+            )
+    overview_summary.append(
+        _tr(locale, "ranking_policy_summary")
+    )
+
+    return {
+        "overview": {
+            "run_id": config.run_id,
+            "experiment_name": config.run_id,
+            "objective": "Topology comparison with decision-ready KPI summary",
+            "input_parameters": _build_input_parameters(config, results),
+            "ranking_policy": _ranking_policy(),
+            "top_winner": winner,
+            "summary": overview_summary,
+        },
+        "per_topology": _build_per_topology(rows, aggregate, locale),
+        "comparisons": _build_comparisons(aggregate, locale),
+        "chart_series": _build_chart_series(rows, aggregate),
+    }
+
+
 # ── 배치 실험 러너 ─────────────────────────────────────────────
 class ExperimentRunner:
     def __init__(self, config: ExperimentConfig) -> None:
@@ -885,12 +1421,17 @@ class ExperimentRunner:
         aggregate_path = self.out_dir / "ranking_aggregate.json"
         aggregate_path.write_text(json.dumps(aggregate, ensure_ascii=False, indent=2))
 
+        report = _build_report(self.config, results)
+        report_path = self.out_dir / "report.json"
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2))
+
         print(f"\n결과 저장: {self.out_dir}/")
         print(f"  summary.csv  ({len(results)}행)")
         print(f"  summary.json")
         print(f"  ranking.csv")
         print(f"  ranking.json")
         print(f"  ranking_aggregate.json")
+        print(f"  report.json")
 
     def _print_matrix(self, results: list[RunResult]) -> None:
         """처리량 매트릭스 콘솔 출력."""
@@ -1031,6 +1572,7 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         battery_charge_rate_pct_per_s = float(raw.get("battery_charge_rate_pct_per_s", 1.0)),
         battery_base_drain_pct_per_hour = float(raw.get("battery_base_drain_pct_per_hour", 8.0)),
         battery_loaded_drain_pct_per_hour = float(raw.get("battery_loaded_drain_pct_per_hour", 12.0)),
+        report_language = str(raw.get("report_language", "ko")),
     )
 
 
@@ -1072,6 +1614,7 @@ def main() -> None:
             demand_mode    = args.demand_mode,
             demand_count   = args.demand_count,
             output_dir     = args.output,
+            report_language= "ko",
         )
 
     runner = ExperimentRunner(config)
