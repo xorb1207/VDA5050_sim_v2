@@ -26,7 +26,7 @@ vda5050_sim_v2/
 │   │   ├── scenario/      task_generator.py
 │   │   └── usecases/      experiment_runner.py
 │   ├── adapters/bus/      adapters.py (LocalMemoryBus)
-│   ├── analytics/         kpi.py
+│   ├── analytics/         kpi.py, playback_trace.py
 │   ├── interfaces/        bus.py
 │   └── vda5050/           parser.py, translator.py
 ├── maps/
@@ -42,12 +42,16 @@ vda5050_sim_v2/
 │                                Type B 대표안 포화 곡선 (20/24/28)
 │   ├── type_b_mid_reachable_battery_saturation.yaml
 │                                Type B battery saturation (운영 SOC 규칙 1차)
+│   ├── type_b_mid_reachable_playback.yaml
+│                                Type B playback 샘플 (600s, trace/report/playback 생성)
+│   ├── type_b_mid_reachable_playback_short.yaml
+│                                Type B 짧은 playback 샘플 (180s, UI 디버깅용)
 │   ├── topology_cd_saturation_common_demand.yaml
 │                                C/D 재정의 후 포화 곡선 비교
 │   └── topology_saturation_common_demand.yaml
 │                                A/B/C/D/E 포화 곡선 비교 (B=mid/reachable)
 ├── tests/integration/
-│   └── test_simulation.py     T1~T56
+│   └── test_simulation.py     T1~T59
 └── outputs/experiments/       실험 결과 CSV/JSON
 ```
 
@@ -62,9 +66,10 @@ vda5050_sim_v2/
   - 중앙 통로 Y=60: 폭 1.5m, 단방향(동→서), 1.5m/s
   - 남측 엔드베이 Y=20: 폭 2.0m, 양방향, 1.5m/s
   - 베이 통로 X=0/160/320/480/640: 단방향 교대, 0.7m/s
-- **노드**: 82개 (WP 51 + Station 23 + Charger 8)
-- **스테이션**: 북9 / 중앙5(북쪽포켓) / 남9 = 23개, 80m 간격
-- **충전소**: 8개, 서/중/동 분산
+- **노드**: topology generator 기준 WP/BAY/Station/Charger/Holding access node 포함 동적 생성
+- **스테이션**: north/south는 main corridor에서 3m inset, center는 bay 축과 분리된 측면 access lane 구조
+- **충전소**: north/south는 FAB 바깥 y 방향, center는 FAB 바깥 x 방향으로 분리
+- **홀딩 포인트**: idle AGV 대기용 `HP_*` / `HA_*` access lane 추가
 
 ### 로봇 물리 스펙
 - 크기: 800×1800mm
@@ -87,6 +92,12 @@ vda5050_sim_v2/
 - **방향 교대**: B1(X=0)=북→남, B2(X=160)=남→북, B3=북→남, B4=남→북, B5=북→남
 - **속도**: 0.7m/s 고정
 - **단방향 강제**: bidir=False
+- **내부 waypoint**: `BAY_*` 중간 노드를 생성해 playback/예약이 긴 jump edge가 아닌 실제 세로 lane처럼 보이게 구성
+
+### Station / Charger / Holding access
+- **station access**: `WP -> SA_* -> ST_*` 2-hop 구조, access midpoint 1.5m / facility 3.0m
+- **charger access**: `WP -> CA_* -> CH_*` 2-hop 구조, center charger는 bay 축이 아니라 FAB 바깥 x 방향 배치
+- **holding access**: `WP -> HA_* -> HP_*` 2-hop 구조, idle AGV는 main corridor 위가 아니라 holding point로 복귀
 
 ---
 
@@ -188,7 +199,7 @@ _edge_congestion_counts: 합산 (하위호환)
 
 ---
 
-## 테스트 구조 (T1~T56)
+## 테스트 구조 (T1~T59)
 
 ```
 T1~T5:   sample_fab.json 기반 — 그래프 로드, 노드 역할, A*, APPROACH 감지
@@ -240,6 +251,9 @@ T53:     Battery low SOC charger reroute
 T54:     TaskGenerator skips low-battery AGV
 T55:     Battery payload drain rate split (8%/h vs 12%/h)
 T56:     report.json schema builder — overview / per_topology / comparisons / chart_series
+T57:     station/charger access geometry 검증 (3m offset / center charger 외곽 x 배치)
+T58:     bay internal waypoint 검증
+T59:     start pool seeded shuffle + north/center/south 분산 검증
 ```
 
 실행:
@@ -266,6 +280,8 @@ python -m src.application.usecases.experiment_runner \
 - `outputs/experiments/{run_id}/ranking.csv`: n_AGV/seed별 Type A-E rank
 - `outputs/experiments/{run_id}/ranking_aggregate.json`: topology별 wins/avg_rank 자동 요약
 - `outputs/experiments/{run_id}/report.json`: 의사결정/시각화용 structured analytics layer
+- `outputs/experiments/{run_id}/{variant}/playback_trace.json`: 시뮬레이션 trace (snapshot/event/path/reservation)
+- `outputs/experiments/{run_id}/{variant}/playback.html`: playback UI (planned/reserved/active/blocked edge 시각화)
 
 ### 결과 해석 시 주의사항
 - **Type A 처리량 비선형**: AGV 과밀 시 available 스테이션 부족으로 태스크 생성 안 됨
@@ -438,6 +454,21 @@ python -m src.application.usecases.experiment_runner \
   - 현재는 `B/mid/reachable`가 대표안으로 충분히 경쟁력이 있어, battery baseline 확보 후 들어가는 편이 낫다
 - [ ] **세부 공간 설계 최적화는 후순위**: node spacing / edge 세부 배치 최적화는 공간 해상도 모델을 높인 뒤 진행
   - 현재 모델은 토폴로지 구조 비교와 스케일링 비교에는 강하지만, 20m vs 40m spacing 같은 세부 layout 최적화 결론엔 아직 해상도가 부족
+- [x] **playback trace / UI 1차**: report 다음 단계로 trace 저장과 playback.html 제공
+  - snapshot: AGV 위치/상태/배터리/current/target node
+  - event: order / wait / reroute / section conflict / charging / demand completed 등
+  - map: node/edge 좌표와 role/access metadata
+  - playback 표현: node 정지 AGV는 원형, edge 주행 AGV는 진행방향 화살표
+  - edge 의미: 연파랑=계획 경로, 진파랑=예약 구간, 초록=현재 주행, 빨강=예약 실패로 대기 중인 blocked edge
+- [x] **bay / station / charger geometry 현실화 1차**
+  - bay는 `WP -> BAY_* -> WP` 내부 waypoint가 있는 세로 lane 구조로 변경
+  - station/charger는 direct node jump 대신 짧은 access lane (`SA/CA`)을 거쳐 진입
+  - station drop/work 지점은 main corridor에서 3m 이내로 제한
+  - center charger(`CH_04/05`)는 bay 축 연장선이 아니라 FAB 바깥 x 방향 배치
+- [x] **idle/holding policy 1차**
+  - 시작 배치는 `WP_*` 대신 charger + holding point 풀에서 seed 고정 랜덤 분산
+  - task가 없고 저전압이 아니면 nearest free holding point(`HP_*`)로 복귀
+  - 운영 의미: main corridor 위에서 idle 대기하는 비현실 상태를 줄이고, 충전과 유휴 대기를 분리
 
 ### Phase 3 완료 항목
 - [x] **경로 전체 사전 예약 (pre-reservation) 1차**: 출발 전 경로 전체 시간 윈도우 계산 → 일괄 예약
@@ -447,7 +478,7 @@ python -m src.application.usecases.experiment_runner \
 - [x] **station processing randomness 1차**: seed 기반 pickup/dropoff 처리시간 분리
 
 ### 확장 / 장기
-- [ ] 시각화: 맵 위 AGV 실시간 이동, head-on 발생 엣지 하이라이트
+- [ ] 시각화 2차: playback에서 AGV별 reserved path depth, blocking AGV chain, 대표 사고 묶음 drill-down
 - [ ] 통로별 조합 실험 (북=B, 중=A, 남=E 등 혼합 시나리오)
 
 ---

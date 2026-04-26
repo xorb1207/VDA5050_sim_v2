@@ -764,6 +764,71 @@ def test_type_b_adjacent_vs_reachable_siding_policy():
     assert_true("reachable policy finds siding", reachable is not None)
 
 
+def test_type_b_reachable_siding_does_not_cross_bay():
+    print("\n[T50-2] Type B reachable siding forbids bay-cross fallback")
+    from types import SimpleNamespace
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="mid")
+    sched = TimeWindowScheduler()
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, sched)
+
+    sched._reservations["SD_C_320_14"] = [SimpleNamespace(released=False)]
+
+    siding = agv._find_siding_candidate(
+        "WP_C_320",
+        "WP_S_360",
+        blocked_edge=("WP_C_320", "WP_S_320"),
+    )
+
+    assert_true("same-corridor fallback still exists", siding is not None)
+    assert_eq("fallback stays on center corridor", siding.split("_")[1], "C")
+
+
+def test_type_b_reroute_via_siding_inserts_full_path():
+    print("\n[T50-3] Type B reroute via siding inserts full path")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="mid")
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
+    agv.current_node_id = "WP_C_320"
+    agv._path = ["WP_S_320", "WP_S_360"]
+    agv._path_index = 0
+
+    agv._reroute_via_siding("SD_S_320_15", sim_time=0.0)
+
+    assert_eq("reroute path inserts bay handoff first", agv._path[0], "WP_S_320")
+    assert_eq("reroute path inserts siding after bay node", agv._path[1], "SD_S_320_15")
+    assert_true(
+        "all reroute hops are real edges",
+        all(
+            agv._find_edge(src, dst) is not None
+            for src, dst in zip(["WP_C_320"] + agv._path, agv._path)
+        ),
+    )
+
+
+async def _test_navigate_skips_current_node_entry():
+    print("\n[T50-4] Navigate skips current-node self step")
+    graph = make_graph()
+    sched = TimeWindowScheduler()
+    agv = AGV("AGV_001", LocalMemoryBus(), graph, sched)
+    agv.current_node_id = "node_approach_01"
+    agv.physics.x = graph.nodes["node_approach_01"].x
+    agv.physics.y = graph.nodes["node_approach_01"].y
+    agv._path = ["node_approach_01", "node_work_01"]
+    agv._path_index = 0
+
+    await agv._navigate_to_next_node(sim_time=0.0)
+
+    assert_eq("self node skipped", agv._path_index, 1)
+    assert_true("self-loop target not created", agv.target_node_id != "node_approach_01")
+
+
+def test_navigate_skips_current_node_entry():
+    run(_test_navigate_skips_current_node_entry())
+
+
 async def _test_battery_low_soc_enters_charging():
     print("\n[T51] Battery low SOC enters charging")
     graph = make_graph()
@@ -1416,6 +1481,93 @@ def test_report_json_schema_builder():
     )
 
 
+def test_report_html_builder():
+    print("\n[T34-4] Report HTML builder")
+    from src.application.usecases.experiment_runner import _build_report_html
+
+    report = {
+        "overview": {
+            "run_id": "demo",
+            "top_winner": "B/mid/reachable",
+            "summary": ["요약 1", "요약 2"],
+            "input_parameters": {
+                "demand_mode": "common_demand",
+                "duration_s": 600,
+                "agv_counts": [20],
+                "random_seeds": [42, 100],
+                "battery": {"enabled": False},
+                "report_language": "ko",
+            },
+        },
+        "per_topology": [
+            {
+                "topology_type": "B",
+                "topology_variant": "B/mid/reachable",
+                "aggregate_metrics": {
+                    "avg_rank": 1.0,
+                    "avg_completion_rate": 0.3,
+                    "avg_demand_throughput_per_hour": 54.0,
+                    "avg_total_wait_time_s": 237.1,
+                },
+                "dominant_bottleneck": "구간 충돌",
+                "tradeoff_summary": "처리량은 높지만 대기 비용이 큽니다.",
+                "recommended_use_case": "고밀도 처리량 중심 운영",
+                "strengths": ["완료율 우세"],
+                "weaknesses": ["대기시간 부담 큼"],
+            }
+        ],
+        "comparisons": [
+            {
+                "lhs": "C",
+                "rhs": "B/mid/reachable",
+                "interpretation": "C 대비 B는 처리량이 좋아졌습니다.",
+            }
+        ],
+        "chart_series": {
+            "completion_by_agv": [
+                {
+                    "topology_variant": "B/mid/reachable",
+                    "points": [{"agv_count": 20, "mean": 0.3}],
+                }
+            ],
+            "throughput_by_agv": [],
+            "wait_by_agv": [],
+            "headon_by_agv": [],
+        },
+    }
+    html = _build_report_html(report)
+    assert_true("html has report title", "실험 결과 리포트" in html)
+    assert_true("html has topology section", "토폴로지 요약" in html)
+    assert_true("html has chart section", "시각화" in html)
+    assert_true("html embeds JSON winner", "B/mid/reachable" in html)
+
+
+async def _test_playback_trace_generation():
+    print("\n[T34-5] Playback trace generation")
+    from src.application.usecases.experiment_runner import _run_single
+
+    result = await _run_single(
+        "A",
+        n_agv=2,
+        duration_s=5.0,
+        task_interval_s=2.0,
+        random_seed=42,
+        demand_mode="common_demand",
+        demand_count=4,
+        playback_trace_enabled=True,
+        playback_sample_interval_s=0.5,
+    )
+    trace = result.diagnostics.get("playback_trace", {})
+    assert_true("trace generated", bool(trace))
+    assert_true("trace has map", len(trace.get("map", {}).get("nodes", [])) > 0)
+    assert_true("trace has snapshots", len(trace.get("snapshots", [])) > 0)
+    assert_true("trace has events", len(trace.get("events", [])) > 0)
+
+
+def test_playback_trace_generation():
+    run(_test_playback_trace_generation())
+
+
 async def _test_follow_on_headway_blocks_close_entry():
     print("\n[T35] Same-direction follow-on headway")
     s = TimeWindowScheduler()
@@ -1604,6 +1756,19 @@ async def _test_critical_section_conflict_blocks_itinerary():
     assert_eq("edge section conflict count", edge_summary["section_conflict_total"], 1)
     assert_eq("section 차단은 head-on 카운트 전", edge_summary["headon_total"], 0)
 
+    s3 = TimeWindowScheduler()
+    await s3.reserve("ST_01", "AGV_001", 0.0, float("inf"))
+    occupied_facility_blocked = await s3.reserve_edge(
+        "WP_A",
+        "ST_01",
+        "AGV_002",
+        start_time=2.0,
+        end_time=5.0,
+        section_key="access:station_access:ST_01",
+        facility_node_id="ST_01",
+    )
+    assert_eq("occupied facility node blocks access edge", occupied_facility_blocked, False)
+
 
 def test_critical_section_conflict_blocks_itinerary():
     run(_test_critical_section_conflict_blocks_itinerary())
@@ -1617,15 +1782,10 @@ def test_critical_section_key_generation():
     agv = AGV("AGV_001", LocalMemoryBus(), graph, TimeWindowScheduler())
     bay_edge = next(e for e in graph.edges.values() if e.corridor == "bay")
     access_edge = next(e for e in graph.edges.values() if e.access_type == "station_access")
-    station_id = next(
-        node_id
-        for node_id in (access_edge.start_node_id, access_edge.end_node_id)
-        if graph.nodes[node_id].role == NodeRole.WORK
-    )
+    station_id = agv._access_facility_node_id(access_edge)
     sibling_access_edges = [
         e for e in graph.edges.values()
-        if e.access_type == "station_access"
-        and station_id in (e.start_node_id, e.end_node_id)
+        if e.access_type == "station_access" and station_id == agv._access_facility_node_id(e)
     ]
     graph_b = MapTopologyGenerator().generate("B")
     agv_b = AGV("AGV_B", LocalMemoryBus(), graph_b, TimeWindowScheduler())
@@ -1644,6 +1804,73 @@ def test_critical_section_key_generation():
     assert_true(
         "shared corridor section key",
         agv_b._critical_section_key(shared_edge).startswith("shared_corridor:north:"),
+    )
+
+
+def test_station_and_charger_access_geometry():
+    print("\n[T57] Station/charger access geometry")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="mid")
+    north_station = graph.nodes["ST_N_01"]
+    north_access = graph.nodes["SA_N_01"]
+    north_wp = graph.nodes["WP_N_000"]
+    charger = graph.nodes["CH_01"]
+    charger_access = graph.nodes["CA_01"]
+
+    assert_eq("north station 3m inset", round(north_wp.y - north_station.y, 1), 3.0)
+    assert_eq("north station access midpoint", round(north_wp.y - north_access.y, 1), 1.5)
+    assert_eq("north charger 3m outset", round(charger.y - north_wp.y, 1), 3.0)
+    assert_eq("north charger access midpoint", round(charger_access.y - north_wp.y, 1), 1.5)
+    assert_true("charger separated from mainline", charger.y != north_wp.y)
+    center_wp = graph.nodes["WP_C_000"]
+    center_access = graph.nodes["CA_04"]
+    center_charger = graph.nodes["CH_04"]
+    assert_eq("center charger access offset x", round(center_access.x - center_wp.x, 1), -1.5)
+    assert_eq("center charger outer offset x", round(center_charger.x - center_wp.x, 1), -3.0)
+    assert_eq("center charger stays on corridor y", center_charger.y, center_wp.y)
+    center_holding = graph.nodes["HP_C_01"]
+    center_holding_access = graph.nodes["HA_C_01"]
+    center_holding_wp = graph.nodes["WP_C_080"]
+    assert_eq("center holding y offset", round(center_holding.y - center_holding_wp.y, 1), 3.0)
+    assert_eq("center holding access midpoint", round(center_holding_access.y - center_holding_wp.y, 1), 1.5)
+
+
+def test_bay_has_internal_waypoints():
+    print("\n[T58] Bay has internal waypoints")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="mid")
+    bay_nodes = [n for n in graph.nodes.values() if n.node_id.startswith("BAY_NS_320")]
+    bay_path = graph.get_path("WP_N_320", "WP_S_320")
+
+    assert_true("bay internal nodes created", len(bay_nodes) >= 4)
+    assert_true("bay path includes internal nodes", any(node_id.startswith("BAY_") for node_id in bay_path))
+
+
+def test_start_pool_is_corridor_distributed():
+    print("\n[T59] Start pool is corridor distributed")
+    from src.application.usecases.experiment_runner import _build_start_pool
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="mid")
+    pool = _build_start_pool(graph, random_seed=42)
+    pool_same = _build_start_pool(graph, random_seed=42)
+    pool_other = _build_start_pool(graph, random_seed=43)
+
+    assert_eq("same seed keeps order", pool, pool_same)
+    assert_true("different seed changes order", pool != pool_other)
+    assert_true(
+        "north corridor included early",
+        any((node.startswith("HP_N_")) or (node in {"CH_01","CH_02","CH_03"}) for node in pool[:9]),
+    )
+    assert_true(
+        "center corridor included early",
+        any((node.startswith("HP_C_")) or (node in {"CH_04","CH_05"}) for node in pool[:9]),
+    )
+    assert_true(
+        "south corridor included early",
+        any((node.startswith("HP_S_")) or (node in {"CH_06","CH_07","CH_08"}) for node in pool[:9]),
     )
 
 
@@ -1880,7 +2107,7 @@ if __name__ == "__main__":
         test_motion_model_acceleration,
         test_restart_delay_accounting,
         test_agv_pickup_dropoff_processing_time_split,
-        # Head-on / siding / bottleneck / battery / reporting regression (T45~T56)
+        # Head-on / siding / bottleneck / battery / reporting regression (T45~T58)
         test_headon_regression,
         test_invalid_type_b_siding_placement_rejected,
         test_bottleneck_edge_interpretation,
@@ -1892,6 +2119,8 @@ if __name__ == "__main__":
         test_task_generator_skips_low_battery_agv,
         test_battery_payload_drain_rate_split,
         test_report_json_schema_builder,
+        test_report_html_builder,
+        test_playback_trace_generation,
     ]
     passed = failed = 0
     for t in tests:

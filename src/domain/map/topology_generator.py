@@ -17,10 +17,12 @@ from src.domain.map.graph import Edge, MapGraph, Node, NodeRole
 # ── FAB 물리 상수 ──────────────────────────────────────────────
 FAB_WIDTH_M   = 640
 FAB_HEIGHT_M  = 120
+FAB_OUTER_OFFSET_M = 3.0
 Y_NORTH  = 100
 Y_CENTER = 60
 Y_SOUTH  = 20
 BAY_X    = [0, 160, 320, 480, 640]
+HOLDING_X = [80, 240, 400, 560]
 WP_STEP  = 40
 WP_X     = list(range(0, FAB_WIDTH_M + 1, WP_STEP))
 STATION_X  = list(range(0, FAB_WIDTH_M + 1, 80))
@@ -32,6 +34,8 @@ SPEED_STATION_MS = 0.5
 SPEED_CHARGER_MS = 0.3
 SPEED_CREEP_MS   = 0.3
 LANE_OFFSET = 2
+ACCESS_LANE_STEP_M = 1.5
+FACILITY_OFFSET_M = 3.0
 WIDTH_SINGLE_LANE_M = 1.5
 WIDTH_NARROW_CORRIDOR_M = 2.0
 WIDTH_WIDE_CORRIDOR_M = 3.0
@@ -111,6 +115,7 @@ class MapTopologyGenerator:
         self._add_bays(g)
         self._add_stations(g)
         self._add_chargers(g)
+        self._add_holding_points(g)
         return g
 
     # ── Type B ────────────────────────────────────────────────
@@ -124,6 +129,7 @@ class MapTopologyGenerator:
         self._add_bays(g)
         self._add_stations(g)
         self._add_chargers(g)
+        self._add_holding_points(g)
         return g
 
     # ── Type C: 2차선 단방향 ───────────────────────────────────
@@ -150,6 +156,7 @@ class MapTopologyGenerator:
         self._add_bays(g, two_lane=True)
         self._add_stations(g, two_lane=True)
         self._add_chargers(g, two_lane=True)
+        self._add_holding_points(g, two_lane=True)
         return g
 
     # ── Type D: 2차선 양방향 (L1: 동→서, L2: 서→동 완전 분리) ──
@@ -177,6 +184,7 @@ class MapTopologyGenerator:
         self._add_bays(g, two_lane=True)
         self._add_stations(g, two_lane=True)
         self._add_chargers(g, two_lane=True)
+        self._add_holding_points(g, two_lane=True)
         return g
 
     # ── Type E: 1차선 양방향 크리프 ───────────────────────────
@@ -193,6 +201,7 @@ class MapTopologyGenerator:
         self._add_bays(g)
         self._add_stations(g)
         self._add_chargers(g)
+        self._add_holding_points(g)
         return g
 
     # ── Invariant 검증 ─────────────────────────────────────────
@@ -340,23 +349,44 @@ class MapTopologyGenerator:
 
             dir_label = "NS" if north_to_south else "SN"
             if north_to_south:
-                g._add_edge(Edge(edge_id=f"e_bay_{dir_label}_{bx:03d}_nc",
-                                 start_node_id=n_nid, end_node_id=c_nid,
-                                 bidirectional=False, max_speed=SPEED_BAY_MS,
-                                 corridor="bay"))
-                g._add_edge(Edge(edge_id=f"e_bay_{dir_label}_{bx:03d}_cs",
-                                 start_node_id=c_nid, end_node_id=s_nid,
-                                 bidirectional=False, max_speed=SPEED_BAY_MS,
-                                 corridor="bay"))
+                self._add_bay_path(g, [n_nid, c_nid, s_nid], bx, dir_label)
             else:
-                g._add_edge(Edge(edge_id=f"e_bay_{dir_label}_{bx:03d}_sc",
-                                 start_node_id=s_nid, end_node_id=c_nid,
-                                 bidirectional=False, max_speed=SPEED_BAY_MS,
-                                 corridor="bay"))
-                g._add_edge(Edge(edge_id=f"e_bay_{dir_label}_{bx:03d}_cn",
-                                 start_node_id=c_nid, end_node_id=n_nid,
-                                 bidirectional=False, max_speed=SPEED_BAY_MS,
-                                 corridor="bay"))
+                self._add_bay_path(g, [s_nid, c_nid, n_nid], bx, dir_label)
+
+    def _add_bay_path(
+        self,
+        g: MapGraph,
+        endpoints: list[str],
+        bay_x: int,
+        dir_label: str,
+    ) -> None:
+        path = [endpoints[0]]
+        for seg_idx, (src_id, dst_id) in enumerate(zip(endpoints, endpoints[1:]), start=1):
+            src = g.nodes[src_id]
+            dst = g.nodes[dst_id]
+            y_step = 10 if dst.y > src.y else -10
+            intermediate_y = list(range(int(src.y + y_step), int(dst.y), y_step))
+            for hop_idx, y in enumerate(intermediate_y, start=1):
+                nid = f"BAY_{dir_label}_{bay_x:03d}_{seg_idx}_{hop_idx}"
+                g._add_node(Node(
+                    node_id=nid,
+                    x=float(bay_x),
+                    y=float(y),
+                    role=NodeRole.STANDARD,
+                ))
+                path.append(nid)
+            path.append(dst_id)
+
+        for idx, (src_id, dst_id) in enumerate(zip(path, path[1:]), start=1):
+            g._add_edge(Edge(
+                edge_id=f"e_bay_{dir_label}_{bay_x:03d}_{idx:02d}",
+                start_node_id=src_id,
+                end_node_id=dst_id,
+                bidirectional=False,
+                max_speed=SPEED_BAY_MS,
+                corridor="bay",
+                width_m=WIDTH_BAY_M,
+            ))
 
     # ── 공통: 스테이션 ─────────────────────────────────────────
     def _add_stations(self, g: MapGraph, two_lane: bool = False) -> None:
@@ -369,52 +399,60 @@ class MapTopologyGenerator:
             if wp not in g.nodes:
                 continue
             nid = f"ST_N_{sid:02d}"
-            g._add_node(Node(node_id=nid, x=float(x), y=88.0,
-                             role=NodeRole.WORK, is_parking_spot=True))
-            g._add_edge(Edge(edge_id=f"e_st_n_{sid:02d}", start_node_id=wp,
-                             end_node_id=nid, bidirectional=True,
-                             max_speed=SPEED_STATION_MS, access_type="station_access"))
-            # 2차선: L2 레인에서도 직접 접근 가능하도록 추가 엣지
-            if two_lane:
-                wp_l2 = f"WP_NL2_{x:03d}"
-                if wp_l2 in g.nodes:
-                    g._add_edge(Edge(edge_id=f"e_st_n_{sid:02d}_l2", start_node_id=wp_l2,
-                                     end_node_id=nid, bidirectional=True,
-                                     max_speed=SPEED_STATION_MS, access_type="station_access"))
+            self._add_access_lane(
+                g,
+                source_wp_ids=[wp] + ([f"WP_NL2_{x:03d}"] if two_lane else []),
+                access_node_id=f"SA_N_{sid:02d}",
+                facility_node_id=nid,
+                access_x=float(x),
+                facility_x=float(x),
+                access_y=Y_NORTH - ACCESS_LANE_STEP_M,
+                facility_y=Y_NORTH - FACILITY_OFFSET_M,
+                access_type="station_access",
+                facility_role=NodeRole.WORK,
+                facility_flags={"is_parking_spot": True},
+                speed=SPEED_STATION_MS,
+            )
             sid += 1
         for bx in BAY_X:
             wp = f"WP_{c_tag}_{bx:03d}"
             if wp not in g.nodes:
                 continue
             nid = f"ST_C_{sid:02d}"
-            g._add_node(Node(node_id=nid, x=float(bx), y=72.0,
-                             role=NodeRole.WORK, is_parking_spot=True))
-            g._add_edge(Edge(edge_id=f"e_st_c_{sid:02d}", start_node_id=wp,
-                             end_node_id=nid, bidirectional=True,
-                             max_speed=SPEED_STATION_MS, access_type="station_access"))
-            if two_lane:
-                wp_l2 = f"WP_CL2_{bx:03d}"
-                if wp_l2 in g.nodes:
-                    g._add_edge(Edge(edge_id=f"e_st_c_{sid:02d}_l2", start_node_id=wp_l2,
-                                     end_node_id=nid, bidirectional=True,
-                                     max_speed=SPEED_STATION_MS, access_type="station_access"))
+            self._add_access_lane(
+                g,
+                source_wp_ids=[wp] + ([f"WP_CL2_{bx:03d}"] if two_lane else []),
+                access_node_id=f"SA_C_{sid:02d}",
+                facility_node_id=nid,
+                access_x=float(bx),
+                facility_x=float(bx),
+                access_y=Y_CENTER + ACCESS_LANE_STEP_M,
+                facility_y=Y_CENTER + FACILITY_OFFSET_M,
+                access_type="station_access",
+                facility_role=NodeRole.WORK,
+                facility_flags={"is_parking_spot": True},
+                speed=SPEED_STATION_MS,
+            )
             sid += 1
         for x in STATION_X:
             wp = f"WP_{s_tag}_{x:03d}"
             if wp not in g.nodes:
                 continue
             nid = f"ST_S_{sid:02d}"
-            g._add_node(Node(node_id=nid, x=float(x), y=32.0,
-                             role=NodeRole.WORK, is_parking_spot=True))
-            g._add_edge(Edge(edge_id=f"e_st_s_{sid:02d}", start_node_id=wp,
-                             end_node_id=nid, bidirectional=True,
-                             max_speed=SPEED_STATION_MS, access_type="station_access"))
-            if two_lane:
-                wp_l2 = f"WP_SL2_{x:03d}"
-                if wp_l2 in g.nodes:
-                    g._add_edge(Edge(edge_id=f"e_st_s_{sid:02d}_l2", start_node_id=wp_l2,
-                                     end_node_id=nid, bidirectional=True,
-                                     max_speed=SPEED_STATION_MS, access_type="station_access"))
+            self._add_access_lane(
+                g,
+                source_wp_ids=[wp] + ([f"WP_SL2_{x:03d}"] if two_lane else []),
+                access_node_id=f"SA_S_{sid:02d}",
+                facility_node_id=nid,
+                access_x=float(x),
+                facility_x=float(x),
+                access_y=Y_SOUTH + ACCESS_LANE_STEP_M,
+                facility_y=Y_SOUTH + FACILITY_OFFSET_M,
+                access_type="station_access",
+                facility_role=NodeRole.WORK,
+                facility_flags={"is_parking_spot": True},
+                speed=SPEED_STATION_MS,
+            )
             sid += 1
 
     # ── 공통: 충전소 ───────────────────────────────────────────
@@ -436,20 +474,161 @@ class MapTopologyGenerator:
             wp = f"WP_{tag}_{x:03d}"
             if wp not in g.nodes:
                 continue
-            g._add_node(Node(node_id=cid, x=float(x), y=float(y),
-                             role=NodeRole.CHARGER, is_charger=True,
-                             is_holding_point=True))
-            g._add_edge(Edge(edge_id=f"e_{cid.lower()}", start_node_id=wp,
-                             end_node_id=cid, bidirectional=True,
-                             max_speed=SPEED_CHARGER_MS, access_type="charger_access"))
-            # 2차선: L2 레인에서도 충전소 직접 접근 가능하도록 추가 엣지
-            if two_lane:
-                l2_tag = tag.replace("L1", "L2")
-                wp_l2 = f"WP_{l2_tag}_{x:03d}"
-                if wp_l2 in g.nodes:
-                    g._add_edge(Edge(edge_id=f"e_{cid.lower()}_l2", start_node_id=wp_l2,
-                                     end_node_id=cid, bidirectional=True,
-                                     max_speed=SPEED_CHARGER_MS, access_type="charger_access"))
+            if y == Y_NORTH:
+                access_y = y + ACCESS_LANE_STEP_M
+                facility_y = y + FACILITY_OFFSET_M
+            elif y == Y_SOUTH:
+                access_y = y - ACCESS_LANE_STEP_M
+                facility_y = y - FACILITY_OFFSET_M
+            else:
+                edge_x = 0.0 if x <= FAB_WIDTH_M / 2.0 else float(FAB_WIDTH_M)
+                access_x = edge_x + ACCESS_LANE_STEP_M if edge_x > 0.0 else -ACCESS_LANE_STEP_M
+                facility_x = edge_x + FAB_OUTER_OFFSET_M if edge_x > 0.0 else -FAB_OUTER_OFFSET_M
+                l2_tag = tag.replace("L1", "L2") if two_lane else None
+                self._add_access_lane(
+                    g,
+                    source_wp_ids=[wp] + ([f"WP_{l2_tag}_{x:03d}"] if l2_tag else []),
+                    access_node_id=f"CA_{cid.split('_')[-1]}",
+                    facility_node_id=cid,
+                    access_x=float(access_x),
+                    facility_x=float(facility_x),
+                    access_y=float(y),
+                    facility_y=float(y),
+                    access_type="charger_access",
+                    facility_role=NodeRole.CHARGER,
+                    facility_flags={"is_charger": True, "is_holding_point": True},
+                    speed=SPEED_CHARGER_MS,
+                )
+                continue
+            l2_tag = tag.replace("L1", "L2") if two_lane else None
+            self._add_access_lane(
+                g,
+                source_wp_ids=[wp] + ([f"WP_{l2_tag}_{x:03d}"] if l2_tag else []),
+                access_node_id=f"CA_{cid.split('_')[-1]}",
+                facility_node_id=cid,
+                access_x=float(x),
+                facility_x=float(x),
+                access_y=access_y,
+                facility_y=facility_y,
+                access_type="charger_access",
+                facility_role=NodeRole.CHARGER,
+                facility_flags={"is_charger": True, "is_holding_point": True},
+                speed=SPEED_CHARGER_MS,
+            )
+
+    def _add_holding_points(self, g: MapGraph, two_lane: bool = False) -> None:
+        n_tag = "NL1" if two_lane else "N"
+        c_tag = "CL1" if two_lane else "C"
+        s_tag = "SL1" if two_lane else "S"
+        hid = 1
+        for x in HOLDING_X:
+            # north corridor: fab 바깥 상단
+            wp_n = f"WP_{n_tag}_{x:03d}"
+            if wp_n in g.nodes:
+                self._add_access_lane(
+                    g,
+                    source_wp_ids=[wp_n] + ([f"WP_NL2_{x:03d}"] if two_lane else []),
+                    access_node_id=f"HA_N_{hid:02d}",
+                    facility_node_id=f"HP_N_{hid:02d}",
+                    access_x=float(x),
+                    facility_x=float(x),
+                    access_y=Y_NORTH + ACCESS_LANE_STEP_M,
+                    facility_y=Y_NORTH + FACILITY_OFFSET_M,
+                    access_type="holding_access",
+                    facility_role=NodeRole.STANDARD,
+                    facility_flags={"is_holding_point": True},
+                    speed=SPEED_STATION_MS,
+                )
+            # center corridor: bay 축과 분리되게 상단 측면
+            wp_c = f"WP_{c_tag}_{x:03d}"
+            if wp_c in g.nodes:
+                self._add_access_lane(
+                    g,
+                    source_wp_ids=[wp_c] + ([f"WP_CL2_{x:03d}"] if two_lane else []),
+                    access_node_id=f"HA_C_{hid:02d}",
+                    facility_node_id=f"HP_C_{hid:02d}",
+                    access_x=float(x),
+                    facility_x=float(x),
+                    access_y=Y_CENTER + ACCESS_LANE_STEP_M,
+                    facility_y=Y_CENTER + FACILITY_OFFSET_M,
+                    access_type="holding_access",
+                    facility_role=NodeRole.STANDARD,
+                    facility_flags={"is_holding_point": True},
+                    speed=SPEED_STATION_MS,
+                )
+            # south corridor: fab 바깥 하단
+            wp_s = f"WP_{s_tag}_{x:03d}"
+            if wp_s in g.nodes:
+                self._add_access_lane(
+                    g,
+                    source_wp_ids=[wp_s] + ([f"WP_SL2_{x:03d}"] if two_lane else []),
+                    access_node_id=f"HA_S_{hid:02d}",
+                    facility_node_id=f"HP_S_{hid:02d}",
+                    access_x=float(x),
+                    facility_x=float(x),
+                    access_y=Y_SOUTH - ACCESS_LANE_STEP_M,
+                    facility_y=Y_SOUTH - FACILITY_OFFSET_M,
+                    access_type="holding_access",
+                    facility_role=NodeRole.STANDARD,
+                    facility_flags={"is_holding_point": True},
+                    speed=SPEED_STATION_MS,
+                )
+            hid += 1
+
+    def _add_access_lane(
+        self,
+        g: MapGraph,
+        source_wp_ids: list[str],
+        access_node_id: str,
+        facility_node_id: str,
+        access_x: float,
+        facility_x: float,
+        access_y: float,
+        facility_y: float,
+        access_type: str,
+        facility_role: NodeRole,
+        facility_flags: dict[str, bool],
+        speed: float,
+    ) -> None:
+        g._add_node(Node(
+            node_id=access_node_id,
+            x=float(access_x),
+            y=float(access_y),
+            role=NodeRole.APPROACH,
+        ))
+        g._add_node(Node(
+            node_id=facility_node_id,
+            x=float(facility_x),
+            y=float(facility_y),
+            role=facility_role,
+            is_parking_spot=facility_flags.get("is_parking_spot", False),
+            is_charger=facility_flags.get("is_charger", False),
+            is_holding_point=facility_flags.get("is_holding_point", False),
+        ))
+
+        unique_sources = []
+        for wp_id in source_wp_ids:
+            if wp_id in g.nodes and wp_id not in unique_sources:
+                unique_sources.append(wp_id)
+        for src_idx, wp_id in enumerate(unique_sources, start=1):
+            g._add_edge(Edge(
+                edge_id=f"e_{access_type}_{facility_node_id.lower()}_{src_idx}",
+                start_node_id=wp_id,
+                end_node_id=access_node_id,
+                bidirectional=True,
+                max_speed=speed,
+                width_m=WIDTH_ACCESS_M,
+                access_type=access_type,
+            ))
+        g._add_edge(Edge(
+            edge_id=f"e_{access_type}_{facility_node_id.lower()}_final",
+            start_node_id=access_node_id,
+            end_node_id=facility_node_id,
+            bidirectional=True,
+            max_speed=speed,
+            width_m=WIDTH_ACCESS_M,
+            access_type=access_type,
+        ))
 
     # ── Type B 전용: siding ────────────────────────────────────
     def _add_sidings(self, g: MapGraph, placement: str = "base") -> None:

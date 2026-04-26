@@ -75,6 +75,7 @@ class TimeWindowScheduler:
         # 대기 그래프 (Deadlock 감지용)
         # waiting_for[agv_id] = 점유 중인 agv_id
         self._waiting_for: dict[str, str] = {}
+        self._trace_recorder = None
 
     # ── 노드 예약 (기존 유지) ──────────────────────────────────
 
@@ -207,6 +208,7 @@ class TimeWindowScheduler:
         same_direction_headway_s: float = 0.0,
         section_key: str = "",
         section_capacity: int = 1,
+        facility_node_id: str = "",
     ) -> bool:
         """
         엣지 예약 시도.
@@ -218,6 +220,24 @@ class TimeWindowScheduler:
         reverse_key = f"{dst_id}__{src_id}"
 
         async with self._lock:
+            if facility_node_id:
+                facility_active = [
+                    r for r in self._reservations[facility_node_id]
+                    if not r.released and r.agv_id != agv_id
+                ]
+                if self._has_node_conflict(facility_active, start_time, end_time):
+                    self._congestion_counts[facility_node_id] += 1
+                    self._reserve_failure += 1
+                    if self._trace_recorder is not None:
+                        self._trace_recorder.record_event(
+                            "facility_node_conflict",
+                            start_time,
+                            agv_id=agv_id,
+                            edge_key=edge_key,
+                            node_id=facility_node_id,
+                        )
+                    return False
+
             if section_key:
                 section_active = [
                     r for r in self._section_reservations[section_key]
@@ -231,6 +251,14 @@ class TimeWindowScheduler:
                 ):
                     self._section_conflict_counts[section_key] += 1
                     self._reserve_failure += 1
+                    if self._trace_recorder is not None:
+                        self._trace_recorder.record_event(
+                            "section_conflict",
+                            start_time,
+                            agv_id=agv_id,
+                            edge_key=edge_key,
+                            section_key=section_key,
+                        )
                     return False
 
             # head-on 충돌 확인 — 역방향 활성 예약
@@ -243,6 +271,14 @@ class TimeWindowScheduler:
                 self._edge_headon_counts[edge_key] += 1
                 self._edge_congestion_counts[edge_key] += 1
                 self._reserve_failure += 1
+                if self._trace_recorder is not None:
+                    self._trace_recorder.record_event(
+                        "headon_block",
+                        start_time,
+                        agv_id=agv_id,
+                        edge_key=edge_key,
+                        reverse_edge_key=reverse_key,
+                    )
                 return False
 
             # same-direction follow-on 안전거리 확인.
@@ -258,6 +294,13 @@ class TimeWindowScheduler:
                 self._edge_followon_counts[edge_key] += 1
                 self._edge_congestion_counts[edge_key] += 1
                 self._reserve_failure += 1
+                if self._trace_recorder is not None:
+                    self._trace_recorder.record_event(
+                        "followon_block",
+                        start_time,
+                        agv_id=agv_id,
+                        edge_key=edge_key,
+                    )
                 return False
 
             # head-on 대기 중 재시도 여부 확인
@@ -280,6 +323,14 @@ class TimeWindowScheduler:
             )
             self._reserve_success += 1
             self._edge_occupancy_time[edge_key] += (end_time - start_time)
+            if self._trace_recorder is not None:
+                self._trace_recorder.record_event(
+                    "edge_reserved",
+                    start_time,
+                    agv_id=agv_id,
+                    edge_key=edge_key,
+                    end_time=round(end_time, 4),
+                )
             return True
 
     async def release_edge(self, src_id: str, dst_id: str, agv_id: str) -> None:

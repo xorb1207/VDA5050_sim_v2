@@ -1,0 +1,15 @@
+types: [B]
+agv_counts: [20]
+duration_s: 180
+task_interval_s: 5.0
+random_seeds: [42]
+demand_mode: common_demand
+demand_count: 12
+type_b_variants:
+  - name: mid_reachable
+    siding_placement: mid
+    siding_policy: reachable
+output_dir: outputs/experiments
+report_language: ko
+playback_trace_enabled: true
+playback_sample_interval_s: 0.5

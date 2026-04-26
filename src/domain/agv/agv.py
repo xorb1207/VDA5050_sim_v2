@@ -160,6 +160,12 @@ class AGV:
     def physics(self):
         return self._motion.state
 
+    def _trace(self, kind: str, sim_time: float, **payload) -> None:
+        recorder = getattr(self._graph, "_trace_recorder", None)
+        if recorder is None:
+            return
+        recorder.record_event(kind, sim_time, agv_id=self.agv_id, **payload)
+
     async def start(self) -> None:
         base = f"uagv/v2/NEXT/{self.agv_id}"
         await self._bus.subscribe(f"{base}/order",          self._on_order_received)
@@ -193,6 +199,13 @@ class AGV:
         self._payload_loaded = False
         if self._path and self._fsm.state == AGVState.IDLE:
             dispatch_time = float(payload.get("dispatchTimeS", 0.0))
+            self._trace(
+                "order_received",
+                dispatch_time,
+                demand_id=self._current_demand_id,
+                pickup_node=self._current_pickup_node_id,
+                dropoff_node=self._current_dropoff_node_id,
+            )
             await self._pre_reserve_itinerary(dispatch_time)
             await self._navigate_to_next_node(sim_time=dispatch_time)
 
@@ -216,6 +229,7 @@ class AGV:
 
         if s == AGVState.IDLE:
             await self._maybe_enter_charging_flow(sim_time)
+            await self._maybe_return_to_holding_point(sim_time)
 
         elif s == AGVState.NAVIGATING:
             await self._tick_navigating(dt, sim_time)
@@ -277,6 +291,12 @@ class AGV:
                 self._charge_request_active = False
                 self._charging_goal_node_id = None
                 self._fsm.force(AGVState.IDLE)
+                self._trace(
+                    "charging_complete",
+                    sim_time,
+                    battery_pct=round(self._battery_pct, 2),
+                    node_id=self.current_node_id,
+                )
 
         self._min_battery_pct = min(self._min_battery_pct, self._battery_pct)
         self._apply_battery_drain(dt)
@@ -319,6 +339,12 @@ class AGV:
             prev = self.current_node_id
             self.current_node_id = self.target_node_id
             self.target_node_id  = None
+            self._trace(
+                "edge_exit",
+                sim_time,
+                edge_key=f"{prev}__{self.current_node_id}" if prev and self.current_node_id else "",
+                node_id=self.current_node_id,
+            )
 
             hold_charge_edge = (
                 prev is not None
@@ -337,12 +363,26 @@ class AGV:
             self.collision_retry_count = 0  # 도착 시 retry 초기화
 
             if self._charge_request_active and self._is_charger_node(self.current_node_id):
+                await self._sched.reserve(
+                    self.current_node_id,
+                    self.agv_id,
+                    sim_time,
+                    float("inf"),
+                )
                 self._charging_sessions += 1
                 self._fsm.force(AGVState.CHARGING)
+                self._trace("charging_start", sim_time, node_id=self.current_node_id)
             elif t.role.value in ("work", "station") or t.is_parking_spot:
+                await self._sched.reserve(
+                    self.current_node_id,
+                    self.agv_id,
+                    sim_time,
+                    float("inf"),
+                )
                 self._processing_node_id = self.current_node_id
                 self._process_remaining = self._processing_time_for_current_node()
                 self._fsm.force(AGVState.PROCESSING)
+                self._trace("processing_start", sim_time, node_id=self.current_node_id)
             else:
                 asyncio.create_task(self._navigate_to_next_node(sim_time))
 
@@ -372,6 +412,13 @@ class AGV:
                 "simTime": round(sim_time, 4),
             },
         )
+        self._trace(
+            "demand_completed",
+            sim_time,
+            demand_id=self._current_demand_id,
+            pickup_node=self._current_pickup_node_id,
+            dropoff_node=self._current_dropoff_node_id,
+        )
 
     def _clear_demand_context(self) -> None:
         self._current_demand_id = None
@@ -397,6 +444,13 @@ class AGV:
         return random.uniform(30.0, 120.0)
 
     async def _navigate_to_next_node(self, sim_time: float) -> None:
+        while (
+            self.current_node_id is not None
+            and self._path_index < len(self._path)
+            and self._path[self._path_index] == self.current_node_id
+        ):
+            self._path_index += 1
+
         if self._path_index >= len(self._path):
             self._fsm.force(AGVState.IDLE)
             return
@@ -439,6 +493,17 @@ class AGV:
             pass
 
         edge     = self._find_edge(src, dst)
+        if edge is None:
+            self._trace(
+                "invalid_edge_transition",
+                sim_time,
+                edge_key=f"{src}__{dst}",
+            )
+            self._sched.clear_waiting(self.agv_id)
+            self._pending_edge_src = None
+            self._pending_edge_dst = None
+            self._fsm.force(AGVState.IDLE)
+            return
         dist     = edge.distance if edge is not None else (
             self._graph._calc_distance(src, dst) if (src in self._graph.nodes and dst in self._graph.nodes) else 1.0
         )
@@ -454,6 +519,11 @@ class AGV:
                 return
             ok = True
         else:
+            facility_node_id = (
+                self._access_facility_node_id(edge)
+                if edge is not None and edge.access_type
+                else ""
+            )
             ok = await self._sched.reserve_edge(
                 src, dst, self.agv_id,
                 start_time=sim_time,
@@ -463,6 +533,7 @@ class AGV:
                 section_capacity=(
                     self._critical_section_capacity(edge) if edge is not None else 1
                 ),
+                facility_node_id=facility_node_id,
             )
 
         if ok:
@@ -476,11 +547,19 @@ class AGV:
             self.target_node_id  = dst
             self._path_index    += 1
             self._fsm.force(AGVState.NAVIGATING)
+            self._trace("edge_enter", sim_time, edge_key=f"{src}__{dst}", src=src, dst=dst)
         else:
             self.collision_retry_count += 1
             blocking = self._find_blocking_agv(src, dst, sim_time)
             if blocking:
                 self._sched.register_waiting(self.agv_id, blocking)
+            self._trace(
+                "wait_start",
+                sim_time,
+                edge_key=f"{src}__{dst}",
+                blocking_agv=blocking,
+                retry_count=self.collision_retry_count,
+            )
 
             # reroute 임계치 확인
             threshold = REROUTE_THRESHOLD_BY_TYPE.get(topology_type, REROUTE_THRESHOLD)
@@ -495,6 +574,12 @@ class AGV:
                         blocked_edge=(src, dst),
                     )
                     if siding:
+                        self._trace(
+                            "reroute_via_siding",
+                            sim_time,
+                            edge_key=f"{src}__{dst}",
+                            siding_id=siding,
+                        )
                         self._reroute_via_siding(siding, sim_time)
                         return
 
@@ -549,6 +634,12 @@ class AGV:
         self._path_index = 0
         self._pending_edge_src = None
         self._pending_edge_dst = None
+        self._trace(
+            "charge_request",
+            sim_time,
+            battery_pct=round(self._battery_pct, 2),
+            charger_node_id=self._charging_goal_node_id,
+        )
         await self._navigate_to_next_node(sim_time)
 
     def _find_nearest_charger_path(self, start_node_id: str) -> list[str]:
@@ -568,6 +659,29 @@ class AGV:
                 best_distance = distance
                 best_path = path
         return best_path
+
+    async def _maybe_return_to_holding_point(self, sim_time: float) -> None:
+        if self.state != AGVState.IDLE or not self.current_node_id:
+            return
+        if self._current_demand_id is not None or self._charge_request_active:
+            return
+        if self._is_holding_node(self.current_node_id) or self._is_charger_node(self.current_node_id):
+            return
+
+        holding_path = self._find_nearest_holding_path(self.current_node_id)
+        if not holding_path or len(holding_path) < 2:
+            return
+
+        self._path = holding_path
+        self._path_index = 0
+        self._pending_edge_src = None
+        self._pending_edge_dst = None
+        self._trace(
+            "return_to_holding",
+            sim_time,
+            holding_node_id=holding_path[-1],
+        )
+        await self._navigate_to_next_node(sim_time)
 
     def is_available_for_dispatch(self) -> bool:
         if self.state != AGVState.IDLE or not self.current_node_id:
@@ -604,6 +718,34 @@ class AGV:
         node = self._graph.nodes.get(node_id)
         return bool(node and (node.is_charger or node.role == NodeRole.CHARGER))
 
+    def _is_holding_node(self, node_id: str) -> bool:
+        node = self._graph.nodes.get(node_id)
+        return bool(node and node.is_holding_point and not node.is_charger)
+
+    def _find_nearest_holding_path(self, start_node_id: str) -> list[str]:
+        best_path: list[str] = []
+        best_distance = float("inf")
+        holding_ids = [
+            node_id
+            for node_id, node in self._graph.nodes.items()
+            if node.is_holding_point and not node.is_charger
+        ]
+        for holding_id in holding_ids:
+            active = [
+                r for r in self._sched._reservations.get(holding_id, [])
+                if not r.released and r.agv_id != self.agv_id
+            ]
+            if active:
+                continue
+            path = self._graph.get_path(start_node_id, holding_id)
+            if not path or len(path) < 2:
+                continue
+            distance = self._path_distance(path)
+            if distance < best_distance:
+                best_distance = distance
+                best_path = path
+        return best_path
+
     def _tick_restart_delay(self, dt: float) -> bool:
         if self._restart_delay_remaining <= 0.0:
             return False
@@ -637,6 +779,8 @@ class AGV:
         best_sid: Optional[str] = None
         best_distance = float("inf")
         best_hops = float("inf")
+        best_same_corridor = False
+        preferred_corridor = self._node_corridor_group(near_node)
 
         for sid, node in self._graph.nodes.items():
             if node.role != NodeRole.SIDING:
@@ -653,6 +797,8 @@ class AGV:
             )
             if not path_to_siding or len(path_to_siding) < 2:
                 continue
+            if self._path_uses_bay_edge(path_to_siding):
+                continue
 
             tail = self._graph.get_path(sid, goal_node)
             if not tail or len(tail) < 2:
@@ -660,12 +806,20 @@ class AGV:
 
             distance = self._path_distance(path_to_siding)
             hops = len(path_to_siding)
-            if distance < best_distance or (
-                distance == best_distance and hops < best_hops
+            same_corridor = self._node_corridor_group(sid) == preferred_corridor
+            if (
+                same_corridor and not best_same_corridor
+            ) or (
+                same_corridor == best_same_corridor and (
+                    distance < best_distance or (
+                        distance == best_distance and hops < best_hops
+                    )
+                )
             ):
                 best_sid = sid
                 best_distance = distance
                 best_hops = hops
+                best_same_corridor = same_corridor
 
         return best_sid
 
@@ -702,17 +856,52 @@ class AGV:
             total += edge.distance
         return total
 
+    def _path_uses_bay_edge(self, node_ids: list[str]) -> bool:
+        for src, dst in zip(node_ids, node_ids[1:]):
+            edge = self._find_edge(src, dst)
+            if edge is None:
+                return True
+            if edge.corridor == "bay":
+                return True
+        return False
+
+    def _node_corridor_group(self, node_id: Optional[str]) -> str:
+        if not node_id:
+            return ""
+        parts = node_id.split("_")
+        if len(parts) < 2:
+            return ""
+        token = parts[1]
+        if token and token[0] in ("N", "C", "S"):
+            return token[0]
+        return ""
+
     def _reroute_via_siding(self, siding_id: str, sim_time: float) -> None:
         """경로에 siding을 중간 경유지로 삽입."""
-        if self._path_index < len(self._path):
+        if self.current_node_id and self._path_index < len(self._path):
             goal = self._path[-1]
+            path_to_siding = self._graph.get_path(self.current_node_id, siding_id)
             # siding → goal 경로
             tail = self._graph.get_path(siding_id, goal)
-            if tail:
-                self._path = self._path[:self._path_index] + [siding_id] + tail[1:]
+            if (
+                path_to_siding
+                and len(path_to_siding) >= 2
+                and tail
+                and len(tail) >= 2
+            ):
+                prefix = self._path[:self._path_index]
+                rebuilt = prefix + path_to_siding[1:] + tail[1:]
+                deduped: list[str] = []
+                for node_id in rebuilt:
+                    if not deduped or deduped[-1] != node_id:
+                        deduped.append(node_id)
+                self._path = deduped
+                self._path_index = len(prefix)
                 self.collision_retry_count = 0
+                self._pending_edge_src = None
                 self._pending_edge_dst = siding_id
                 self._fsm.force(AGVState.WAITING_RESERVATION)
+                self._trace("reroute_siding_applied", sim_time, siding_id=siding_id)
 
     async def _reroute(
         self,
@@ -740,9 +929,20 @@ class AGV:
             self.collision_retry_count = 0
             self._pending_edge_src = None
             self._pending_edge_dst = None
+            self._trace(
+                "reroute",
+                sim_time,
+                blocked_edge=f"{blocked_edge[0]}__{blocked_edge[1]}" if blocked_edge else "",
+                new_path=new_path,
+            )
             await self._navigate_to_next_node(sim_time)
         else:
             self._fsm.force(AGVState.IDLE)
+            self._trace(
+                "reroute_failed",
+                sim_time,
+                blocked_edge=f"{blocked_edge[0]}__{blocked_edge[1]}" if blocked_edge else "",
+            )
 
     async def _pre_reserve_itinerary(self, start_time: float) -> bool:
         segments = self._build_itinerary_segments(start_time)
@@ -880,6 +1080,26 @@ class AGV:
                 node.role == NodeRole.CHARGER or node.is_charger
             ):
                 return node_id
+            if edge.access_type == "holding_access" and node.is_holding_point and not node.is_charger:
+                return node_id
+        for node_id in (edge.start_node_id, edge.end_node_id):
+            for next_edge_id in self._graph._out_edges.get(node_id, []):
+                next_edge = self._graph.edges.get(next_edge_id)
+                if not next_edge or next_edge.access_type != edge.access_type:
+                    continue
+                next_node = self._graph.nodes.get(next_edge.end_node_id)
+                if not next_node:
+                    continue
+                if edge.access_type == "station_access" and (
+                    next_node.role == NodeRole.WORK or next_node.is_parking_spot
+                ):
+                    return next_node.node_id
+                if edge.access_type == "charger_access" and (
+                    next_node.role == NodeRole.CHARGER or next_node.is_charger
+                ):
+                    return next_node.node_id
+                if edge.access_type == "holding_access" and next_node.is_holding_point and not next_node.is_charger:
+                    return next_node.node_id
         return self._undirected_edge_key(edge)
 
     @staticmethod

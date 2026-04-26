@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from src.domain.reservation.scheduler import TimeWindowScheduler
     from src.application.scenario.task_generator import TaskGenerator
     from src.domain.policy.traffic_policy import TrafficPolicy
+    from src.analytics.playback_trace import PlaybackTraceRecorder
 
 # Deadlock 감지 주기 (초)
 DEADLOCK_CHECK_INTERVAL_S: float = 5.0
@@ -28,11 +29,13 @@ class SimulationEngine:
         scheduler: TimeWindowScheduler,
         task_generator: Optional[TaskGenerator] = None,
         policy: Optional[TrafficPolicy] = None,
+        trace_recorder: Optional["PlaybackTraceRecorder"] = None,
     ) -> None:
         self.graph     = graph
         self.scheduler = scheduler
         self.task_generator = task_generator
         self.policy    = policy
+        self.trace_recorder = trace_recorder
         self.agvs:     dict[str, AGV] = {}
         self.sim_time: float = 0.0
         self._running: bool  = False
@@ -42,6 +45,9 @@ class SimulationEngine:
 
         if policy and policy.lane_mode == "one_way":
             self._apply_one_way(graph)
+        if self.trace_recorder is not None:
+            setattr(self.scheduler, "_trace_recorder", self.trace_recorder)
+            setattr(self.graph, "_trace_recorder", self.trace_recorder)
 
     @staticmethod
     def _apply_one_way(graph: MapGraph) -> None:
@@ -82,6 +88,8 @@ class SimulationEngine:
         if self.task_generator:
             coros.append(self.task_generator.step(self.sim_time, self.agvs))
         await asyncio.gather(*coros)
+        if self.trace_recorder is not None:
+            self.trace_recorder.sample(self.sim_time, self.agvs, self.scheduler)
 
     async def _check_and_resolve_deadlocks(self) -> None:
         """
@@ -94,6 +102,13 @@ class SimulationEngine:
             victim_id = self.scheduler.resolve_deadlock(cycle)
             victim = self.agvs.get(victim_id)
             if victim:
+                if self.trace_recorder is not None:
+                    self.trace_recorder.record_event(
+                        "deadlock_resolved",
+                        self.sim_time,
+                        agv_id=victim_id,
+                        cycle=cycle,
+                    )
                 # victim AGV 강제 재계획
                 self.scheduler.clear_waiting(victim_id)
                 asyncio.create_task(victim._reroute(self.sim_time))

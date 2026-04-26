@@ -36,6 +36,53 @@ from src.application.engine.simulation_engine import SimulationEngine
 from src.application.scenario.task_generator import TaskGenerator
 from src.adapters.bus.adapters import LocalMemoryBus
 from src.domain.agv.agv import AGV
+from src.analytics.playback_trace import PlaybackTraceRecorder, build_playback_html
+
+
+def _interleave_groups(groups: list[list[str]]) -> list[str]:
+    merged: list[str] = []
+    max_len = max((len(group) for group in groups), default=0)
+    for idx in range(max_len):
+        for group in groups:
+            if idx < len(group):
+                merged.append(group[idx])
+    return merged
+
+
+def _build_start_pool(graph: MapGraph, random_seed: int | None = None) -> list[str]:
+    chargers = sorted([n.node_id for n in graph.get_chargers()])
+    holding_points = sorted([
+        n.node_id
+        for n in graph.get_holding_points()
+        if not n.is_charger
+    ])
+    charger_groups = [
+        [nid for nid in chargers if nid in ("CH_01", "CH_02", "CH_03")],
+        [nid for nid in chargers if nid in ("CH_04", "CH_05")],
+        [nid for nid in chargers if nid in ("CH_06", "CH_07", "CH_08")],
+    ]
+    holding_groups = [
+        sorted(
+            nid for nid in holding_points if nid.startswith("HP_N_")
+        ),
+        sorted(
+            nid for nid in holding_points if nid.startswith("HP_C_")
+        ),
+        sorted(
+            nid for nid in holding_points if nid.startswith("HP_S_")
+        ),
+    ]
+    pool = _interleave_groups(charger_groups) + _interleave_groups(holding_groups)
+    seen: set[str] = set()
+    ordered_unique: list[str] = []
+    for node_id in pool:
+        if node_id in graph.nodes and node_id not in seen:
+            seen.add(node_id)
+            ordered_unique.append(node_id)
+    if random_seed is not None:
+        rng = random.Random(random_seed)
+        rng.shuffle(ordered_unique)
+    return ordered_unique
 
 
 # ── 실험 파라미터 ──────────────────────────────────────────────
@@ -67,6 +114,8 @@ class ExperimentConfig:
     battery_base_drain_pct_per_hour: float = 8.0
     battery_loaded_drain_pct_per_hour: float = 12.0
     report_language: str = "ko"
+    playback_trace_enabled: bool = False
+    playback_sample_interval_s: float = 0.5
 
     def __post_init__(self):
         if self.run_id is None:
@@ -127,6 +176,8 @@ class RunResult:
     sim_time_s: float               = 0.0
     wall_time_s: float              = 0.0
     error: str                      = ""
+    playback_trace_file: str        = ""
+    playback_html_file: str         = ""
 
 
 SUMMARY_COLUMNS = [
@@ -180,6 +231,8 @@ async def _run_single(
     battery_charge_rate_pct_per_s: float = 1.0,
     battery_base_drain_pct_per_hour: float = 8.0,
     battery_loaded_drain_pct_per_hour: float = 12.0,
+    playback_trace_enabled: bool = False,
+    playback_sample_interval_s: float = 0.5,
 ) -> RunResult:
     result = RunResult(
         topology_type=topology_type,
@@ -222,18 +275,22 @@ async def _run_single(
             task_interval_s=task_interval_s,
             demand_set=demand_set,
         )
+        trace_recorder = (
+            PlaybackTraceRecorder(graph, sample_interval_s=playback_sample_interval_s)
+            if playback_trace_enabled else None
+        )
 
         # Type E: graph._lane_mode 태그로 creep policy 자동 주입
         # (agv._get_effective_speed()가 graph._lane_mode를 직접 읽음)
-        engine  = SimulationEngine(graph, sched, task_generator=task_gen)
+        engine  = SimulationEngine(
+            graph,
+            sched,
+            task_generator=task_gen,
+            trace_recorder=trace_recorder,
+        )
 
-        # AGV 초기 배치 — 충전소 우선, 부족하면 웨이포인트로 채움
-        charger_nodes = [n.node_id for n in graph.get_chargers()]
-        wp_nodes = [
-            nid for nid, n in graph.nodes.items()
-            if n.role == NodeRole.STANDARD and nid.startswith("WP_")
-        ]
-        start_pool = charger_nodes + wp_nodes
+        # AGV 초기 배치 — 북/중/남 corridor를 섞어서 분산 배치
+        start_pool = _build_start_pool(graph, random_seed=random_seed)
         if not start_pool:
             raise ValueError("no start nodes available")
         start_nodes = [start_pool[i % len(start_pool)] for i in range(n_agv)]
@@ -307,6 +364,8 @@ async def _run_single(
             round(result.demands_completed / duration_s * 3600.0, 3)
             if duration_s > 0 else 0.0
         )
+        if trace_recorder is not None:
+            result.diagnostics["playback_trace"] = trace_recorder.build_trace(duration_s)
 
     except Exception as e:
         result.error = str(e)
@@ -358,6 +417,13 @@ def _build_station_access_diagnostics(graph: MapGraph) -> dict:
     start = charger_nodes[0] if charger_nodes else fallback_start
 
     for station in stations:
+        access_neighbors = {
+            e.start_node_id if e.end_node_id == station.node_id else e.end_node_id
+            for e in graph.edges.values()
+            if e.access_type == "station_access"
+            and station.node_id in (e.start_node_id, e.end_node_id)
+        }
+        cluster_node_ids = {station.node_id, *access_neighbors}
         inbound = [
             e for e in graph.edges.values()
             if e.end_node_id == station.node_id
@@ -366,14 +432,19 @@ def _build_station_access_diagnostics(graph: MapGraph) -> dict:
             e for e in graph.edges.values()
             if e.start_node_id == station.node_id
         ]
-        access_edge_counts[station.node_id] = len(inbound) + len(outbound)
+        cluster_access_edges = [
+            e for e in graph.edges.values()
+            if e.access_type == "station_access"
+            and (e.start_node_id in cluster_node_ids or e.end_node_id in cluster_node_ids)
+        ]
+        access_edge_counts[station.node_id] = len(cluster_access_edges)
         if start and not graph.get_path(start, station.node_id):
             unreachable.append(station.node_id)
         station_details.append({
             "station_id": station.node_id,
             "inbound_edges": len(inbound),
             "outbound_edges": len(outbound),
-            "access_edges": len(inbound) + len(outbound),
+            "access_edges": len(cluster_access_edges),
         })
 
     pair_failures: list[dict] = []
@@ -1245,6 +1316,404 @@ def _build_report(config: ExperimentConfig, results: list[RunResult]) -> dict:
     }
 
 
+def _build_report_html(report: dict) -> str:
+    report_json = json.dumps(report, ensure_ascii=False)
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Experiment Report</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --panel-alt: #eef2f7;
+      --text: #18202a;
+      --muted: #5a6877;
+      --border: #d7dee7;
+      --accent: #1f6feb;
+      --good: #0f9d58;
+      --warn: #c77700;
+      --bad: #c0392b;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }}
+    .page {{
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }}
+    h1, h2, h3, p {{ margin: 0; }}
+    .hero {{
+      display: grid;
+      gap: 18px;
+      padding: 24px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }}
+    .hero-top {{
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: start;
+    }}
+    .hero h1 {{
+      font-size: 28px;
+      line-height: 1.1;
+    }}
+    .eyebrow {{
+      color: var(--muted);
+      font-size: 13px;
+    }}
+    .hero-summary {{
+      display: grid;
+      gap: 8px;
+      color: var(--text);
+      line-height: 1.5;
+    }}
+    .meta-grid, .card-grid, .chart-grid {{
+      display: grid;
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .meta-grid {{
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }}
+    .card-grid {{
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }}
+    .chart-grid {{
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    }}
+    .panel {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }}
+    .panel h2 {{
+      font-size: 18px;
+      margin-bottom: 12px;
+    }}
+    .metric-kv {{
+      display: grid;
+      gap: 6px;
+      font-size: 14px;
+    }}
+    .metric-kv .label {{
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .chips {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }}
+    .chip {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+    }}
+    .chip.bad {{ color: var(--bad); }}
+    .chip.good {{ color: var(--good); }}
+    .muted {{
+      color: var(--muted);
+    }}
+    .comparison-list {{
+      display: grid;
+      gap: 12px;
+    }}
+    .comparison-item {{
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: #fbfcfe;
+    }}
+    .chart-card {{
+      display: grid;
+      gap: 10px;
+    }}
+    .chart-head {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }}
+    .legend {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    .legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .swatch {{
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }}
+    svg {{
+      width: 100%;
+      height: 240px;
+      background: #fcfdff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }}
+    .axis {{
+      stroke: #9aa7b5;
+      stroke-width: 1;
+    }}
+    .grid {{
+      stroke: #e6ebf2;
+      stroke-width: 1;
+    }}
+    .series-line {{
+      fill: none;
+      stroke-width: 2.5;
+    }}
+    .series-point {{
+      stroke: white;
+      stroke-width: 1.5;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }}
+    th, td {{
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }}
+    th {{
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+    }}
+    @media (max-width: 720px) {{
+      .page {{ padding: 12px; }}
+      .chart-grid {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow" id="eyebrow"></div>
+          <h1 id="title"></h1>
+        </div>
+        <div class="metric-kv">
+          <span class="label">Top Winner</span>
+          <strong id="winner"></strong>
+        </div>
+      </div>
+      <div class="hero-summary" id="hero-summary"></div>
+    </section>
+
+    <section class="meta-grid" id="meta-grid"></section>
+
+    <section class="panel" style="margin-top: 18px;">
+      <h2>토폴로지 요약</h2>
+      <div class="card-grid" id="topology-cards"></div>
+    </section>
+
+    <section class="panel" style="margin-top: 18px;">
+      <h2>비교 해석</h2>
+      <div class="comparison-list" id="comparison-list"></div>
+    </section>
+
+    <section class="panel" style="margin-top: 18px;">
+      <h2>시각화</h2>
+      <div class="chart-grid" id="chart-grid"></div>
+    </section>
+  </div>
+
+  <script>
+    const report = {report_json};
+    const palette = ["#1f6feb", "#0f9d58", "#c77700", "#c0392b", "#7b61ff", "#00838f"];
+
+    function byId(id) {{
+      return document.getElementById(id);
+    }}
+
+    function formatValue(value, digits = 2) {{
+      if (typeof value !== "number") return String(value);
+      return value.toFixed(digits);
+    }}
+
+    function renderMeta() {{
+      const input = report.overview.input_parameters;
+      const items = [
+        ["Demand Mode", input.demand_mode],
+        ["Duration", `${{input.duration_s}}s`],
+        ["AGV Counts", input.agv_counts.join(", ")],
+        ["Seeds", input.random_seeds.join(", ")],
+        ["Battery", input.battery.enabled ? "On" : "Off"],
+        ["Language", input.report_language],
+      ];
+      byId("meta-grid").innerHTML = items.map(([label, value]) => `
+        <div class="panel metric-kv">
+          <span class="label">${{label}}</span>
+          <strong>${{value}}</strong>
+        </div>
+      `).join("");
+    }}
+
+    function renderOverview() {{
+      byId("eyebrow").textContent = `run_id=${{report.overview.run_id}}`;
+      byId("title").textContent = "실험 결과 리포트";
+      byId("winner").textContent = report.overview.top_winner || "-";
+      byId("hero-summary").innerHTML = report.overview.summary
+        .map(line => `<div>${{line}}</div>`)
+        .join("");
+    }}
+
+    function renderTopologyCards() {{
+      const cards = report.per_topology.map((item, idx) => {{
+        const metrics = item.aggregate_metrics;
+        const strengthChips = item.strengths.map(s => `<span class="chip good">${{s}}</span>`).join("");
+        const weaknessChips = item.weaknesses.map(s => `<span class="chip bad">${{s}}</span>`).join("");
+        return `
+          <article class="panel">
+            <div class="chart-head">
+              <div>
+                <div class="eyebrow">${{item.topology_type}}</div>
+                <h3>${{item.topology_variant}}</h3>
+              </div>
+              <div class="metric-kv">
+                <span class="label">평균 순위</span>
+                <strong>${{formatValue(metrics.avg_rank, 2)}}</strong>
+              </div>
+            </div>
+            <div class="meta-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px;">
+              <div class="metric-kv"><span class="label">완료율</span><strong>${{formatValue(metrics.avg_completion_rate, 4)}}</strong></div>
+              <div class="metric-kv"><span class="label">처리량</span><strong>${{formatValue(metrics.avg_demand_throughput_per_hour, 1)}}/h</strong></div>
+              <div class="metric-kv"><span class="label">대기</span><strong>${{formatValue(metrics.avg_total_wait_time_s, 1)}}s</strong></div>
+              <div class="metric-kv"><span class="label">지배 병목</span><strong>${{item.dominant_bottleneck}}</strong></div>
+            </div>
+            <p style="margin-top: 12px; line-height: 1.5;">${{item.tradeoff_summary}}</p>
+            <p class="muted" style="margin-top: 8px;">권장 운영: ${{item.recommended_use_case}}</p>
+            <div class="chips">${{strengthChips}}${{weaknessChips}}</div>
+          </article>
+        `;
+      }});
+      byId("topology-cards").innerHTML = cards.join("");
+    }}
+
+    function renderComparisons() {{
+      byId("comparison-list").innerHTML = report.comparisons.map(item => `
+        <div class="comparison-item">
+          <div class="eyebrow">${{item.lhs}} vs ${{item.rhs}}</div>
+          <div style="margin-top: 6px; line-height: 1.6;">${{item.interpretation}}</div>
+        </div>
+      `).join("");
+    }}
+
+    function svgLineChart(title, seriesList) {{
+      const width = 640;
+      const height = 240;
+      const pad = {{ top: 20, right: 18, bottom: 28, left: 42 }};
+      const values = seriesList.flatMap(s => s.points.map(p => p.mean));
+      const xValues = [...new Set(seriesList.flatMap(s => s.points.map(p => p.agv_count)))].sort((a, b) => a - b);
+      const minY = values.length ? Math.min(...values) : 0;
+      const maxY = values.length ? Math.max(...values) : 1;
+      const ySpan = maxY - minY || 1;
+      const xSpan = Math.max(xValues.length - 1, 1);
+      function xPos(index) {{
+        return pad.left + ((width - pad.left - pad.right) * index / xSpan);
+      }}
+      function yPos(value) {{
+        return height - pad.bottom - ((value - minY) / ySpan) * (height - pad.top - pad.bottom);
+      }}
+      const grid = [0, 0.25, 0.5, 0.75, 1].map(t => {{
+        const y = pad.top + (height - pad.top - pad.bottom) * t;
+        return `<line class="grid" x1="${{pad.left}}" y1="${{y}}" x2="${{width - pad.right}}" y2="${{y}}" />`;
+      }}).join("");
+      const xAxisLabels = xValues.map((value, idx) => `
+        <text x="${{xPos(idx)}}" y="${{height - 8}}" text-anchor="middle" font-size="11" fill="#5a6877">${{value}}</text>
+      `).join("");
+      const yAxisLabels = [0, 0.25, 0.5, 0.75, 1].map(t => {{
+        const value = maxY - ySpan * t;
+        const y = pad.top + (height - pad.top - pad.bottom) * t + 4;
+        return `<text x="${{pad.left - 8}}" y="${{y}}" text-anchor="end" font-size="11" fill="#5a6877">${{formatValue(value, 1)}}</text>`;
+      }}).join("");
+      const lines = seriesList.map((series, idx) => {{
+        const color = palette[idx % palette.length];
+        const path = series.points.map((point, pointIdx) => `${{pointIdx === 0 ? "M" : "L"}} ${{xPos(xValues.indexOf(point.agv_count))}} ${{yPos(point.mean)}}`).join(" ");
+        const points = series.points.map(point => `
+          <circle class="series-point" cx="${{xPos(xValues.indexOf(point.agv_count))}}" cy="${{yPos(point.mean)}}" r="4" fill="${{color}}" />
+        `).join("");
+        return `
+          <path class="series-line" d="${{path}}" stroke="${{color}}" />
+          ${{points}}
+        `;
+      }}).join("");
+      const legend = seriesList.map((series, idx) => `
+        <span class="legend-item"><span class="swatch" style="background:${{palette[idx % palette.length]}}"></span>${{series.topology_variant}}</span>
+      `).join("");
+      return `
+        <div class="chart-card panel">
+          <div class="chart-head">
+            <h3>${{title}}</h3>
+            <div class="legend">${{legend}}</div>
+          </div>
+          <svg viewBox="0 0 ${{width}} ${{height}}" aria-label="${{title}}">
+            ${{grid}}
+            <line class="axis" x1="${{pad.left}}" y1="${{height - pad.bottom}}" x2="${{width - pad.right}}" y2="${{height - pad.bottom}}" />
+            <line class="axis" x1="${{pad.left}}" y1="${{pad.top}}" x2="${{pad.left}}" y2="${{height - pad.bottom}}" />
+            ${{xAxisLabels}}
+            ${{yAxisLabels}}
+            ${{lines}}
+          </svg>
+        </div>
+      `;
+    }}
+
+    function renderCharts() {{
+      const chartMap = [
+        ["completion_by_agv", "완료율"],
+        ["throughput_by_agv", "처리량 (demands/h)"],
+        ["wait_by_agv", "대기시간 (s)"],
+        ["headon_by_agv", "정면 교행 충돌"],
+      ];
+      byId("chart-grid").innerHTML = chartMap
+        .map(([key, title]) => svgLineChart(title, report.chart_series[key] || []))
+        .join("");
+    }}
+
+    renderOverview();
+    renderMeta();
+    renderTopologyCards();
+    renderComparisons();
+    renderCharts();
+  </script>
+</body>
+</html>
+"""
+
+
 # ── 배치 실험 러너 ─────────────────────────────────────────────
 class ExperimentRunner:
     def __init__(self, config: ExperimentConfig) -> None:
@@ -1344,6 +1813,8 @@ class ExperimentRunner:
                                 battery_charge_rate_pct_per_s=cfg.battery_charge_rate_pct_per_s,
                                 battery_base_drain_pct_per_hour=cfg.battery_base_drain_pct_per_hour,
                                 battery_loaded_drain_pct_per_hour=cfg.battery_loaded_drain_pct_per_hour,
+                                playback_trace_enabled=cfg.playback_trace_enabled,
+                                playback_sample_interval_s=cfg.playback_sample_interval_s,
                             )
                         )
                         results.append(result)
@@ -1381,6 +1852,15 @@ class ExperimentRunner:
         (d / "kpi_summary.json").write_text(
             json.dumps(asdict(r), ensure_ascii=False, indent=2)
         )
+        playback_trace = r.diagnostics.get("playback_trace")
+        if playback_trace:
+            trace_path = d / "playback_trace.json"
+            html_path = d / "playback.html"
+            trace_path.write_text(
+                json.dumps(playback_trace, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            html_path.write_text(build_playback_html(playback_trace), encoding="utf-8")
 
     def _save_summary(self, results: list[RunResult]) -> None:
         rows = [_flatten_summary_row(r) for r in results]
@@ -1424,6 +1904,8 @@ class ExperimentRunner:
         report = _build_report(self.config, results)
         report_path = self.out_dir / "report.json"
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2))
+        report_html_path = self.out_dir / "report.html"
+        report_html_path.write_text(_build_report_html(report), encoding="utf-8")
 
         print(f"\n결과 저장: {self.out_dir}/")
         print(f"  summary.csv  ({len(results)}행)")
@@ -1432,6 +1914,7 @@ class ExperimentRunner:
         print(f"  ranking.json")
         print(f"  ranking_aggregate.json")
         print(f"  report.json")
+        print(f"  report.html")
 
     def _print_matrix(self, results: list[RunResult]) -> None:
         """처리량 매트릭스 콘솔 출력."""
@@ -1573,6 +2056,8 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         battery_base_drain_pct_per_hour = float(raw.get("battery_base_drain_pct_per_hour", 8.0)),
         battery_loaded_drain_pct_per_hour = float(raw.get("battery_loaded_drain_pct_per_hour", 12.0)),
         report_language = str(raw.get("report_language", "ko")),
+        playback_trace_enabled = bool(raw.get("playback_trace_enabled", False)),
+        playback_sample_interval_s = float(raw.get("playback_sample_interval_s", 0.5)),
     )
 
 
