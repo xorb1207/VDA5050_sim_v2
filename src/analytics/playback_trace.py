@@ -495,6 +495,23 @@ def build_playback_html(trace: dict) -> str:
     let zoomPanY = 0;
     let isDragging = false;
     let dragStart = null;
+    let highlightedIncident = null; // { edge_key, agv_id, until }
+    let highlightTimer = null;
+    const HIGHLIGHT_DURATION_MS = 4500;
+    function clearHighlight() {
+      highlightedIncident = null;
+      if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null; }
+      render();
+    }
+    function setHighlight(edgeKey, agvId) {
+      highlightedIncident = {
+        edge_key: edgeKey || '',
+        agv_id: agvId || '',
+        until: Date.now() + HIGHLIGHT_DURATION_MS,
+      };
+      if (highlightTimer) clearTimeout(highlightTimer);
+      highlightTimer = setTimeout(clearHighlight, HIGHLIGHT_DURATION_MS);
+    }
 
     const minX = Math.min(...map.nodes.map(n => n.x), 0);
     const maxX = Math.max(...map.nodes.map(n => n.x), 1);
@@ -770,6 +787,24 @@ def build_playback_html(trace: dict) -> str:
               <text class="agv-label" transform="translate(${labelX} ${labelY}) scale(${labelScale})">${labelText}</text>
             `;
           }).join('')}
+          ${(() => {
+            if (!highlightedIncident || Date.now() >= highlightedIncident.until) return '';
+            const overlays = [];
+            if (highlightedIncident.edge_key) {
+              const edge = map.edges.find(e => e.edge_key === highlightedIncident.edge_key);
+              if (edge) {
+                overlays.push(`<line x1="${sx(edge.x1)}" y1="${sy(edge.y1)}" x2="${sx(edge.x2)}" y2="${sy(edge.y2)}" stroke="#ff6b35" stroke-width="9" stroke-opacity="0.85" stroke-linecap="round" vector-effect="non-scaling-stroke"><animate attributeName="stroke-opacity" values="0.95;0.35;0.95" dur="1.1s" repeatCount="indefinite" /></line>`);
+              }
+            }
+            if (highlightedIncident.agv_id) {
+              const agv = (snapshot.agvs || []).find(a => a.agv_id === highlightedIncident.agv_id);
+              if (agv) {
+                const cx = sx(agv.x), cy = sy(agv.y);
+                overlays.push(`<g transform="translate(${cx} ${cy}) scale(${labelScale})"><circle r="16" fill="none" stroke="#ff6b35" stroke-width="3"><animate attributeName="r" values="14;22;14" dur="1.1s" repeatCount="indefinite" /><animate attributeName="stroke-opacity" values="1;0.4;1" dur="1.1s" repeatCount="indefinite" /></circle></g>`);
+              }
+            }
+            return overlays.join('');
+          })()}
         </g>
       `;
     }
@@ -778,20 +813,28 @@ def build_playback_html(trace: dict) -> str:
       const filteredIncidents = incidents.filter(event => filteredEventAgv(event));
       const groups = buildIncidentGroups(filteredIncidents);
       document.getElementById('incident-count').textContent = String(groups.length);
-      document.getElementById('incident-list').innerHTML = groups.map(group => `
-        <div class="incident-item ${current >= group.start_t && current <= group.end_t ? 'current' : ''}" data-time="${group.start_t}">
+      document.getElementById('incident-list').innerHTML = groups.map(group => {
+        const head = group.events[0] || {};
+        return `
+        <div class="incident-item ${current >= group.start_t && current <= group.end_t ? 'current' : ''}"
+             data-time="${group.start_t}"
+             data-edge-key="${head.edge_key || ''}"
+             data-agv-id="${head.agv_id || ''}">
           <div class="section-title" style="margin:0 0 6px 0;">
             <strong>${eventLabel(group.kind)}</strong>
             <span class="subtle">${group.count}회</span>
           </div>
-          <div style="margin-top:4px;">${describeEvent(group.events[0])}</div>
+          <div style="margin-top:4px;">${describeEvent(head)}</div>
           <div class="meta">t=${group.start_t.toFixed(2)}s ~ ${group.end_t.toFixed(2)}s ${current >= group.start_t && current <= group.end_t ? '· 현재 시점 인접' : ''}</div>
         </div>
-      `).join('');
+      `;
+      }).join('');
       document.querySelectorAll('.incident-item').forEach(el => {
         el.addEventListener('click', () => {
           pause();
           setIndexFromTime(Number(el.dataset.time || 0));
+          setHighlight(el.dataset.edgeKey || '', el.dataset.agvId || '');
+          render();
         });
       });
     }
