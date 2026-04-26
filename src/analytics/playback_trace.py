@@ -138,6 +138,7 @@ class PlaybackTraceRecorder:
                 "corridor": edge.corridor,
                 "access_type": edge.access_type,
                 "width_m": edge.width_m,
+                "bidirectional": bool(getattr(edge, "bidirectional", False)),
             })
         return {"nodes": nodes, "edges": edges}
 
@@ -495,6 +496,15 @@ def build_playback_html(trace: dict) -> str:
     let zoomPanY = 0;
     let isDragging = false;
     let dragStart = null;
+    // Pre-compute one-way edge keys (no reverse counterpart) on main corridors.
+    const _edgeKeySet = new Set((map.edges || []).map(e => e.edge_key));
+    const directionMarkerCorridors = new Set(['north', 'center', 'south', 'bay']);
+    const oneWayEdges = (map.edges || []).filter(e => {
+      if (!directionMarkerCorridors.has(e.corridor)) return false;
+      if (e.access_type) return false;
+      const reverseKey = `${e.end_node_id}__${e.start_node_id}`;
+      return !_edgeKeySet.has(reverseKey);
+    });
     let highlightedIncident = null; // { edge_key, agv_id, until }
     let highlightTimer = null;
     const HIGHLIGHT_DURATION_MS = 4500;
@@ -667,6 +677,40 @@ def build_playback_html(trace: dict) -> str:
           });
         });
       }
+      // Cross-bucket label collision: when single-bucket items share a y band,
+      // stagger their labels above/below alternately so they don't fight each other.
+      const Y_BAND = 22;
+      const X_PROXIMITY = 110;
+      const singles = positioned.filter(it => it.bucketCount <= 1);
+      const bands = new Map();
+      for (const item of singles) {
+        const cy = sy(item.agv.y);
+        const bandKey = Math.round(cy / Y_BAND);
+        if (!bands.has(bandKey)) bands.set(bandKey, []);
+        bands.get(bandKey).push(item);
+      }
+      for (const items of bands.values()) {
+        if (items.length <= 1) continue;
+        items.sort((a, b) => a.agv.x - b.agv.x);
+        let lastBelow = -Infinity;
+        let lastAbove = -Infinity;
+        for (const item of items) {
+          const cx = sx(item.agv.x);
+          const aboveBusy = cx - lastAbove < X_PROXIMITY;
+          const belowBusy = cx - lastBelow < X_PROXIMITY;
+          if (aboveBusy && !belowBusy) {
+            item.labelOy = 18;
+            lastBelow = cx;
+          } else if (!aboveBusy) {
+            // default: above
+            lastAbove = cx;
+          } else {
+            // both busy — push further below to avoid overlap
+            item.labelOy = 30;
+            lastBelow = cx;
+          }
+        }
+      }
       return positioned;
     }
     function agvShapeMarkup(cx, cy, color, anchored, faded) {
@@ -737,6 +781,21 @@ def build_playback_html(trace: dict) -> str:
               dash: '',
             };
             return `<line x1="${sx(edge.x1)}" y1="${sy(edge.y1)}" x2="${sx(edge.x2)}" y2="${sy(edge.y2)}" stroke="${style.stroke}" stroke-width="${style.width / zoomScale}" stroke-opacity="${style.opacity}" stroke-dasharray="${style.dash}" stroke-linecap="round" vector-effect="non-scaling-stroke" />`;
+          }).join('')}
+          ${oneWayEdges.map(edge => {
+            const mx = sx((edge.x1 + edge.x2) / 2);
+            const my = sy((edge.y1 + edge.y2) / 2);
+            const dx = sx(edge.x2) - sx(edge.x1);
+            const dy = sy(edge.y2) - sy(edge.y1);
+            const len = Math.hypot(dx, dy) || 1;
+            const ux = dx / len, uy = dy / len;
+            // Chevron: 8px long arrowhead, 5px wide, drawn in counter-scaled group.
+            const tipX = 6, baseX = -2, halfY = 4;
+            const tip = `${tipX},0`;
+            const upper = `${baseX},${-halfY}`;
+            const lower = `${baseX},${halfY}`;
+            const angle = Math.atan2(uy, ux) * 180 / Math.PI;
+            return `<g transform="translate(${mx} ${my}) scale(${labelScale}) rotate(${angle})"><polygon points="${tip} ${upper} ${lower}" fill="#9aa6b6" opacity="0.85" /></g>`;
           }).join('')}
           ${map.nodes.map(node => {
             const id = node.node_id || '';
