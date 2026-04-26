@@ -458,8 +458,12 @@ python -m src.application.usecases.experiment_runner \
   - snapshot: AGV 위치/상태/배터리/current/target node
   - event: order / wait / reroute / section conflict / charging / demand completed 등
   - map: node/edge 좌표와 role/access metadata
-  - playback 표현: node 정지 AGV는 원형, edge 주행 AGV는 진행방향 화살표
+  - playback 표현: node 정지 AGV는 원형, edge 주행 AGV는 진행방향 화살표 (단일 AGV는 edge 위에 정확히 앉음, 군집일 때만 spread)
   - edge 의미: 연파랑=계획 경로, 진파랑=예약 구간, 초록=현재 주행, 빨강=예약 실패로 대기 중인 blocked edge
+  - 노드 시각 구분: ST(초록 원), CH(파랑 사각), SD(주황 원), HP(흰 도넛 링), 일반 WP/BAY/access(회색 점)
+  - AGV 식별: 모든 AGV body/arrow는 단일 무채색(`#3a4555`)로 통일 — edge state 색(빨강·초록·파랑)과 충돌 회피
+  - **blocked_edge_key fallback**: `_pending_edge_src/dst`가 비대칭 클리어되거나 approach 노드 슬롯 대기 중이라 비어 있어도, `blocking_agv` + `WAITING_RESERVATION`이면 `current_node → path[path_index]`로 다음 hop을 추론해 빨강 차단 edge가 항상 그려지도록 보정 (`src/analytics/playback_trace.py`)
+  - 라벨 충돌: 같은 노드 버킷에서는 vertical stack으로 분산 (군집은 ID만, 단일은 ID+state)
 - [x] **bay / station / charger geometry 현실화 1차**
   - bay는 `WP -> BAY_* -> WP` 내부 waypoint가 있는 세로 lane 구조로 변경
   - station/charger는 direct node jump 대신 짧은 access lane (`SA/CA`)을 거쳐 진입
@@ -479,6 +483,7 @@ python -m src.application.usecases.experiment_runner \
 
 ### 확장 / 장기
 - [ ] 시각화 2차: playback에서 AGV별 reserved path depth, blocking AGV chain, 대표 사고 묶음 drill-down
+  - 추가 후순위: 3-pane 레이아웃(맵/이벤트 동시 가시), 사고 묶음 클릭 시 해당 edge·AGV 맵 상 강조, 단방향 corridor 방향 마커, 가까운 y에 다른 버킷 라벨이 겹치는 cross-bucket collision 해소
 - [ ] 통로별 조합 실험 (북=B, 중=A, 남=E 등 혼합 시나리오)
 
 ---

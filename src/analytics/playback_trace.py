@@ -54,11 +54,25 @@ class PlaybackTraceRecorder:
                 if getattr(agv, "current_node_id", None) and getattr(agv, "target_node_id", None)
                 else ""
             )
-            blocked_edge_key = (
-                f"{getattr(agv, '_pending_edge_src', '')}__{getattr(agv, '_pending_edge_dst', '')}"
-                if getattr(agv, "_pending_edge_src", None) and getattr(agv, "_pending_edge_dst", None)
-                else ""
-            )
+            pending_src = getattr(agv, "_pending_edge_src", None)
+            pending_dst = getattr(agv, "_pending_edge_dst", None)
+            blocking_agv_id = snapshot["waiting_for"].get(agv.agv_id, "")
+            if pending_src and pending_dst:
+                blocked_edge_key = f"{pending_src}__{pending_dst}"
+            elif blocking_agv_id and agv.state.value == "WAITING_RESERVATION":
+                next_hop = None
+                if path and path_index < len(path):
+                    candidate = path[path_index]
+                    if candidate and candidate != agv.current_node_id:
+                        next_hop = candidate
+                    elif path_index + 1 < len(path):
+                        next_hop = path[path_index + 1]
+                if agv.current_node_id and next_hop:
+                    blocked_edge_key = f"{agv.current_node_id}__{next_hop}"
+                else:
+                    blocked_edge_key = ""
+            else:
+                blocked_edge_key = ""
             snapshot["agvs"].append({
                 "agv_id": agv.agv_id,
                 "state": agv.state.value,
@@ -270,6 +284,17 @@ def build_playback_html(trace: dict) -> str:
       height: 10px;
       border-radius: 2px;
     }
+    .swatch-ring {
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid #8b98a8;
+    }
+    .legend-divider {
+      width: 1px;
+      align-self: stretch;
+      background: var(--border);
+      margin: 0 4px;
+    }
     .event-list, .incident-list {
       display: grid;
       gap: 8px;
@@ -371,14 +396,17 @@ def build_playback_html(trace: dict) -> str:
         <div class="map-topline">
           <div class="legend">
             <span class="legend-item"><span class="swatch" style="background:#c6d0db"></span>기본 통로</span>
-            <span class="legend-item"><span class="swatch" style="background:#8bb4ff"></span>계획 경로</span>
-            <span class="legend-item"><span class="swatch" style="background:#2459d1"></span>예약 구간</span>
-            <span class="legend-item"><span class="swatch" style="background:#0f9d58"></span>현재 주행</span>
-            <span class="legend-item"><span class="swatch" style="background:#c0392b"></span>차단/대기 구간</span>
-            <span class="legend-item"><span class="swatch" style="background:#0f9d58"></span>작업 노드</span>
-            <span class="legend-item"><span class="swatch" style="background:#1f6feb"></span>충전 노드</span>
+            <span class="legend-item"><span class="swatch" style="background:#8bb4ff"></span>계획</span>
+            <span class="legend-item"><span class="swatch" style="background:#2459d1"></span>예약</span>
+            <span class="legend-item"><span class="swatch" style="background:#0f9d58"></span>주행</span>
+            <span class="legend-item"><span class="swatch" style="background:#c0392b"></span>차단/대기</span>
+            <span class="legend-divider"></span>
+            <span class="legend-item"><span class="swatch" style="background:#0f9d58"></span>작업(ST)</span>
+            <span class="legend-item"><span class="swatch" style="background:#1f6feb"></span>충전(CH)</span>
+            <span class="legend-item"><span class="swatch" style="background:#e0a000"></span>사이딩(SD)</span>
+            <span class="legend-item"><span class="swatch swatch-ring"></span>홀딩(HP)</span>
+            <span class="legend-item"><span class="swatch" style="background:#3a4555"></span>AGV</span>
           </div>
-          <span class="pill">연파랑=계획, 진파랑=예약, 초록=현재 주행, 빨강=예약 실패로 대기 중인 edge</span>
         </div>
         <div class="map-shell">
           <svg id="map" viewBox="0 0 1000 700"></svg>
@@ -563,14 +591,23 @@ def build_playback_html(trace: dict) -> str:
       for (const entries of grouped.values()) {
         const count = entries.length;
         entries.forEach((entry, idx) => {
+          // Single AGV in bucket: render exactly on the edge/node (no offset).
+          // Only spread when multiple AGVs share the same anchor.
           const spread = count <= 1 ? 0 : (idx - (count - 1) / 2);
-          const ox = entry.anchored ? spread * 12 : spread * 10;
-          const oy = entry.anchored ? -10 - Math.abs(spread) * 3 : 8 + spread * 3;
+          const ox = count <= 1 ? 0 : (entry.anchored ? spread * 14 : spread * 10);
+          const oy = count <= 1 ? 0 : (entry.anchored ? -10 - Math.abs(spread) * 4 : 8 + spread * 3);
+          // Label offset: stack vertically when bucketed; single AGV gets a fixed callout up-right.
+          const labelOx = 12;
+          const labelOy = count <= 1 ? -12 : (-12 + (idx - (count - 1) / 2) * 12);
           positioned.push({
             agv: entry.agv,
             anchored: entry.anchored,
             ox,
             oy,
+            labelOx,
+            labelOy,
+            bucketIndex: idx,
+            bucketCount: count,
           });
         });
       }
@@ -647,29 +684,50 @@ def build_playback_html(trace: dict) -> str:
         </g>
         <g>
           ${map.nodes.map(node => {
-            const fill = node.role === 'work' ? '#0f9d58' : ((node.is_charger || node.role === 'charger') ? '#1f6feb' : '#8b98a8');
-            const radius = (node.role === 'work' || node.is_charger || node.role === 'charger') ? 5 : 3;
-            return `<circle cx="${sx(node.x)}" cy="${sy(node.y)}" r="${radius}" fill="${fill}" opacity="0.9" />`;
+            const id = node.node_id || '';
+            const isCharger = node.is_charger || node.role === 'charger';
+            const isWork = node.role === 'work';
+            const isSiding = node.role === 'siding' || id.startsWith('SD_');
+            const isHolding = id.startsWith('HP_');
+            const isAccess = id.startsWith('SA_') || id.startsWith('CA_') || id.startsWith('HA_');
+            const cx = sx(node.x), cy = sy(node.y);
+            if (isCharger) {
+              return `<rect x="${cx-5}" y="${cy-5}" width="10" height="10" rx="1" fill="#1f6feb" opacity="0.95" />`;
+            }
+            if (isWork) {
+              return `<circle cx="${cx}" cy="${cy}" r="5" fill="#0f9d58" opacity="0.95" />`;
+            }
+            if (isSiding) {
+              return `<circle cx="${cx}" cy="${cy}" r="4" fill="#e0a000" opacity="0.95" />`;
+            }
+            if (isHolding) {
+              return `<circle cx="${cx}" cy="${cy}" r="4" fill="#fff" stroke="#8b98a8" stroke-width="1.5" />`;
+            }
+            const radius = isAccess ? 2.5 : 3;
+            return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="#8b98a8" opacity="0.7" />`;
           }).join('')}
-          ${fadedDisplay.map((item, i) => {
+          ${fadedDisplay.map(item => {
             const agv = item.agv;
-            const color = ['#1f6feb','#0f9d58','#c77700','#c0392b','#7b61ff','#00838f'][i % 6];
             const cx = sx(agv.x) + item.ox;
             const cy = sy(agv.y) + item.oy;
             return item.anchored
-              ? agvShapeMarkup(cx, cy, color, true, true)
-              : agvArrowMarkup(cx, cy, color, agv.heading, true);
+              ? agvShapeMarkup(cx, cy, '#3a4555', true, true)
+              : agvArrowMarkup(cx, cy, '#3a4555', agv.heading, true);
           }).join('')}
-          ${visibleDisplay.map((item, i) => {
+          ${visibleDisplay.map(item => {
             const agv = item.agv;
-            const color = ['#1f6feb','#0f9d58','#c77700','#c0392b','#7b61ff','#00838f'][i % 6];
             const cx = sx(agv.x) + item.ox;
             const cy = sy(agv.y) + item.oy;
+            const labelX = cx + item.labelOx;
+            const labelY = cy + item.labelOy;
+            const labelText = item.bucketCount > 1
+              ? `${agv.agv_id}`
+              : `${agv.agv_id} (${agv.state})`;
             return `
               ${item.anchored
-                ? agvShapeMarkup(cx, cy, color, true, false)
-                : agvArrowMarkup(cx, cy, color, agv.heading, false)}
-              <text x="${cx + 10}" y="${cy - 10}" class="agv-label">${agv.agv_id} (${agv.state})</text>
+                ? agvShapeMarkup(cx, cy, '#3a4555', true, false)
+                : agvArrowMarkup(cx, cy, '#3a4555', agv.heading, false)}
+              <text x="${labelX}" y="${labelY}" class="agv-label">${labelText}</text>
             `;
           }).join('')}
         </g>
