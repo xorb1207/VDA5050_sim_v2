@@ -670,6 +670,7 @@ def build_playback_html(trace: dict) -> str:
           applyEdgeStyle(agv.blocked_edge_key, { stroke: '#c0392b', width: 6, opacity: 1, dash: '' });
         }
       }
+      const labelScale = 1 / Math.max(zoomScale, 0.0001);
       svg.innerHTML = `
         <g id="viewport" transform="translate(${zoomPanX} ${zoomPanY}) scale(${zoomScale})">
           ${map.edges.map(edge => {
@@ -679,10 +680,8 @@ def build_playback_html(trace: dict) -> str:
               opacity: 1,
               dash: '',
             };
-            return `<line x1="${sx(edge.x1)}" y1="${sy(edge.y1)}" x2="${sx(edge.x2)}" y2="${sy(edge.y2)}" stroke="${style.stroke}" stroke-width="${style.width}" stroke-opacity="${style.opacity}" stroke-dasharray="${style.dash}" stroke-linecap="round" />`;
+            return `<line x1="${sx(edge.x1)}" y1="${sy(edge.y1)}" x2="${sx(edge.x2)}" y2="${sy(edge.y2)}" stroke="${style.stroke}" stroke-width="${style.width / zoomScale}" stroke-opacity="${style.opacity}" stroke-dasharray="${style.dash}" stroke-linecap="round" vector-effect="non-scaling-stroke" />`;
           }).join('')}
-        </g>
-        <g>
           ${map.nodes.map(node => {
             const id = node.node_id || '';
             const isCharger = node.is_charger || node.role === 'charger';
@@ -691,28 +690,29 @@ def build_playback_html(trace: dict) -> str:
             const isHolding = id.startsWith('HP_');
             const isAccess = id.startsWith('SA_') || id.startsWith('CA_') || id.startsWith('HA_');
             const cx = sx(node.x), cy = sy(node.y);
+            let inner;
             if (isCharger) {
-              return `<rect x="${cx-5}" y="${cy-5}" width="10" height="10" rx="1" fill="#1f6feb" opacity="0.95" />`;
+              inner = `<rect x="-5" y="-5" width="10" height="10" rx="1" fill="#1f6feb" opacity="0.95" />`;
+            } else if (isWork) {
+              inner = `<circle r="5" fill="#0f9d58" opacity="0.95" />`;
+            } else if (isSiding) {
+              inner = `<circle r="4" fill="#e0a000" opacity="0.95" />`;
+            } else if (isHolding) {
+              inner = `<circle r="4" fill="#fff" stroke="#8b98a8" stroke-width="${1.5 / zoomScale}" vector-effect="non-scaling-stroke" />`;
+            } else {
+              const radius = isAccess ? 2.5 : 3;
+              inner = `<circle r="${radius}" fill="#8b98a8" opacity="0.7" />`;
             }
-            if (isWork) {
-              return `<circle cx="${cx}" cy="${cy}" r="5" fill="#0f9d58" opacity="0.95" />`;
-            }
-            if (isSiding) {
-              return `<circle cx="${cx}" cy="${cy}" r="4" fill="#e0a000" opacity="0.95" />`;
-            }
-            if (isHolding) {
-              return `<circle cx="${cx}" cy="${cy}" r="4" fill="#fff" stroke="#8b98a8" stroke-width="1.5" />`;
-            }
-            const radius = isAccess ? 2.5 : 3;
-            return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="#8b98a8" opacity="0.7" />`;
+            return `<g transform="translate(${cx} ${cy}) scale(${labelScale})">${inner}</g>`;
           }).join('')}
           ${fadedDisplay.map(item => {
             const agv = item.agv;
             const cx = sx(agv.x) + item.ox;
             const cy = sy(agv.y) + item.oy;
-            return item.anchored
-              ? agvShapeMarkup(cx, cy, '#3a4555', true, true)
-              : agvArrowMarkup(cx, cy, '#3a4555', agv.heading, true);
+            const inner = item.anchored
+              ? agvShapeMarkup(0, 0, '#3a4555', true, true)
+              : agvArrowMarkup(0, 0, '#3a4555', agv.heading, true);
+            return `<g transform="translate(${cx} ${cy}) scale(${labelScale})">${inner}</g>`;
           }).join('')}
           ${visibleDisplay.map(item => {
             const agv = item.agv;
@@ -723,11 +723,12 @@ def build_playback_html(trace: dict) -> str:
             const labelText = item.bucketCount > 1
               ? `${agv.agv_id}`
               : `${agv.agv_id} (${agv.state})`;
+            const inner = item.anchored
+              ? agvShapeMarkup(0, 0, '#3a4555', true, false)
+              : agvArrowMarkup(0, 0, '#3a4555', agv.heading, false);
             return `
-              ${item.anchored
-                ? agvShapeMarkup(cx, cy, '#3a4555', true, false)
-                : agvArrowMarkup(cx, cy, '#3a4555', agv.heading, false)}
-              <text x="${labelX}" y="${labelY}" class="agv-label">${labelText}</text>
+              <g transform="translate(${cx} ${cy}) scale(${labelScale})">${inner}</g>
+              <text class="agv-label" transform="translate(${labelX} ${labelY}) scale(${labelScale})">${labelText}</text>
             `;
           }).join('')}
         </g>
