@@ -481,10 +481,44 @@ python -m src.application.usecases.experiment_runner \
 - [x] **물리 모델 고도화 1차**: 가감속 구간, processing 이후 재출발 시간 반영
 - [x] **station processing randomness 1차**: seed 기반 pickup/dropoff 처리시간 분리
 
+### 다음 우선순위 (2026-04-27 합의)
+
+현 실험 호라이즌(600s~1800s) + 토폴로지 비교가 주 목적인 한, 엔진은 사실상 완료 상태이다.
+미체크 엔진 항목(charging contention / priority reservation / 회전 감속 / wait_time 통합)은
+ranking을 흔들 만한 효과가 거의 없거나(현재 SOC 운영값에서 charging 개입 자체가 발생 안 함),
+모든 traversal에 일률적으로 더해져 상대 비교에서 상쇄되거나, 명확한 운영 시나리오 없이
+넣으면 결과만 바뀌고 해석은 안 깊어진다. 새 질문이 생기기 전까지는 보류한다.
+
+대신 다음 세 갈래로 진행한다:
+
+- [ ] **(b) 시각화 2차** ← 1순위, 새 실험 없이 도구만 만들어 a/c 결과 해석에 그대로 재사용
+  - 3-pane 레이아웃 (맵 + 이벤트/사고 묶음 우측 동시 가시)
+  - 사고 묶음 클릭 시 해당 edge·AGV 맵 상 강조 (시간 점프 + 공간 강조)
+  - AGV별 reserved path depth 시각화 (몇 단계 앞까지 잡혀있는지)
+  - blocking AGV chain drill-down (A→B→C→A 형태의 deadlock 직전 패턴 추적)
+  - 단방향 corridor 방향 마커, cross-bucket 라벨 충돌 해소 (잔여 폴리시)
+- [ ] **(a) 혼합 토폴로지 실험** ← 2순위, 엔진 확장 선행 필요
+  - 현재 `topology_generator.py`는 graph 전체에 단일 type만 적용. corridor별 type 분리 필요
+  - 입력 스키마: `corridor_types: {north: B, center: A, south: E}`
+  - invariant 검증을 corridor 단위로 분리
+  - ranking variant 키에 mixed config 인코딩
+  - 실험 yaml 디자인: A를 어느 row에 배치하는지가 핵심 (head-on 없는 row 위치 영향)
+- [ ] **(c) 24h 호라이즌 시나리오** ← 3순위, b가 끝난 뒤
+  - 엔진 변경 없음, sample interval 조정(0.5s → 5s 정도)으로 trace 크기 제어
+  - 24h가 되어야 battery/charging이 비로소 ranking에 들어옴
+  - b가 있어야 24h trace를 들여다볼 도구가 있음
+
+### 보류 (현 단계에서 ROI 낮음)
+- [ ] charging reservation/policy 1차 — 현 SOC 운영값에서 충전 개입 자체가 거의 없음. (c) 24h 시나리오와 함께 재검토.
+- [ ] priority-based reservation — priority 정의(SLA? battery?)에 대한 운영 시나리오 없이 넣으면 해석이 안 깊어짐
+- [ ] 물리 모델 2차 (회전/곡선 감속) — 모든 traversal에 일률 적용되어 상대 비교에서 상쇄됨
+- [ ] critical section 세분화 (priority/release timing) — priority-based reservation과 종속
+- [ ] reachable siding policy 정밀화 — 현재 `B/mid/reachable`가 충분한 경쟁력
+- [ ] 세부 공간 설계 최적화 (node spacing 등) — 공간 해상도 모델 고도화 필요
+- [ ] failure injection (AGV breakdown, edge closure) — 완전 새 엔진 일감, 장기
+
 ### 확장 / 장기
-- [ ] 시각화 2차: playback에서 AGV별 reserved path depth, blocking AGV chain, 대표 사고 묶음 drill-down
-  - 추가 후순위: 3-pane 레이아웃(맵/이벤트 동시 가시), 사고 묶음 클릭 시 해당 edge·AGV 맵 상 강조, 단방향 corridor 방향 마커, 가까운 y에 다른 버킷 라벨이 겹치는 cross-bucket collision 해소
-- [ ] 통로별 조합 실험 (북=B, 중=A, 남=E 등 혼합 시나리오)
+- [ ] **(d) failure/recovery 모델**: AGV breakdown, edge 일시 폐쇄 등 외부 변동 — 새 엔진 영역, 장기
 
 ---
 
