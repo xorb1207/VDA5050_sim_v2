@@ -255,6 +255,32 @@ def build_playback_html(trace: dict) -> str:
       gap: 16px;
       align-items: start;
     }
+    .main-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      align-items: start;
+    }
+    .side-stack {
+      display: grid;
+      grid-template-rows: minmax(0, 38fr) minmax(0, 62fr);
+      gap: 16px;
+      position: sticky;
+      top: 76px;
+      height: calc(100vh - 96px);
+    }
+    .side-stack .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .side-stack .event-list,
+    .side-stack .incident-list {
+      max-height: none;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
     .map-shell {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -356,6 +382,17 @@ def build_playback_html(trace: dict) -> str:
       color: var(--muted);
       font-size: 12px;
     }
+    @media (max-width: 1180px) {
+      .main-layout { grid-template-columns: 1fr; }
+      .side-stack {
+        position: static;
+        max-height: none;
+      }
+      .side-stack > .panel:nth-child(1),
+      .side-stack > .panel:nth-child(2) { max-height: none; }
+      .side-stack .event-list,
+      .side-stack .incident-list { max-height: 320px; }
+    }
     @media (max-width: 980px) {
       .lower-layout { grid-template-columns: 1fr; }
       .kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -390,9 +427,19 @@ def build_playback_html(trace: dict) -> str:
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
           </div>
         </div>
-        <div class="hint">지도 위에서 마우스 휠로 확대/축소하고 드래그로 이동할 수 있습니다. 사고 묶음 항목을 클릭하면 해당 시점으로 이동합니다.</div>
+        <div class="hint">지도 위에서 마우스 휠로 확대/축소하고 드래그로 이동. 우측 사고 묶음 항목을 클릭하면 해당 시점으로 점프합니다.</div>
       </div>
-      <div class="map-stage">
+    </section>
+
+    <section class="kpi">
+      <div class="panel"><div class="meta">총 스냅샷</div><strong id="snapshot-count"></strong></div>
+      <div class="panel"><div class="meta">총 이벤트</div><strong id="event-count"></strong></div>
+      <div class="panel"><div class="meta">샘플 간격</div><strong id="sample-interval"></strong></div>
+      <div class="panel"><div class="meta">사고/병목 포인트</div><strong id="incident-count"></strong></div>
+    </section>
+
+    <section class="main-layout">
+      <section class="panel map-panel">
         <div class="map-topline">
           <div class="legend">
             <span class="legend-item"><span class="swatch" style="background:#c6d0db"></span>기본 통로</span>
@@ -411,31 +458,23 @@ def build_playback_html(trace: dict) -> str:
         <div class="map-shell">
           <svg id="map" viewBox="0 0 1000 700"></svg>
         </div>
-      </div>
-    </section>
-
-    <section class="kpi">
-      <div class="panel"><div class="meta">총 스냅샷</div><strong id="snapshot-count"></strong></div>
-      <div class="panel"><div class="meta">총 이벤트</div><strong id="event-count"></strong></div>
-      <div class="panel"><div class="meta">샘플 간격</div><strong id="sample-interval"></strong></div>
-      <div class="panel"><div class="meta">사고/병목 포인트</div><strong id="incident-count"></strong></div>
-    </section>
-
-    <section class="lower-layout">
-      <div class="panel">
-        <div class="section-title">
-          <h2 style="margin:0;">대표 사고 묶음</h2>
-          <span class="meta">같은 종류/구간/AGV의 연속 이벤트를 압축</span>
+      </section>
+      <aside class="side-stack">
+        <div class="panel">
+          <div class="section-title">
+            <h2 style="margin:0;">대표 사고 묶음</h2>
+            <span class="meta">연속 이벤트 압축</span>
+          </div>
+          <div id="incident-list" class="incident-list"></div>
         </div>
-        <div id="incident-list" class="incident-list"></div>
-      </div>
-      <div class="panel">
-        <div class="section-title">
-          <h2 style="margin:0;">이벤트 로그</h2>
-          <span class="meta">현재 시점 기준 최근 20개</span>
+        <div class="panel">
+          <div class="section-title">
+            <h2 style="margin:0;">이벤트 로그</h2>
+            <span class="meta">최근 20개</span>
+          </div>
+          <div id="event-list" class="event-list"></div>
         </div>
-        <div id="event-list" class="event-list"></div>
-      </div>
+      </aside>
     </section>
   </div>
   <script>
