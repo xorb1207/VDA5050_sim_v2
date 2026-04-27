@@ -263,13 +263,62 @@ def build_playback_html(trace: dict) -> str:
       align-items: start;
     }
     .side-stack {
-      display: grid;
-      grid-template-rows: minmax(0, 38fr) minmax(0, 62fr);
+      display: flex;
+      flex-direction: column;
       gap: 16px;
       position: sticky;
       top: 76px;
       height: calc(100vh - 96px);
+      min-height: 0;
     }
+    #agv-detail-panel[hidden] { display: none; }
+    #agv-detail-panel { flex: 0 0 30%; }
+    #incident-panel { flex: 0 0 32%; }
+    #event-panel { flex: 1 1 0; }
+    .side-stack.has-focus #incident-panel { flex: 0 0 26%; }
+    .side-stack.has-focus #event-panel { flex: 1 1 0; }
+    .agv-detail-body {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      overflow: auto;
+      min-height: 0;
+    }
+    .agv-detail-body .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .agv-detail-body .row .key { color: var(--muted); }
+    .depth-bars { display: grid; gap: 3px; }
+    .depth-row {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .depth-row .bar {
+      height: 8px;
+      background: linear-gradient(90deg, #2459d1 0%, #2459d1 var(--bar), #e6ecf5 var(--bar));
+      border-radius: 4px;
+    }
+    .depth-row .label { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+    .chain-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+    .chain-row .badge {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      background: #fff;
+    }
+    .chain-row .arrow { color: var(--muted); }
+    .chain-row.cycle .badge { border-color: #c0392b; color: #c0392b; }
     .side-stack .panel {
       display: flex;
       flex-direction: column;
@@ -460,15 +509,22 @@ def build_playback_html(trace: dict) -> str:
           <svg id="map" viewBox="0 0 1000 700"></svg>
         </div>
       </section>
-      <aside class="side-stack">
-        <div class="panel">
+      <aside class="side-stack" id="side-stack">
+        <div class="panel" id="agv-detail-panel" hidden>
+          <div class="section-title">
+            <h2 style="margin:0;" id="agv-detail-title">AGV 상세</h2>
+            <span class="meta">포커스 AGV</span>
+          </div>
+          <div id="agv-detail-body" class="agv-detail-body"></div>
+        </div>
+        <div class="panel" id="incident-panel">
           <div class="section-title">
             <h2 style="margin:0;">대표 사고 묶음</h2>
             <span class="meta">연속 이벤트 압축</span>
           </div>
           <div id="incident-list" class="incident-list"></div>
         </div>
-        <div class="panel">
+        <div class="panel" id="event-panel">
           <div class="section-title">
             <h2 style="margin:0;">이벤트 로그</h2>
             <span class="meta">최근 20개</span>
@@ -505,6 +561,39 @@ def build_playback_html(trace: dict) -> str:
       const reverseKey = `${e.end_node_id}__${e.start_node_id}`;
       return !_edgeKeySet.has(reverseKey);
     });
+    function destinationNodeId(agv) {
+      if (agv.target_node) return agv.target_node;
+      const keys = agv.planned_edge_keys || [];
+      if (!keys.length) return '';
+      const parts = (keys[keys.length - 1] || '').split('__');
+      return parts[1] || '';
+    }
+    function destinationLabel(agv) {
+      // Used for labels during transit so "this AGV is heading where" is visible.
+      const keys = agv.planned_edge_keys || [];
+      const finalNode = keys.length
+        ? ((keys[keys.length - 1] || '').split('__')[1] || '')
+        : (agv.target_node || '');
+      if (!finalNode) return '';
+      if (finalNode.startsWith('ST_')) return '→' + finalNode;
+      if (finalNode.startsWith('HP_')) return '→휴식 ' + finalNode;
+      if (finalNode.startsWith('CH_')) return '→충전 ' + finalNode;
+      if (finalNode.startsWith('SD_')) return '→사이딩';
+      // generic — shows pass-through target (often a bay/main waypoint)
+      return '→' + finalNode;
+    }
+    function agvCaption(agv, includeStateForCluster) {
+      const state = agv.state;
+      if (state === 'NAVIGATING') {
+        const dest = destinationLabel(agv);
+        return dest ? (agv.agv_id + ' ' + dest) : agv.agv_id;
+      }
+      if (state === 'WAITING_RESERVATION') return agv.agv_id + ' (대기)';
+      if (state === 'PROCESSING') return agv.agv_id + ' (작업중)';
+      if (state === 'CHARGING') return agv.agv_id + ' (충전중)';
+      if (state === 'IDLE') return includeStateForCluster ? agv.agv_id : agv.agv_id + ' (IDLE)';
+      return agv.agv_id + ' (' + state + ')';
+    }
     let highlightedIncident = null; // { edge_key, agv_id, until }
     let highlightTimer = null;
     const HIGHLIGHT_DURATION_MS = 4500;
@@ -513,14 +602,24 @@ def build_playback_html(trace: dict) -> str:
       if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null; }
       render();
     }
-    function setHighlight(edgeKey, agvId) {
+    function setHighlight(edgeKey, agvId, opts) {
+      const meta = opts || {};
       highlightedIncident = {
         edge_key: edgeKey || '',
         agv_id: agvId || '',
+        chain: meta.chain || [],
+        cycle: !!meta.cycle,
         until: Date.now() + HIGHLIGHT_DURATION_MS,
       };
       if (highlightTimer) clearTimeout(highlightTimer);
       highlightTimer = setTimeout(clearHighlight, HIGHLIGHT_DURATION_MS);
+    }
+    function chainAtTime(t, agvId) {
+      // Find snapshot closest to t and compute blocking chain rooted at agvId.
+      if (!agvId) return { chain: [], cycle: false };
+      const intv = trace.meta.sample_interval_s || 0.5;
+      const idx = Math.min(snapshots.length - 1, Math.max(0, Math.round(t / intv)));
+      return buildBlockingChainFor(snapshots[idx] || { agvs: [] }, agvId);
     }
 
     const minX = Math.min(...map.nodes.map(n => n.x), 0);
@@ -757,11 +856,20 @@ def build_playback_html(trace: dict) -> str:
         edgeStyles.set(edgeKey, { ...prev, ...patch });
       };
       for (const agv of visibleAgvs) {
-        (agv.planned_edge_keys || []).forEach(edgeKey => {
-          applyEdgeStyle(edgeKey, { stroke: '#8bb4ff', width: 3, opacity: 0.9, dash: '6 5' });
+        const planned = agv.planned_edge_keys || [];
+        // Planned: depth-based opacity ramp so the immediate next hops stand out
+        // and farther-out plans fade. Cap depth at 8 to avoid invisible tails.
+        planned.forEach((edgeKey, depth) => {
+          const t = Math.min(depth, 8) / 8;
+          const opacity = 0.95 - t * 0.65; // 0.95 → 0.30
+          applyEdgeStyle(edgeKey, { stroke: '#8bb4ff', width: 3, opacity, dash: '6 5' });
         });
-        (agv.reserved_edge_keys || []).forEach(edgeKey => {
-          applyEdgeStyle(edgeKey, { stroke: '#2459d1', width: 4, opacity: 0.95, dash: '' });
+        const reserved = agv.reserved_edge_keys || [];
+        reserved.forEach((edgeKey, depth) => {
+          const t = Math.min(depth, 6) / 6;
+          const opacity = 1.0 - t * 0.45; // 1.0 → 0.55
+          const width = 4 - t * 1.2;        // 4 → 2.8
+          applyEdgeStyle(edgeKey, { stroke: '#2459d1', width, opacity, dash: '' });
         });
         if (agv.current_edge_key) {
           applyEdgeStyle(agv.current_edge_key, { stroke: '#0f9d58', width: 6, opacity: 1, dash: '' });
@@ -836,8 +944,8 @@ def build_playback_html(trace: dict) -> str:
             const labelX = cx + item.labelOx;
             const labelY = cy + item.labelOy;
             const labelText = item.bucketCount > 1
-              ? `${agv.agv_id}`
-              : `${agv.agv_id} (${agv.state})`;
+              ? agvCaption(agv, true)
+              : agvCaption(agv, false);
             const inner = item.anchored
               ? agvShapeMarkup(0, 0, '#3a4555', true, false)
               : agvArrowMarkup(0, 0, '#3a4555', agv.heading, false);
@@ -847,6 +955,21 @@ def build_playback_html(trace: dict) -> str:
             `;
           }).join('')}
           ${(() => {
+            // Focus AGV target ring + connector (bay confusion fix C, path detail).
+            if (!focusedAgvId) return '';
+            const agv = (snapshot.agvs || []).find(a => a.agv_id === focusedAgvId);
+            if (!agv) return '';
+            const destId = destinationNodeId(agv);
+            if (!destId) return '';
+            const node = nodeIndex.get(destId);
+            if (!node) return '';
+            const ax = sx(agv.x), ay = sy(agv.y);
+            const tx = sx(node.x), ty = sy(node.y);
+            const ring = `<g transform="translate(${tx} ${ty}) scale(${labelScale})"><circle r="14" fill="none" stroke="#1f6feb" stroke-width="2" stroke-dasharray="4 3" /></g>`;
+            const line = `<line x1="${ax}" y1="${ay}" x2="${tx}" y2="${ty}" stroke="#1f6feb" stroke-width="2" stroke-opacity="0.55" stroke-dasharray="6 5" vector-effect="non-scaling-stroke" />`;
+            return line + ring;
+          })()}
+          ${(() => {
             if (!highlightedIncident || Date.now() >= highlightedIncident.until) return '';
             const overlays = [];
             if (highlightedIncident.edge_key) {
@@ -855,12 +978,15 @@ def build_playback_html(trace: dict) -> str:
                 overlays.push(`<line x1="${sx(edge.x1)}" y1="${sy(edge.y1)}" x2="${sx(edge.x2)}" y2="${sy(edge.y2)}" stroke="#ff6b35" stroke-width="9" stroke-opacity="0.85" stroke-linecap="round" vector-effect="non-scaling-stroke"><animate attributeName="stroke-opacity" values="0.95;0.35;0.95" dur="1.1s" repeatCount="indefinite" /></line>`);
               }
             }
-            if (highlightedIncident.agv_id) {
-              const agv = (snapshot.agvs || []).find(a => a.agv_id === highlightedIncident.agv_id);
-              if (agv) {
-                const cx = sx(agv.x), cy = sy(agv.y);
-                overlays.push(`<g transform="translate(${cx} ${cy}) scale(${labelScale})"><circle r="16" fill="none" stroke="#ff6b35" stroke-width="3"><animate attributeName="r" values="14;22;14" dur="1.1s" repeatCount="indefinite" /><animate attributeName="stroke-opacity" values="1;0.4;1" dur="1.1s" repeatCount="indefinite" /></circle></g>`);
-              }
+            const ringIds = (highlightedIncident.chain && highlightedIncident.chain.length)
+              ? highlightedIncident.chain
+              : (highlightedIncident.agv_id ? [highlightedIncident.agv_id] : []);
+            for (const id of ringIds) {
+              const agv = (snapshot.agvs || []).find(a => a.agv_id === id);
+              if (!agv) continue;
+              const cx = sx(agv.x), cy = sy(agv.y);
+              const color = highlightedIncident.cycle ? '#c0392b' : '#ff6b35';
+              overlays.push(`<g transform="translate(${cx} ${cy}) scale(${labelScale})"><circle r="16" fill="none" stroke="${color}" stroke-width="3"><animate attributeName="r" values="14;22;14" dur="1.1s" repeatCount="indefinite" /><animate attributeName="stroke-opacity" values="1;0.4;1" dur="1.1s" repeatCount="indefinite" /></circle></g>`);
             }
             return overlays.join('');
           })()}
@@ -874,6 +1000,14 @@ def build_playback_html(trace: dict) -> str:
       document.getElementById('incident-count').textContent = String(groups.length);
       document.getElementById('incident-list').innerHTML = groups.map(group => {
         const head = group.events[0] || {};
+        const blockingKinds = new Set(['headon_block', 'section_conflict', 'followon_block', 'deadlock_resolved']);
+        let chainBadge = '';
+        if (head.agv_id && blockingKinds.has(group.kind)) {
+          const { chain, cycle } = chainAtTime(group.start_t, head.agv_id);
+          if (chain.length >= 2) {
+            chainBadge = `<span class="subtle" style="${cycle ? 'color:#c0392b;font-weight:600;' : ''}">${cycle ? 'cycle ' : ''}chain depth=${chain.length}</span>`;
+          }
+        }
         return `
         <div class="incident-item ${current >= group.start_t && current <= group.end_t ? 'current' : ''}"
              data-time="${group.start_t}"
@@ -881,7 +1015,7 @@ def build_playback_html(trace: dict) -> str:
              data-agv-id="${head.agv_id || ''}">
           <div class="section-title" style="margin:0 0 6px 0;">
             <strong>${eventLabel(group.kind)}</strong>
-            <span class="subtle">${group.count}회</span>
+            <span class="subtle">${group.count}회 ${chainBadge}</span>
           </div>
           <div style="margin-top:4px;">${describeEvent(head)}</div>
           <div class="meta">t=${group.start_t.toFixed(2)}s ~ ${group.end_t.toFixed(2)}s ${current >= group.start_t && current <= group.end_t ? '· 현재 시점 인접' : ''}</div>
@@ -891,8 +1025,11 @@ def build_playback_html(trace: dict) -> str:
       document.querySelectorAll('.incident-item').forEach(el => {
         el.addEventListener('click', () => {
           pause();
-          setIndexFromTime(Number(el.dataset.time || 0));
-          setHighlight(el.dataset.edgeKey || '', el.dataset.agvId || '');
+          const t = Number(el.dataset.time || 0);
+          setIndexFromTime(t);
+          const agvId = el.dataset.agvId || '';
+          const { chain, cycle } = agvId ? chainAtTime(t, agvId) : { chain: [], cycle: false };
+          setHighlight(el.dataset.edgeKey || '', agvId, { chain, cycle });
           render();
         });
       });
@@ -921,6 +1058,73 @@ def build_playback_html(trace: dict) -> str:
       renderMap();
       renderIncidents();
       renderEvents();
+      renderAgvDetail();
+    }
+    function buildBlockingChainFor(snapshot, startAgvId) {
+      const map = new Map();
+      for (const a of (snapshot.agvs || [])) {
+        if (a.blocking_agv) map.set(a.agv_id, a.blocking_agv);
+      }
+      const chain = [];
+      const seen = new Set();
+      let cur = startAgvId;
+      let cycle = false;
+      while (cur) {
+        if (seen.has(cur)) { cycle = true; chain.push(cur); break; }
+        seen.add(cur);
+        chain.push(cur);
+        cur = map.get(cur) || '';
+      }
+      return { chain, cycle };
+    }
+    function renderAgvDetail() {
+      const panel = document.getElementById('agv-detail-panel');
+      const stack = document.getElementById('side-stack');
+      if (!focusedAgvId) {
+        panel.hidden = true;
+        stack.classList.remove('has-focus');
+        return;
+      }
+      const snapshot = snapshots[index] || { agvs: [] };
+      const agv = (snapshot.agvs || []).find(a => a.agv_id === focusedAgvId);
+      if (!agv) {
+        panel.hidden = true;
+        stack.classList.remove('has-focus');
+        return;
+      }
+      panel.hidden = false;
+      stack.classList.add('has-focus');
+      document.getElementById('agv-detail-title').textContent = agv.agv_id + ' 상세';
+      const dest = destinationNodeId(agv);
+      const reserved = agv.reserved_edge_keys || [];
+      const planned = agv.planned_edge_keys || [];
+      const reservedDepth = reserved.length;
+      const plannedDepth = planned.length;
+      const maxDepth = Math.max(reservedDepth, plannedDepth, 1);
+      const reservedRows = reserved.slice(0, 6).map((key, i) => {
+        const pct = ((reservedDepth - i) / maxDepth) * 100;
+        return `<div class="depth-row"><span class="label">res ${i+1}</span><span class="bar" style="--bar: ${pct.toFixed(1)}%"></span></div>`;
+      }).join('');
+      const plannedRows = planned.slice(0, 6).map((key, i) => {
+        const pct = ((plannedDepth - i) / maxDepth) * 100;
+        return `<div class="depth-row"><span class="label">plan ${i+1}</span><span class="bar" style="--bar: ${pct.toFixed(1)}%; background: linear-gradient(90deg, #8bb4ff 0%, #8bb4ff ${pct.toFixed(1)}%, #e6ecf5 ${pct.toFixed(1)}%);"></span></div>`;
+      }).join('');
+      const blocking = agv.blocking_agv ? buildBlockingChainFor(snapshot, agv.agv_id) : null;
+      const chainHtml = blocking && blocking.chain.length > 1
+        ? `<div class="chain-row ${blocking.cycle ? 'cycle' : ''}">${blocking.chain.map(id => `<span class="badge">${id}</span>`).join('<span class="arrow">→</span>')}</div>`
+        : '<div class="meta">현재 대기 체인 없음</div>';
+      document.getElementById('agv-detail-body').innerHTML = `
+        <div class="row"><span class="key">상태</span><strong>${agv.state}</strong></div>
+        <div class="row"><span class="key">현재</span><span>${agv.current_node || '—'}</span></div>
+        <div class="row"><span class="key">목적</span><span>${dest || '—'}</span></div>
+        <div class="row"><span class="key">배터리</span><span>${(agv.battery_pct || 0).toFixed(1)}%</span></div>
+        <div class="row"><span class="key">예약 깊이</span><span>${reservedDepth} hop</span></div>
+        <div class="row"><span class="key">계획 깊이</span><span>${plannedDepth} hop</span></div>
+        ${reservedRows ? `<div class="depth-bars">${reservedRows}</div>` : ''}
+        ${plannedRows ? `<div class="depth-bars">${plannedRows}</div>` : ''}
+        <div class="row"><span class="key">대기 체인</span></div>
+        ${chainHtml}
+      `;
     }
     function play() {
       if (timer) return;
