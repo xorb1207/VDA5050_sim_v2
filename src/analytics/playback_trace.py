@@ -73,6 +73,12 @@ class PlaybackTraceRecorder:
                     blocked_edge_key = ""
             else:
                 blocked_edge_key = ""
+            goal_node_id = path[-1] if path else (getattr(agv, "target_node_id", "") or "")
+            detour_via_siding = ""
+            for nid in path[path_index:]:
+                if nid and nid.startswith("SD_") and nid != goal_node_id:
+                    detour_via_siding = nid
+                    break
             snapshot["agvs"].append({
                 "agv_id": agv.agv_id,
                 "state": agv.state.value,
@@ -83,6 +89,8 @@ class PlaybackTraceRecorder:
                 "battery_pct": round(getattr(agv, "_battery_pct", 0.0), 2),
                 "current_node": agv.current_node_id,
                 "target_node": agv.target_node_id,
+                "goal_node": goal_node_id,
+                "detour_via": detour_via_siding,
                 "current_edge_key": current_edge_key,
                 "planned_edge_keys": planned_edge_keys,
                 "reserved_edge_keys": active_edge_by_agv.get(agv.agv_id, []),
@@ -561,26 +569,35 @@ def build_playback_html(trace: dict) -> str:
       const reverseKey = `${e.end_node_id}__${e.start_node_id}`;
       return !_edgeKeySet.has(reverseKey);
     });
-    function destinationNodeId(agv) {
+    function goalNodeId(agv) {
+      // Prefer the explicit goal (path[-1]) so the label stays put across
+      // sliding planned-edge windows. Fall back to target_node, then last
+      // planned hop. Never returns the detour siding itself.
+      if (agv.goal_node) return agv.goal_node;
       if (agv.target_node) return agv.target_node;
       const keys = agv.planned_edge_keys || [];
       if (!keys.length) return '';
       const parts = (keys[keys.length - 1] || '').split('__');
       return parts[1] || '';
     }
+    function destinationNodeId(agv) {
+      // Used for the on-map target ring; mirrors goal so the ring lands on
+      // the actual delivery point, not on a passing waypoint.
+      return goalNodeId(agv);
+    }
+    function describeGoal(goalId) {
+      if (!goalId) return '';
+      if (goalId.startsWith('ST_')) return '→' + goalId;
+      if (goalId.startsWith('HP_')) return '→휴식 ' + goalId;
+      if (goalId.startsWith('CH_')) return '→충전 ' + goalId;
+      return '→' + goalId;
+    }
     function destinationLabel(agv) {
-      // Used for labels during transit so "this AGV is heading where" is visible.
-      const keys = agv.planned_edge_keys || [];
-      const finalNode = keys.length
-        ? ((keys[keys.length - 1] || '').split('__')[1] || '')
-        : (agv.target_node || '');
-      if (!finalNode) return '';
-      if (finalNode.startsWith('ST_')) return '→' + finalNode;
-      if (finalNode.startsWith('HP_')) return '→휴식 ' + finalNode;
-      if (finalNode.startsWith('CH_')) return '→충전 ' + finalNode;
-      if (finalNode.startsWith('SD_')) return '→사이딩';
-      // generic — shows pass-through target (often a bay/main waypoint)
-      return '→' + finalNode;
+      const goal = goalNodeId(agv);
+      const base = describeGoal(goal);
+      if (!base) return '';
+      if (agv.detour_via) return base + ' (via ' + agv.detour_via + ')';
+      return base;
     }
     function agvCaption(agv, includeStateForCluster) {
       const state = agv.state;
@@ -1095,7 +1112,11 @@ def build_playback_html(trace: dict) -> str:
       panel.hidden = false;
       stack.classList.add('has-focus');
       document.getElementById('agv-detail-title').textContent = agv.agv_id + ' 상세';
+      const goal = goalNodeId(agv);
       const dest = destinationNodeId(agv);
+      const detourRow = agv.detour_via
+        ? `<div class="row"><span class="key">우회</span><span style="color:#c77700;">via ${agv.detour_via}</span></div>`
+        : '';
       const reserved = agv.reserved_edge_keys || [];
       const planned = agv.planned_edge_keys || [];
       const reservedDepth = reserved.length;
@@ -1116,7 +1137,9 @@ def build_playback_html(trace: dict) -> str:
       document.getElementById('agv-detail-body').innerHTML = `
         <div class="row"><span class="key">상태</span><strong>${agv.state}</strong></div>
         <div class="row"><span class="key">현재</span><span>${agv.current_node || '—'}</span></div>
-        <div class="row"><span class="key">목적</span><span>${dest || '—'}</span></div>
+        <div class="row"><span class="key">다음</span><span>${agv.target_node || '—'}</span></div>
+        <div class="row"><span class="key">목적</span><span>${goal || '—'}</span></div>
+        ${detourRow}
         <div class="row"><span class="key">배터리</span><span>${(agv.battery_pct || 0).toFixed(1)}%</span></div>
         <div class="row"><span class="key">예약 깊이</span><span>${reservedDepth} hop</span></div>
         <div class="row"><span class="key">계획 깊이</span><span>${plannedDepth} hop</span></div>
