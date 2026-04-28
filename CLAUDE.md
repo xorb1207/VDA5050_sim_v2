@@ -393,25 +393,30 @@ python -m src.application.usecases.experiment_runner \
     - wait/section conflict는 계속 증가하므로 28대부터는 교통 병목 비용이 빠르게 커짐
 - [x] A/B/C/D/E common-demand 포화 곡선 비교 (pre-battery baseline)
   - `topology_saturation_common_demand.yaml` 추가: AGV `20/24/28`, 600s, 5 seeds, `B=mid/reachable`
-  - **주요 결과 (avg_completion / avg_demand_tph)**:
+  - **2026-04-28 재실험 (siding pickup-preservation fix 후)**: AGV `20/24/28`, 600s, 5 seeds
     | Type | AGV=20 | AGV=24 | AGV=28 |
     |------|--------|--------|--------|
-    | A | 0.2067 / 37.2 | 0.1866 / 33.6 | 0.2133 / 38.4 |
-    | B(mid/reachable) | 0.3000 / 54.0 | 0.3800 / 68.4 | 0.4000 / 72.0 |
-    | C | 0.2467 / 44.4 | 0.2933 / 52.8 | 0.3733 / 67.2 |
-    | D | 0.2400 / 43.2 | 0.3133 / 56.4 | 0.3867 / 69.6 |
-    | E | 0.1067 / 19.2 | 0.0867 / 15.6 | 0.1000 / 18.0 |
-  - **Topology ranking summary**:
-    - `B/mid/reachable`: `avg_rank=1.47`, `avg_completion=0.3600`, `avg_demand_tph=64.8`
-    - `C`: `avg_rank=2.20`, `avg_completion=0.3045`, `avg_demand_tph=54.8`
-    - `D`: `avg_rank=2.53`, `avg_completion=0.3133`, `avg_demand_tph=56.4`
-    - `A`: `avg_rank=3.93`, `avg_completion=0.2022`, `avg_demand_tph=36.4`
-    - `E`: `avg_rank=4.87`, `avg_completion=0.0978`, `avg_demand_tph=17.6`
+    | A | 0.1933 / — | 0.1933 / — | 0.1867 / — |
+    | B(mid/reachable) | 0.2867 / — | 0.3600 / — | 0.4067 / — |
+    | C | 0.2866 / — | 0.3867 / — | 0.3867 / — |
+    | D | 0.2733 / — | 0.3733 / — | 0.3733 / — |
+    | E | 0.0600 / — | 0.0933 / — | 0.1133 / — |
+  - **2026-04-28 Topology ranking summary**:
+    - `C`: `avg_rank=1.53`, `avg_completion=0.3533`, `avg_demand_tph=63.6`, wins=8/15
+    - `B/mid/reachable`: `avg_rank=1.87`, `avg_completion=0.3511`, `avg_demand_tph=63.2`, wins=7/15
+    - `D`: `avg_rank=2.80`, `avg_completion=0.3400`, `avg_demand_tph=61.2`
+    - `A`: `avg_rank=4.07`, `avg_completion=0.1911`, `avg_demand_tph=34.4`
+    - `E`: `avg_rank=4.73`, `avg_completion=0.0889`, `avg_demand_tph=16.0`
+  - **이전(buggy siding) vs 현재(fixed) 차이**:
+    - 이전 ranking은 `B/mid/reachable`이 1.47로 명확한 1위였음 (`completion=0.3600`)
+    - siding 우회 시 픽업을 건너뛰던 버그가 있어 B의 실제 처리력이 부풀려져 있었음 — fix 후
+      픽업까지 정상 방문하면서 B의 wait가 커지고 C/D와의 격차가 거의 사라짐
+    - 현 ranking은 사실상 `C ≈ B > D ≫ A ≫ E`. C와 B가 statistical tie 수준 (Δrank=0.34)
   - **해석**:
-    - 현재 모델 기준 스케일링 강도는 `B > C ≈ D >> A >> E`
-    - `C/D`는 `B`보다 throughput은 낮지만 wait와 section conflict를 훨씬 낮게 유지
+    - C/D는 단방향 + wide 모델 덕분에 fix 영향 없음, B만 정상화로 약간 후퇴
+    - C가 wait/section conflict를 가장 안정적으로 관리해 ranking 1위
     - `A`는 head-on이 없지만 20대 이후 completion이 거의 늘지 않아 조기 포화
-    - `E`는 교행보다 section conflict가 지배적이라 고밀도에서 가장 약함
+    - `E`는 section conflict가 지배적이라 고밀도에서 가장 약함
 - [x] C/D 총 통로폭 재정의 후 포화 곡선 재검증
   - `topology_cd_saturation_common_demand.yaml` 추가: AGV `20/24/28`, 600s, 5 seeds
   - 정의 수정: `C=총 통로폭 2.0m`, `D=총 통로폭 3.0m`, lane section capacity는 둘 다 `1`
