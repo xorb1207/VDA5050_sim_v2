@@ -1115,15 +1115,20 @@ def _recommended_use_case(row: dict, locale: str) -> str:
     return _tr(locale, "moderate_use_case")
 
 
-def _build_per_topology(rows: list[dict], aggregate: list[dict], locale: str) -> list[dict]:
+def _build_per_topology(rows: list[dict], aggregate: list[dict], locale: str, out_dir: Optional[Path] = None) -> list[dict]:
     per_topology: list[dict] = []
     for agg in aggregate:
         strengths, weaknesses = _build_strengths_and_weaknesses(agg, aggregate, locale)
+        siding_placement = agg.get("siding_placement", "base")
+        siding_policy = agg.get("siding_policy", "reachable")
+        playback_link = _find_playback_link(
+            out_dir, agg["topology_type"], siding_placement, siding_policy
+        ) if out_dir is not None else ""
         per_topology.append({
             "topology_type": agg["topology_type"],
             "topology_variant": agg["topology_variant"],
-            "siding_placement": agg.get("siding_placement", "base"),
-            "siding_policy": agg.get("siding_policy", "reachable"),
+            "siding_placement": siding_placement,
+            "siding_policy": siding_policy,
             "aggregate_metrics": {
                 "avg_rank": agg["avg_rank"],
                 "wins": agg["first_place_wins"],
@@ -1140,6 +1145,7 @@ def _build_per_topology(rows: list[dict], aggregate: list[dict], locale: str) ->
             "dominant_bottleneck": _localized_bottleneck(agg, locale),
             "tradeoff_summary": _tradeoff_summary(agg, locale),
             "recommended_use_case": _recommended_use_case(agg, locale),
+            "playback_link": playback_link,
         })
     return per_topology
 
@@ -1229,7 +1235,30 @@ def _build_comparisons(aggregate: list[dict], locale: str) -> list[dict]:
     return comparisons
 
 
-def _build_report(config: ExperimentConfig, results: list[RunResult]) -> dict:
+def _find_playback_link(out_dir: Path, topology_type: str, siding_placement: str, siding_policy: str) -> str:
+    """Look for a representative playback.html in any variant dir matching the topology."""
+    if out_dir is None or not out_dir.exists():
+        return ""
+    placement_suffix = (
+        f"_siding{siding_placement}"
+        if topology_type == "B" and siding_placement and siding_placement != "base"
+        else ""
+    )
+    policy_suffix = (
+        f"_policy{siding_policy}"
+        if topology_type == "B" and siding_policy and siding_policy != "reachable"
+        else ""
+    )
+    prefix = f"{topology_type}{placement_suffix}{policy_suffix}_"
+    candidates = sorted(p for p in out_dir.iterdir() if p.is_dir() and p.name.startswith(prefix))
+    for cand in candidates:
+        playback = cand / "playback.html"
+        if playback.exists():
+            return f"./{cand.name}/playback.html"
+    return ""
+
+
+def _build_report(config: ExperimentConfig, results: list[RunResult], out_dir: Optional[Path] = None) -> dict:
     locale = config.report_language
     rows = [_flatten_summary_row(r) for r in results]
     ranking_rows = _build_ranking_rows(results)
@@ -1310,7 +1339,7 @@ def _build_report(config: ExperimentConfig, results: list[RunResult]) -> dict:
             "top_winner": winner,
             "summary": overview_summary,
         },
-        "per_topology": _build_per_topology(rows, aggregate, locale),
+        "per_topology": _build_per_topology(rows, aggregate, locale, out_dir),
         "comparisons": _build_comparisons(aggregate, locale),
         "chart_series": _build_chart_series(rows, aggregate),
     }
@@ -1432,6 +1461,35 @@ def _build_report_html(report: dict) -> str:
     .chip.bad {{ color: var(--bad); }}
     .chip.good {{ color: var(--good); }}
     .muted {{
+      color: var(--muted);
+    }}
+    .playback-btn {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 100ms, border-color 100ms;
+    }}
+    .playback-btn:hover {{
+      background: #e6efff;
+      border-color: #2563eb;
+      color: #1d4ed8;
+    }}
+    .playback-btn.disabled {{
+      color: var(--muted);
+      cursor: not-allowed;
+      background: #f5f7fb;
+    }}
+    .playback-btn.disabled:hover {{
+      background: #f5f7fb;
+      border-color: var(--border);
       color: var(--muted);
     }}
     .comparison-list {{
@@ -1595,6 +1653,9 @@ def _build_report_html(report: dict) -> str:
         const metrics = item.aggregate_metrics;
         const strengthChips = item.strengths.map(s => `<span class="chip good">${{s}}</span>`).join("");
         const weaknessChips = item.weaknesses.map(s => `<span class="chip bad">${{s}}</span>`).join("");
+        const playbackBtn = item.playback_link
+          ? `<a class="playback-btn" href="${{item.playback_link}}" target="_blank">시뮬레이션 재생 →</a>`
+          : `<span class="playback-btn disabled" title="이 토폴로지의 playback이 생성되지 않았습니다 (showcase 실험을 함께 실행하면 활성화됩니다)">재생 없음</span>`;
         return `
           <article class="panel">
             <div class="chart-head">
@@ -1616,6 +1677,7 @@ def _build_report_html(report: dict) -> str:
             <p style="margin-top: 12px; line-height: 1.5;">${{item.tradeoff_summary}}</p>
             <p class="muted" style="margin-top: 8px;">권장 운영: ${{item.recommended_use_case}}</p>
             <div class="chips">${{strengthChips}}${{weaknessChips}}</div>
+            <div style="margin-top: 12px;">${{playbackBtn}}</div>
           </article>
         `;
       }});
@@ -1901,7 +1963,7 @@ class ExperimentRunner:
         aggregate_path = self.out_dir / "ranking_aggregate.json"
         aggregate_path.write_text(json.dumps(aggregate, ensure_ascii=False, indent=2))
 
-        report = _build_report(self.config, results)
+        report = _build_report(self.config, results, self.out_dir)
         report_path = self.out_dir / "report.json"
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2))
         report_html_path = self.out_dir / "report.html"

@@ -1,0 +1,22 @@
+# Topology showcase — one representative simulation per type with playback enabled.
+# Goal: pair with a saturation experiment so the report can link to a clickable
+# simulation for each type.
+#
+# 5 types × AGV=24 × seed=42 × 600s × common_demand × playback on
+# Disk cost: ~5 traces × ~5 MB = ~25 MB total
+
+types: [A, B, C, D, E]
+agv_counts: [24]
+duration_s: 600
+task_interval_s: 5.0
+random_seeds: [42]
+demand_mode: common_demand
+demand_count: 30
+type_b_variants:
+  - name: mid_reachable
+    siding_placement: mid
+    siding_policy: reachable
+output_dir: outputs/experiments
+report_language: ko
+playback_trace_enabled: true
+playback_sample_interval_s: 0.5
