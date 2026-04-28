@@ -74,9 +74,23 @@ class PlaybackTraceRecorder:
             else:
                 blocked_edge_key = ""
             goal_node_id = path[-1] if path else (getattr(agv, "target_node_id", "") or "")
+            pickup_node_id = getattr(agv, "_current_pickup_node_id", None) or ""
+            dropoff_node_id = getattr(agv, "_current_dropoff_node_id", None) or ""
+            phase = ""
+            immediate_goal = goal_node_id
+            if pickup_node_id and dropoff_node_id:
+                upcoming = set(path[path_index:])
+                if pickup_node_id in upcoming:
+                    phase = "pickup"
+                    immediate_goal = pickup_node_id
+                else:
+                    phase = "dropoff"
+                    immediate_goal = dropoff_node_id
             detour_via_siding = ""
             for nid in path[path_index:]:
-                if nid and nid.startswith("SD_") and nid != goal_node_id:
+                if not nid or nid == goal_node_id or nid == immediate_goal:
+                    continue
+                if nid.startswith("SD_"):
                     detour_via_siding = nid
                     break
             snapshot["agvs"].append({
@@ -90,6 +104,10 @@ class PlaybackTraceRecorder:
                 "current_node": agv.current_node_id,
                 "target_node": agv.target_node_id,
                 "goal_node": goal_node_id,
+                "pickup_node": pickup_node_id,
+                "dropoff_node": dropoff_node_id,
+                "phase": phase,
+                "immediate_goal": immediate_goal,
                 "detour_via": detour_via_siding,
                 "current_edge_key": current_edge_key,
                 "planned_edge_keys": planned_edge_keys,
@@ -569,10 +587,11 @@ def build_playback_html(trace: dict) -> str:
       const reverseKey = `${e.end_node_id}__${e.start_node_id}`;
       return !_edgeKeySet.has(reverseKey);
     });
-    function goalNodeId(agv) {
-      // Prefer the explicit goal (path[-1]) so the label stays put across
-      // sliding planned-edge windows. Fall back to target_node, then last
-      // planned hop. Never returns the detour siding itself.
+    function immediateGoalNodeId(agv) {
+      // The leg the AGV is actually heading toward right now: pickup during
+      // pickup phase, dropoff after pickup completes. Falls back to goal_node
+      // (= path[-1]) for non-order travel (idle return / charging).
+      if (agv.immediate_goal) return agv.immediate_goal;
       if (agv.goal_node) return agv.goal_node;
       if (agv.target_node) return agv.target_node;
       const keys = agv.planned_edge_keys || [];
@@ -581,9 +600,7 @@ def build_playback_html(trace: dict) -> str:
       return parts[1] || '';
     }
     function destinationNodeId(agv) {
-      // Used for the on-map target ring; mirrors goal so the ring lands on
-      // the actual delivery point, not on a passing waypoint.
-      return goalNodeId(agv);
+      return immediateGoalNodeId(agv);
     }
     function describeGoal(goalId) {
       if (!goalId) return '';
@@ -593,10 +610,12 @@ def build_playback_html(trace: dict) -> str:
       return '→' + goalId;
     }
     function destinationLabel(agv) {
-      const goal = goalNodeId(agv);
-      const base = describeGoal(goal);
+      const target = immediateGoalNodeId(agv);
+      let base = describeGoal(target);
       if (!base) return '';
-      if (agv.detour_via) return base + ' (via ' + agv.detour_via + ')';
+      if (agv.phase === 'pickup') base += ' [픽업]';
+      else if (agv.phase === 'dropoff') base += ' [드롭]';
+      if (agv.detour_via) base += ' (via ' + agv.detour_via + ')';
       return base;
     }
     function agvCaption(agv, includeStateForCluster) {
@@ -966,9 +985,13 @@ def build_playback_html(trace: dict) -> str:
             const inner = item.anchored
               ? agvShapeMarkup(0, 0, '#3a4555', true, false)
               : agvArrowMarkup(0, 0, '#3a4555', agv.heading, false);
+            // Invisible 18px hit-circle (counter-scaled) so clicks land reliably.
             return `
-              <g transform="translate(${cx} ${cy}) scale(${labelScale})">${inner}</g>
-              <text class="agv-label" transform="translate(${labelX} ${labelY}) scale(${labelScale})">${labelText}</text>
+              <g class="agv-hit" data-agv-id="${agv.agv_id}" style="cursor: pointer;" transform="translate(${cx} ${cy}) scale(${labelScale})">
+                <circle r="18" fill="transparent" />
+                ${inner}
+              </g>
+              <text class="agv-label" data-agv-id="${agv.agv_id}" style="cursor: pointer;" transform="translate(${labelX} ${labelY}) scale(${labelScale})">${labelText}</text>
             `;
           }).join('')}
           ${(() => {
@@ -1112,11 +1135,19 @@ def build_playback_html(trace: dict) -> str:
       panel.hidden = false;
       stack.classList.add('has-focus');
       document.getElementById('agv-detail-title').textContent = agv.agv_id + ' 상세';
-      const goal = goalNodeId(agv);
       const dest = destinationNodeId(agv);
       const detourRow = agv.detour_via
         ? `<div class="row"><span class="key">우회</span><span style="color:#c77700;">via ${agv.detour_via}</span></div>`
         : '';
+      const orderRow = (agv.pickup_node || agv.dropoff_node)
+        ? (() => {
+            const isPickup = agv.phase === 'pickup';
+            const isDropoff = agv.phase === 'dropoff';
+            const pickupBadge = `<span class="badge" ${isPickup ? 'style="border-color:#0f9d58;color:#0f9d58;font-weight:600;"' : ''}>${agv.pickup_node || '—'}</span>`;
+            const dropoffBadge = `<span class="badge" ${isDropoff ? 'style="border-color:#0f9d58;color:#0f9d58;font-weight:600;"' : ''}>${agv.dropoff_node || '—'}</span>`;
+            return `<div class="row"><span class="key">주문</span></div><div class="chain-row">픽업 ${pickupBadge}<span class="arrow">→</span>드롭 ${dropoffBadge}</div>`;
+          })()
+        : '<div class="meta">현재 주문 없음</div>';
       const reserved = agv.reserved_edge_keys || [];
       const planned = agv.planned_edge_keys || [];
       const reservedDepth = reserved.length;
@@ -1138,7 +1169,8 @@ def build_playback_html(trace: dict) -> str:
         <div class="row"><span class="key">상태</span><strong>${agv.state}</strong></div>
         <div class="row"><span class="key">현재</span><span>${agv.current_node || '—'}</span></div>
         <div class="row"><span class="key">다음</span><span>${agv.target_node || '—'}</span></div>
-        <div class="row"><span class="key">목적</span><span>${goal || '—'}</span></div>
+        <div class="row"><span class="key">즉시 목적</span><span>${dest || '—'}${agv.phase ? ' · ' + (agv.phase === 'pickup' ? '픽업' : '드롭') + ' 단계' : ''}</span></div>
+        ${orderRow}
         ${detourRow}
         <div class="row"><span class="key">배터리</span><span>${(agv.battery_pct || 0).toFixed(1)}%</span></div>
         <div class="row"><span class="key">예약 깊이</span><span>${reservedDepth} hop</span></div>
@@ -1220,6 +1252,24 @@ def build_playback_html(trace: dict) -> str:
     document.getElementById('map').addEventListener('pointerleave', () => {
       isDragging = false;
       dragStart = null;
+    });
+    // AGV click → toggle focus on clicked AGV.
+    document.getElementById('map').addEventListener('click', (e) => {
+      const hit = e.target.closest('[data-agv-id]');
+      if (!hit) return;
+      const agvId = hit.dataset.agvId;
+      const select = document.getElementById('agv-focus');
+      // Toggle: clicking the already-focused AGV clears focus.
+      const next = focusedAgvId === agvId ? '' : agvId;
+      focusedAgvId = next;
+      select.value = next;
+      render();
+    });
+    // Double-click empty map area → reset zoom/pan. Skip when clicking an AGV.
+    document.getElementById('map').addEventListener('dblclick', (e) => {
+      if (e.target.closest('[data-agv-id]')) return;
+      resetZoom();
+      render();
     });
     populateAgvFocusOptions();
     render();
