@@ -877,31 +877,38 @@ class AGV:
         return ""
 
     def _reroute_via_siding(self, siding_id: str, sim_time: float) -> None:
-        """경로에 siding을 중간 경유지로 삽입."""
-        if self.current_node_id and self._path_index < len(self._path):
-            goal = self._path[-1]
-            path_to_siding = self._graph.get_path(self.current_node_id, siding_id)
-            # siding → goal 경로
-            tail = self._graph.get_path(siding_id, goal)
-            if (
-                path_to_siding
-                and len(path_to_siding) >= 2
-                and tail
-                and len(tail) >= 2
-            ):
-                prefix = self._path[:self._path_index]
-                rebuilt = prefix + path_to_siding[1:] + tail[1:]
-                deduped: list[str] = []
-                for node_id in rebuilt:
-                    if not deduped or deduped[-1] != node_id:
-                        deduped.append(node_id)
-                self._path = deduped
-                self._path_index = len(prefix)
-                self.collision_retry_count = 0
-                self._pending_edge_src = None
-                self._pending_edge_dst = siding_id
-                self._fsm.force(AGVState.WAITING_RESERVATION)
-                self._trace("reroute_siding_applied", sim_time, siding_id=siding_id)
+        """siding을 중간 경유지로 삽입하되 원 경로의 픽업·드롭 시퀀스는 보존."""
+        if not self.current_node_id or self._path_index >= len(self._path):
+            return
+        # 원래 가려던 다음 hop. 우회 후 다시 이 노드로 복귀해 잔여 경로를 이어간다.
+        next_hop = self._path[self._path_index]
+        path_to_siding = self._graph.get_path(self.current_node_id, siding_id)
+        return_path = self._graph.get_path(siding_id, next_hop)
+        if (
+            path_to_siding
+            and len(path_to_siding) >= 2
+            and return_path
+            and len(return_path) >= 2
+        ):
+            prefix = self._path[:self._path_index]
+            tail_after_next = self._path[self._path_index + 1:]
+            rebuilt = (
+                prefix
+                + path_to_siding[1:]
+                + return_path[1:]
+                + tail_after_next
+            )
+            deduped: list[str] = []
+            for node_id in rebuilt:
+                if not deduped or deduped[-1] != node_id:
+                    deduped.append(node_id)
+            self._path = deduped
+            self._path_index = len(prefix)
+            self.collision_retry_count = 0
+            self._pending_edge_src = None
+            self._pending_edge_dst = siding_id
+            self._fsm.force(AGVState.WAITING_RESERVATION)
+            self._trace("reroute_siding_applied", sim_time, siding_id=siding_id)
 
     async def _reroute(
         self,
