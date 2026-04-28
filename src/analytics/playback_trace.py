@@ -180,41 +180,119 @@ def build_playback_html(trace: dict) -> str:
   <style>
     :root {
       color-scheme: light;
-      --bg: #f3f5f8;
-      --panel: #ffffff;
-      --text: #18202a;
-      --muted: #5a6877;
-      --border: #d8dee7;
-      --edge: #c6d0db;
+      /* Surfaces */
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --surface-2: #fafbfd;
+      --surface-3: #f1f4f8;
+      --panel: var(--surface);
+      /* Ink */
+      --ink: #0f172a;
+      --text: var(--ink);
+      --muted: #64748b;
+      --muted-2: #94a3b8;
+      /* Border */
+      --border: #e3e8ef;
+      --border-strong: #cbd3df;
+      /* Edge state colors */
+      --edge: #d3dae4;
       --edge-plan: #8bb4ff;
       --edge-reserved: #2459d1;
       --edge-active: #0f9d58;
       --edge-blocked: #c0392b;
+      /* Node colors */
       --node-work: #0f9d58;
       --node-charger: #1f6feb;
-      --accent: #1f6feb;
+      --node-siding: #e0a000;
+      /* Accents */
+      --accent: #2563eb;
+      --accent-soft: #e6efff;
+      --success: #0f9d58;
+      --success-soft: #e6f7ee;
+      --warn: #c77700;
+      --warn-soft: #fff3df;
+      --danger: #c0392b;
+      --danger-soft: #fde8e7;
+      /* Type */
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Apple SD Gothic Neo", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+      /* Shadows */
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+      --shadow-md: 0 1px 3px rgba(15, 23, 42, 0.05), 0 6px 18px -10px rgba(15, 23, 42, 0.10);
+      /* Radii */
+      --radius-sm: 6px;
+      --radius: 10px;
+      --radius-lg: 14px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      letter-spacing: -0.005em;
       background: var(--bg);
-      color: var(--text);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
+    h1, h2, h3 { letter-spacing: -0.015em; margin: 0; }
     .page {
       max-width: 1480px;
       margin: 0 auto;
-      padding: 18px;
+      padding: 20px 18px 32px;
       display: grid;
-      gap: 16px;
+      gap: 14px;
     }
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow-sm);
     }
     .top { display: grid; gap: 12px; }
+    .header-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      align-items: end;
+      justify-content: space-between;
+    }
+    .header-title { display: grid; gap: 2px; }
+    .header-eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .header-title h1 {
+      font-size: 22px;
+      line-height: 1.1;
+      font-weight: 700;
+    }
+    .kpi-strip {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .kpi-chip {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 6px 10px;
+      background: var(--surface-3);
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .kpi-chip strong {
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 12.5px;
+    }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -223,58 +301,131 @@ def build_playback_html(trace: dict) -> str:
       position: sticky;
       top: 0;
       z-index: 10;
-      padding: 12px;
-      background: rgba(255,255,255,0.96);
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.92);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      backdrop-filter: blur(8px);
+      border-radius: var(--radius);
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      box-shadow: var(--shadow-sm);
     }
-    .playback-stage {
-      display: grid;
-      gap: 10px;
+    .toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding-left: 10px;
+      border-left: 1px solid var(--border);
     }
-    .map-stage {
-      display: grid;
-      gap: 10px;
+    .toolbar-group:first-of-type { padding-left: 0; border-left: 0; }
+    .toolbar-group .meta { font-size: 11px; }
+    .time-pill {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--surface-3);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: 0.01em;
+      white-space: nowrap;
     }
+    .time-pill .meta { font-family: var(--font-sans); font-weight: 500; color: var(--muted); }
+    .playback-stage { display: grid; gap: 10px; }
+    .map-stage { display: grid; gap: 10px; }
     button {
-      height: 32px;
+      height: 30px;
       padding: 0 12px;
       border: 1px solid var(--border);
-      background: #fff;
-      border-radius: 6px;
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 120ms, border-color 120ms, color 120ms, box-shadow 120ms;
+    }
+    button:hover { background: var(--surface-3); border-color: var(--border-strong); }
+    button:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 3px var(--accent);
+    }
+    .play-toggle {
+      min-width: 76px;
+      font-weight: 600;
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+    .play-toggle:hover { background: #1a253b; border-color: #1a253b; }
+    .play-toggle.is-playing { background: var(--surface); color: var(--ink); border-color: var(--border-strong); font-weight: 500; }
+    .play-toggle.is-playing:hover { background: var(--surface-3); }
+    select {
+      height: 30px;
+      padding: 0 26px 0 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+      font: inherit;
+      font-size: 12.5px;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path fill='%2364748b' d='M3 4.5l3 3 3-3z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
       cursor: pointer;
     }
-    select {
-      height: 32px;
-      padding: 0 10px;
-      border: 1px solid var(--border);
-      background: #fff;
-      border-radius: 6px;
-    }
-    .speed-group {
-      display: inline-flex;
-      gap: 6px;
-      align-items: center;
-      padding-left: 8px;
-      border-left: 1px solid var(--border);
-    }
-    .focus-group {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      padding-left: 8px;
-      border-left: 1px solid var(--border);
-    }
+    .speed-btn { padding: 0 10px; min-width: 40px; font-variant-numeric: tabular-nums; }
     .speed-btn.active {
       background: var(--accent);
-      color: white;
+      color: #fff;
       border-color: var(--accent);
     }
-    input[type=range] { width: min(620px, 100%); }
+    .speed-btn.active:hover { background: #1d4ed8; border-color: #1d4ed8; }
+    /* Range slider polish */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: min(540px, 100%);
+      height: 6px;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--surface-3);
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #fff;
+      margin-top: -4px;
+      box-shadow: 0 0 0 1px var(--accent), 0 1px 2px rgba(15,23,42,0.2);
+    }
+    input[type=range]::-moz-range-track {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--surface-3);
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px var(--accent), 0 1px 2px rgba(15,23,42,0.2);
+    }
     .hint {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11.5px;
     }
     .lower-layout {
       display: grid;
@@ -306,50 +457,75 @@ def build_playback_html(trace: dict) -> str:
     .agv-detail-body {
       display: grid;
       gap: 8px;
-      font-size: 13px;
+      font-size: 12.5px;
       overflow: auto;
       min-height: 0;
+      padding-right: 4px;
     }
     .agv-detail-body .row {
       display: flex;
       justify-content: space-between;
       gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px dashed var(--border);
     }
-    .agv-detail-body .row .key { color: var(--muted); }
+    .agv-detail-body .row:last-of-type { border-bottom: 0; }
+    .agv-detail-body .row .key { color: var(--muted); font-size: 11.5px; }
+    .agv-detail-body .row .val-mono { font-family: var(--font-mono); font-size: 12px; }
+    .state-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      background: var(--surface-3);
+      color: var(--muted);
+    }
+    .state-pill.s-navigating { background: var(--accent-soft); color: #1d4ed8; }
+    .state-pill.s-processing { background: var(--success-soft); color: #0b6e3f; }
+    .state-pill.s-charging { background: #ddeafe; color: #1d4ed8; }
+    .state-pill.s-waiting { background: var(--danger-soft); color: var(--danger); }
+    .state-pill.s-idle { background: var(--surface-3); color: var(--muted); }
     .depth-bars { display: grid; gap: 3px; }
     .depth-row {
       display: grid;
-      grid-template-columns: 64px 1fr;
+      grid-template-columns: 56px 1fr;
       gap: 8px;
       align-items: center;
-      font-size: 12px;
+      font-size: 11.5px;
     }
     .depth-row .bar {
-      height: 8px;
-      background: linear-gradient(90deg, #2459d1 0%, #2459d1 var(--bar), #e6ecf5 var(--bar));
-      border-radius: 4px;
+      height: 6px;
+      background: linear-gradient(90deg, #2459d1 0%, #2459d1 var(--bar), var(--surface-3) var(--bar));
+      border-radius: 999px;
     }
-    .depth-row .label { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+    .depth-row .label { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
     .chain-row {
       display: flex;
       gap: 6px;
       align-items: center;
-      font-size: 12px;
+      font-size: 11.5px;
       flex-wrap: wrap;
     }
     .chain-row .badge {
       border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1px 6px;
-      background: #fff;
+      border-radius: 999px;
+      padding: 1px 8px;
+      background: var(--surface);
+      font-family: var(--font-mono);
+      font-size: 11px;
     }
-    .chain-row .arrow { color: var(--muted); }
-    .chain-row.cycle .badge { border-color: #c0392b; color: #c0392b; }
+    .chain-row .arrow { color: var(--muted-2); font-size: 11px; }
+    .chain-row.cycle .badge { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
     .side-stack .panel {
       display: flex;
       flex-direction: column;
       min-height: 0;
       overflow: hidden;
+      padding: 12px 14px;
     }
     .side-stack .event-list,
     .side-stack .incident-list {
@@ -357,87 +533,94 @@ def build_playback_html(trace: dict) -> str:
       flex: 1 1 auto;
       min-height: 0;
     }
+    .map-panel { padding: 0; overflow: hidden; }
     .map-shell {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-      background: #fcfdff;
+      border-top: 1px solid var(--border);
+      background: #fbfcfe;
     }
     svg {
       width: 100%;
       height: 760px;
-      background: #fcfdff;
+      background: linear-gradient(180deg, #fcfdff 0%, #f7f9fc 100%);
       display: block;
     }
     .legend {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
-      font-size: 12px;
+      gap: 8px 14px;
+      font-size: 11.5px;
       color: var(--muted);
     }
     .legend-item {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
     .swatch {
       width: 10px;
       height: 10px;
       border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.04);
     }
     .swatch-ring {
       border-radius: 50%;
       background: #fff;
-      border: 2px solid #8b98a8;
+      border: 2px solid #94a3b8;
+      box-shadow: none;
     }
     .legend-divider {
       width: 1px;
       align-self: stretch;
       background: var(--border);
-      margin: 0 4px;
+      margin: 0 2px;
     }
     .event-list, .incident-list {
       display: grid;
-      gap: 8px;
+      gap: 6px;
       max-height: 280px;
       overflow: auto;
+      padding-right: 4px;
     }
     .event-item, .incident-item {
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px;
-      background: #fbfcfe;
-      font-size: 13px;
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      background: var(--surface-2);
+      font-size: 12.5px;
       line-height: 1.45;
+      transition: border-color 100ms, background 100ms, box-shadow 100ms;
     }
+    .event-item { font-family: inherit; }
+    .event-item .event-head { font-weight: 600; color: var(--ink); }
+    .event-item .event-key { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
     .incident-item {
       cursor: pointer;
     }
     .incident-item:hover {
       border-color: var(--accent);
-      background: #f4f8ff;
+      background: var(--accent-soft);
+      box-shadow: var(--shadow-sm);
     }
-    .meta { color: var(--muted); font-size: 12px; }
-    .kpi {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-    }
-    .kpi .panel { padding: 12px; }
-    .agv-label { font-size: 10px; fill: #18202a; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 11.5px; }
+    .agv-label { font-size: 10px; fill: var(--ink); font-weight: 600; paint-order: stroke; stroke: rgba(255,255,255,0.85); stroke-width: 2px; }
     .section-title {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: baseline;
       gap: 8px;
       margin-bottom: 10px;
+    }
+    .section-title h2 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.005em;
     }
     .map-topline {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 10px;
+      padding: 10px 14px;
     }
     .pill {
       display: inline-flex;
@@ -479,46 +662,50 @@ def build_playback_html(trace: dict) -> str:
 <body>
   <div class="page">
     <section class="panel top">
-      <div>
-        <div class="meta">Playback Trace</div>
-        <h1 style="margin: 0; font-size: 28px;">시뮬레이션 재생</h1>
+      <div class="header-row">
+        <div class="header-title">
+          <div class="header-eyebrow">Playback Trace</div>
+          <h1>시뮬레이션 재생</h1>
+        </div>
+        <div class="kpi-strip" id="kpi-strip">
+          <span class="kpi-chip">스냅샷 <strong id="snapshot-count">—</strong></span>
+          <span class="kpi-chip">이벤트 <strong id="event-count">—</strong></span>
+          <span class="kpi-chip">간격 <strong id="sample-interval">—</strong></span>
+          <span class="kpi-chip">사고/병목 <strong id="incident-count">—</strong></span>
+        </div>
       </div>
       <div class="playback-stage">
         <div class="toolbar">
-          <button id="play-btn">재생</button>
-          <button id="pause-btn">일시정지</button>
-          <input id="time-slider" type="range" min="0" max="0" step="1" value="0" />
-          <strong id="time-label">t=0.0s</strong>
-          <div class="speed-group">
-            <span class="meta">배속</span>
-            <button class="speed-btn active" data-speed="1">1.0x</button>
-            <button class="speed-btn" data-speed="2">2.0x</button>
-            <button class="speed-btn" data-speed="5">5.0x</button>
+          <div class="toolbar-group">
+            <button id="play-toggle" class="play-toggle" type="button">재생</button>
           </div>
-          <div class="focus-group">
-            <span class="meta">AGV 포커스</span>
+          <div class="toolbar-group" style="flex: 1 1 320px;">
+            <input id="time-slider" type="range" min="0" max="0" step="1" value="0" />
+            <span class="time-pill"><span class="meta">t</span><span id="time-label">0.00s</span></span>
+          </div>
+          <div class="toolbar-group">
+            <span class="meta">배속</span>
+            <button class="speed-btn active" data-speed="1" type="button">1.0x</button>
+            <button class="speed-btn" data-speed="2" type="button">2.0x</button>
+            <button class="speed-btn" data-speed="5" type="button">5.0x</button>
+          </div>
+          <div class="toolbar-group">
+            <span class="meta">AGV</span>
             <select id="agv-focus">
               <option value="">전체</option>
             </select>
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
           </div>
         </div>
-        <div class="hint">지도 위에서 마우스 휠로 확대/축소하고 드래그로 이동. 우측 사고 묶음 항목을 클릭하면 해당 시점으로 점프합니다.</div>
+        <div class="hint">맵: 휠 확대/축소, 드래그 이동, 더블클릭 줌 초기화. AGV 클릭 시 포커스. 우측 사고 묶음 클릭 시 해당 시점으로 점프합니다.</div>
       </div>
-    </section>
-
-    <section class="kpi">
-      <div class="panel"><div class="meta">총 스냅샷</div><strong id="snapshot-count"></strong></div>
-      <div class="panel"><div class="meta">총 이벤트</div><strong id="event-count"></strong></div>
-      <div class="panel"><div class="meta">샘플 간격</div><strong id="sample-interval"></strong></div>
-      <div class="panel"><div class="meta">사고/병목 포인트</div><strong id="incident-count"></strong></div>
     </section>
 
     <section class="main-layout">
       <section class="panel map-panel">
         <div class="map-topline">
           <div class="legend">
-            <span class="legend-item"><span class="swatch" style="background:#c6d0db"></span>기본 통로</span>
+            <span class="legend-item"><span class="swatch" style="background:#d3dae4"></span>기본 통로</span>
             <span class="legend-item"><span class="swatch" style="background:#8bb4ff"></span>계획</span>
             <span class="legend-item"><span class="swatch" style="background:#2459d1"></span>예약</span>
             <span class="legend-item"><span class="swatch" style="background:#0f9d58"></span>주행</span>
@@ -532,7 +719,7 @@ def build_playback_html(trace: dict) -> str:
           </div>
         </div>
         <div class="map-shell">
-          <svg id="map" viewBox="0 0 1000 700"></svg>
+          <svg id="map" viewBox="-30 -10 1060 720"></svg>
         </div>
       </section>
       <aside class="side-stack" id="side-stack">
@@ -755,8 +942,8 @@ def build_playback_html(trace: dict) -> str:
       const rect = svg.getBoundingClientRect();
       const viewBox = svg.viewBox.baseVal;
       return {
-        x: ((clientX - rect.left) / rect.width) * viewBox.width,
-        y: ((clientY - rect.top) / rect.height) * viewBox.height,
+        x: viewBox.x + ((clientX - rect.left) / rect.width) * viewBox.width,
+        y: viewBox.y + ((clientY - rect.top) / rect.height) * viewBox.height,
       };
     }
     function svgDeltaFromClient(svg, dx, dy) {
@@ -1089,12 +1276,18 @@ def build_playback_html(trace: dict) -> str:
       `).join('');
     }
     function render() {
-      document.getElementById('snapshot-count').textContent = String(snapshots.length);
-      document.getElementById('event-count').textContent = String(events.length);
+      document.getElementById('snapshot-count').textContent = snapshots.length.toLocaleString();
+      document.getElementById('event-count').textContent = events.length.toLocaleString();
       document.getElementById('sample-interval').textContent = `${trace.meta.sample_interval_s.toFixed(2)}s`;
       document.getElementById('time-slider').max = Math.max(snapshots.length - 1, 0);
       document.getElementById('time-slider').value = index;
-      document.getElementById('time-label').textContent = `t=${currentTime().toFixed(2)}s`;
+      document.getElementById('time-label').textContent = `${currentTime().toFixed(2)}s`;
+      const toggle = document.getElementById('play-toggle');
+      if (toggle) {
+        const playing = !!timer;
+        toggle.textContent = playing ? '일시정지' : '재생';
+        toggle.classList.toggle('is-playing', playing);
+      }
       renderMap();
       renderIncidents();
       renderEvents();
@@ -1165,16 +1358,23 @@ def build_playback_html(trace: dict) -> str:
       const chainHtml = blocking && blocking.chain.length > 1
         ? `<div class="chain-row ${blocking.cycle ? 'cycle' : ''}">${blocking.chain.map(id => `<span class="badge">${id}</span>`).join('<span class="arrow">→</span>')}</div>`
         : '<div class="meta">현재 대기 체인 없음</div>';
+      const stateMap = {
+        NAVIGATING: ['s-navigating', '주행'],
+        PROCESSING: ['s-processing', '작업'],
+        WAITING_RESERVATION: ['s-waiting', '대기'],
+        CHARGING: ['s-charging', '충전'],
+        IDLE: ['s-idle', 'IDLE'],
+      };
+      const [statePillCls, stateLabel] = stateMap[agv.state] || ['s-idle', agv.state];
       document.getElementById('agv-detail-body').innerHTML = `
-        <div class="row"><span class="key">상태</span><strong>${agv.state}</strong></div>
-        <div class="row"><span class="key">현재</span><span>${agv.current_node || '—'}</span></div>
-        <div class="row"><span class="key">다음</span><span>${agv.target_node || '—'}</span></div>
-        <div class="row"><span class="key">즉시 목적</span><span>${dest || '—'}${agv.phase ? ' · ' + (agv.phase === 'pickup' ? '픽업' : '드롭') + ' 단계' : ''}</span></div>
+        <div class="row"><span class="key">상태</span><span class="state-pill ${statePillCls}">${stateLabel}</span></div>
+        <div class="row"><span class="key">현재</span><span class="val-mono">${agv.current_node || '—'}</span></div>
+        <div class="row"><span class="key">다음</span><span class="val-mono">${agv.target_node || '—'}</span></div>
+        <div class="row"><span class="key">즉시 목적</span><span><span class="val-mono">${dest || '—'}</span>${agv.phase ? ' <span class="meta">· ' + (agv.phase === 'pickup' ? '픽업' : '드롭') + ' 단계</span>' : ''}</span></div>
         ${orderRow}
         ${detourRow}
-        <div class="row"><span class="key">배터리</span><span>${(agv.battery_pct || 0).toFixed(1)}%</span></div>
-        <div class="row"><span class="key">예약 깊이</span><span>${reservedDepth} hop</span></div>
-        <div class="row"><span class="key">계획 깊이</span><span>${plannedDepth} hop</span></div>
+        <div class="row"><span class="key">배터리</span><span><span class="val-mono">${(agv.battery_pct || 0).toFixed(1)}%</span></span></div>
+        <div class="row"><span class="key">예약 / 계획</span><span class="val-mono">${reservedDepth} / ${plannedDepth} hop</span></div>
         ${reservedRows ? `<div class="depth-bars">${reservedRows}</div>` : ''}
         ${plannedRows ? `<div class="depth-bars">${plannedRows}</div>` : ''}
         <div class="row"><span class="key">대기 체인</span></div>
@@ -1197,8 +1397,10 @@ def build_playback_html(trace: dict) -> str:
       clearInterval(timer);
       timer = null;
     }
-    document.getElementById('play-btn').addEventListener('click', play);
-    document.getElementById('pause-btn').addEventListener('click', pause);
+    document.getElementById('play-toggle').addEventListener('click', () => {
+      if (timer) pause(); else play();
+      render();
+    });
     document.getElementById('time-slider').addEventListener('input', (e) => {
       index = Number(e.target.value);
       render();
