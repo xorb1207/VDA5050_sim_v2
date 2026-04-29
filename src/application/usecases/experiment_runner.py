@@ -1124,11 +1124,13 @@ def _build_per_topology(rows: list[dict], aggregate: list[dict], locale: str, ou
         playback_link = _find_playback_link(
             out_dir, agg["topology_type"], siding_placement, siding_policy
         ) if out_dir is not None else ""
+        description = _topology_description(agg["topology_type"], locale)
         per_topology.append({
             "topology_type": agg["topology_type"],
             "topology_variant": agg["topology_variant"],
             "siding_placement": siding_placement,
             "siding_policy": siding_policy,
+            "description": description,
             "aggregate_metrics": {
                 "avg_rank": agg["avg_rank"],
                 "wins": agg["first_place_wins"],
@@ -1233,6 +1235,71 @@ def _build_comparisons(aggregate: list[dict], locale: str) -> list[dict]:
             "interpretation": interpretation,
         })
     return comparisons
+
+
+_TOPOLOGY_DESCRIPTIONS_KO: dict[str, dict[str, str]] = {
+    "A": {
+        "headline": "1차선 단방향 순환 — head-on 구조적 불가",
+        "lanes": "1차선",
+        "direction": "단방향 (순환)",
+        "conflict": "없음 (구조적으로 head-on 불가)",
+        "details": (
+            "메인 통로가 한 방향으로만 흐르는 단순 순환 구조. head-on 충돌이 발생할 수 없어 안정적이지만, "
+            "AGV가 늘어도 우회로가 좁아 처리량이 빨리 포화한다."
+        ),
+    },
+    "B": {
+        "headline": "1차선 양방향 + siding 대피",
+        "lanes": "1차선",
+        "direction": "양방향",
+        "conflict": "siding 대피 (head-on 발생 시 사이딩으로 회피)",
+        "details": (
+            "한 차선에서 양방향 통행. 충돌 시 가까운 사이딩(SD)으로 빠지는 정책으로 head-on을 해소한다. "
+            "사이딩 배치/정책에 따라 성능 변동 폭이 큼 (base/mid/dense × adjacent/reachable)."
+        ),
+    },
+    "C": {
+        "headline": "2차선 단방향 분리 — 통로폭 2.0m",
+        "lanes": "2차선 (L1 / L2)",
+        "direction": "단방향 (lane별 분리)",
+        "conflict": "없음 (same-lane head-on 불가)",
+        "details": (
+            "차선을 두 개로 분리해 각 차선이 단방향으로 흐른다. 같은 차선 내 head-on 불가, "
+            "차선 변경은 station/charger access 시점에 발생. 총 통로폭 2.0m."
+        ),
+    },
+    "D": {
+        "headline": "2차선 단방향 wide — 통로폭 3.0m",
+        "lanes": "2차선 (L1: 동→서, L2: 서→동)",
+        "direction": "단방향 (lane별 분리)",
+        "conflict": "없음, follow-on headway 짧음",
+        "details": (
+            "C와 같은 단방향 분리 구조이지만 총 통로폭 3.0m로 더 넓다. 같은 방향 follow-on 안전거리 "
+            "(headway)가 짧아져 처리량 우위. lane section capacity는 C와 동일하게 1."
+        ),
+    },
+    "E": {
+        "headline": "1차선 양방향 + 크리프 감속",
+        "lanes": "1차선",
+        "direction": "양방향",
+        "conflict": "크리프 감속 (head-on 감지 시 0.3m/s)",
+        "details": (
+            "양방향 1차선에서 head-on이 감지되면 양쪽 모두 크리프 속도(0.3m/s)로 감속해 통과. "
+            "사이딩 없이 속도 양보로 해소. 고밀도에선 critical section 충돌이 지배적."
+        ),
+    },
+}
+
+
+def _topology_description(topology_type: str, locale: str) -> dict[str, str]:
+    descs = _TOPOLOGY_DESCRIPTIONS_KO  # English locale would extend here
+    return descs.get(topology_type, {
+        "headline": "",
+        "lanes": "",
+        "direction": "",
+        "conflict": "",
+        "details": "",
+    })
 
 
 def _find_playback_link(out_dir: Path, topology_type: str, siding_placement: str, siding_policy: str) -> str:
@@ -1492,6 +1559,73 @@ def _build_report_html(report: dict) -> str:
       border-color: var(--border);
       color: var(--muted);
     }}
+    .topology-defs {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }}
+    .topology-def {{
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #fbfcfe;
+    }}
+    .topology-def .def-head {{
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }}
+    .topology-def .def-tag {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: #e6efff;
+      color: #1d4ed8;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+    }}
+    .topology-def .def-headline {{
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text);
+      flex: 1 1 auto;
+    }}
+    .topology-def dl {{
+      margin: 0;
+      display: grid;
+      grid-template-columns: 60px 1fr;
+      gap: 4px 8px;
+      font-size: 12px;
+    }}
+    .topology-def dt {{
+      color: var(--muted);
+    }}
+    .topology-def dd {{
+      margin: 0;
+      color: var(--text);
+    }}
+    .topology-def .def-details {{
+      margin-top: 10px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #475569;
+    }}
+    .topology-headline {{
+      margin: 8px 0 0 0;
+      padding: 6px 10px;
+      background: #f1f5fb;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #1d4ed8;
+      font-weight: 500;
+    }}
     .comparison-list {{
       display: grid;
       gap: 12px;
@@ -1593,6 +1727,12 @@ def _build_report_html(report: dict) -> str:
     <section class="meta-grid" id="meta-grid"></section>
 
     <section class="panel" style="margin-top: 18px;">
+      <h2>토폴로지 정의</h2>
+      <p class="muted" style="margin-top:6px;">실험에서 비교한 5가지 통로 구조의 의미. 각 카드의 KPI는 이 정의를 전제로 해석합니다.</p>
+      <div class="topology-defs" id="topology-defs"></div>
+    </section>
+
+    <section class="panel" style="margin-top: 18px;">
       <h2>토폴로지 요약</h2>
       <div class="card-grid" id="topology-cards"></div>
     </section>
@@ -1648,6 +1788,41 @@ def _build_report_html(report: dict) -> str:
         .join("");
     }}
 
+    function renderTopologyDefinitions() {{
+      const seen = new Set();
+      const items = [];
+      for (const t of report.per_topology) {{
+        const code = t.topology_type;
+        if (seen.has(code)) continue;
+        seen.add(code);
+        items.push({{ code, desc: t.description || {{}} }});
+      }}
+      // Stabilize order: A, B, C, D, E first, others appended.
+      const order = ["A", "B", "C", "D", "E"];
+      items.sort((x, y) => {{
+        const ix = order.indexOf(x.code);
+        const iy = order.indexOf(y.code);
+        const xi = ix < 0 ? order.length : ix;
+        const yi = iy < 0 ? order.length : iy;
+        return xi - yi;
+      }});
+      const html = items.map(({{ code, desc }}) => `
+        <div class="topology-def">
+          <div class="def-head">
+            <span class="def-tag">${{code}}</span>
+            <span class="def-headline">${{desc.headline || ""}}</span>
+          </div>
+          <dl>
+            <dt>차선</dt><dd>${{desc.lanes || "—"}}</dd>
+            <dt>방향</dt><dd>${{desc.direction || "—"}}</dd>
+            <dt>충돌 처리</dt><dd>${{desc.conflict || "—"}}</dd>
+          </dl>
+          ${{desc.details ? `<p class="def-details">${{desc.details}}</p>` : ""}}
+        </div>
+      `).join("");
+      byId("topology-defs").innerHTML = html;
+    }}
+
     function renderTopologyCards() {{
       const cards = report.per_topology.map((item, idx) => {{
         const metrics = item.aggregate_metrics;
@@ -1656,6 +1831,10 @@ def _build_report_html(report: dict) -> str:
         const playbackBtn = item.playback_link
           ? `<a class="playback-btn" href="${{item.playback_link}}" target="_blank">시뮬레이션 재생 →</a>`
           : `<span class="playback-btn disabled" title="이 토폴로지의 playback이 생성되지 않았습니다 (showcase 실험을 함께 실행하면 활성화됩니다)">재생 없음</span>`;
+        const desc = item.description || {{}};
+        const headlineHtml = desc.headline
+          ? `<p class="topology-headline">${{desc.headline}}</p>`
+          : "";
         return `
           <article class="panel">
             <div class="chart-head">
@@ -1668,6 +1847,7 @@ def _build_report_html(report: dict) -> str:
                 <strong>${{formatValue(metrics.avg_rank, 2)}}</strong>
               </div>
             </div>
+            ${{headlineHtml}}
             <div class="meta-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px;">
               <div class="metric-kv"><span class="label">완료율</span><strong>${{formatValue(metrics.avg_completion_rate, 4)}}</strong></div>
               <div class="metric-kv"><span class="label">처리량</span><strong>${{formatValue(metrics.avg_demand_throughput_per_hour, 1)}}/h</strong></div>
@@ -1767,6 +1947,7 @@ def _build_report_html(report: dict) -> str:
 
     renderOverview();
     renderMeta();
+    renderTopologyDefinitions();
     renderTopologyCards();
     renderComparisons();
     renderCharts();
