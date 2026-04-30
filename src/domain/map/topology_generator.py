@@ -29,7 +29,7 @@ STATION_X  = list(range(0, FAB_WIDTH_M + 1, 80))
 CHARGER_X  = [0, 320, 640]
 
 SPEED_MAIN_MS    = 1.5
-SPEED_BAY_MS     = 0.7
+SPEED_BAY_MS     = 0.8
 SPEED_STATION_MS = 0.5
 SPEED_CHARGER_MS = 0.3
 SPEED_CREEP_MS   = 0.3
@@ -105,13 +105,14 @@ class MapTopologyGenerator:
     # ── Type A ────────────────────────────────────────────────
     def _build_type_a(self) -> MapGraph:
         g = MapGraph()
+        # 운영 합의: 북·남 메인은 동→서, 중앙만 서→동 (단방향 순환).
         self._add_corridor(g, Y_NORTH, "N", bidirectional=False,
                            direction="east_to_west", corridor="north")
         self._add_corridor(g, Y_CENTER, "C", bidirectional=False,
-                           direction="east_to_west", corridor="center",
+                           direction="west_to_east", corridor="center",
                            role=NodeRole.APPROACH)
         self._add_corridor(g, Y_SOUTH, "S", bidirectional=False,
-                           direction="west_to_east", corridor="south")
+                           direction="east_to_west", corridor="south")
         self._add_bays(g)
         self._add_stations(g)
         self._add_chargers(g)

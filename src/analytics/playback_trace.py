@@ -1084,13 +1084,15 @@ def build_playback_html(trace: dict) -> str:
     function agvShapeMarkup(cx, cy, color, anchored, faded) {
       const opacity = faded ? 0.18 : 1.0;
       if (anchored) {
-        return `<circle cx="${cx}" cy="${cy}" r="${faded ? 6 : 8}" fill="${color}" opacity="${opacity}" />`;
+        // 마커 크기 축소: r 8→5 (faded 6→4) — 시각 사이즈가 실 robot에 가까워지도록
+        return `<circle cx="${cx}" cy="${cy}" r="${faded ? 4 : 5}" fill="${color}" opacity="${opacity}" />`;
       }
       return '';
     }
     function agvArrowMarkup(cx, cy, color, heading, faded) {
       const opacity = faded ? 0.18 : 1.0;
-      const scale = faded ? 0.9 : 1.15;
+      // 화살표 크기도 축소 (본래 1.15 → 0.65). follow-on 시 시각 겹침 방지.
+      const scale = faded ? 0.5 : 0.65;
       const cos = Math.cos(heading || 0);
       const sin = Math.sin(heading || 0);
       const rotatePoint = (px, py) => {

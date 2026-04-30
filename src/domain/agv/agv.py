@@ -31,8 +31,10 @@ BATTERY_ENABLED = False
 ROBOT_LENGTH_M = 1.8
 PROTECTIVE_ZONE_M = 0.2
 WARNING_ZONE_M = 0.5
-BASE_FOLLOWING_DISTANCE_M = ROBOT_LENGTH_M + PROTECTIVE_ZONE_M + WARNING_ZONE_M
-MIN_FOLLOW_ON_HEADWAY_S = 0.5
+# 현실적 큐 간격: 앞 AGV 길이 + 안전 zone + 뒤 AGV 정지 거리 한 단위.
+# 2.5m → 4.0m 로 상향 (이전 값은 충돌 회피 최소치였고 follow-on 시각이 겹쳐 보임).
+BASE_FOLLOWING_DISTANCE_M = 2 * ROBOT_LENGTH_M + PROTECTIVE_ZONE_M + WARNING_ZONE_M  # 4.3m
+MIN_FOLLOW_ON_HEADWAY_S = 1.5
 RESTART_DELAY_S = 1.0
 
 # ── Conflict Resolution 파라미터 ──────────────────────────────
