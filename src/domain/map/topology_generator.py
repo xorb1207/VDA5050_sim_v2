@@ -22,7 +22,12 @@ Y_NORTH  = 100
 Y_CENTER = 60
 Y_SOUTH  = 20
 BAY_X    = [0, 160, 320, 480, 640]
-HOLDING_X = [80, 240, 400, 560]
+# 24+ AGV 풀 동시 시작을 보장하려면 HP가 베이 사이 80m 간격으로 충분히 깔려야 함.
+# 베이 X와 겹치지 않게 40, 120, 200, 280, 360, 440, 520, 600 8개 × 3 row = 24 HP.
+HOLDING_X = [40, 120, 200, 280, 360, 440, 520, 600]
+# 중앙 station은 베이 통로 위에 두지 않는다 ("베이는 그냥 통과 lane").
+# STATION_X 중 BAY_X와 겹치지 않는 위치만 사용.
+CENTER_STATION_X = [x for x in range(0, FAB_WIDTH_M + 1, 80) if x not in BAY_X]
 WP_STEP  = 40
 WP_X     = list(range(0, FAB_WIDTH_M + 1, WP_STEP))
 STATION_X  = list(range(0, FAB_WIDTH_M + 1, 80))
@@ -415,18 +420,18 @@ class MapTopologyGenerator:
                 speed=SPEED_STATION_MS,
             )
             sid += 1
-        for bx in BAY_X:
-            wp = f"WP_{c_tag}_{bx:03d}"
+        for cx in CENTER_STATION_X:
+            wp = f"WP_{c_tag}_{cx:03d}"
             if wp not in g.nodes:
                 continue
             nid = f"ST_C_{sid:02d}"
             self._add_access_lane(
                 g,
-                source_wp_ids=[wp] + ([f"WP_CL2_{bx:03d}"] if two_lane else []),
+                source_wp_ids=[wp] + ([f"WP_CL2_{cx:03d}"] if two_lane else []),
                 access_node_id=f"SA_C_{sid:02d}",
                 facility_node_id=nid,
-                access_x=float(bx),
-                facility_x=float(bx),
+                access_x=float(cx),
+                facility_x=float(cx),
                 access_y=Y_CENTER + ACCESS_LANE_STEP_M,
                 facility_y=Y_CENTER + FACILITY_OFFSET_M,
                 access_type="station_access",

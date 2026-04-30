@@ -293,7 +293,12 @@ async def _run_single(
         start_pool = _build_start_pool(graph, random_seed=random_seed)
         if not start_pool:
             raise ValueError("no start nodes available")
-        start_nodes = [start_pool[i % len(start_pool)] for i in range(n_agv)]
+        if len(start_pool) < n_agv:
+            raise ValueError(
+                f"start pool ({len(start_pool)} slots) cannot host {n_agv} AGVs without "
+                f"two AGVs sharing a node. Add more HP/CH spots or lower n_agv."
+            )
+        start_nodes = start_pool[:n_agv]
 
         for i, start_node in enumerate(start_nodes):
             agv = AGV(f"AGV_{i+1:03d}", bus, graph, sched)
