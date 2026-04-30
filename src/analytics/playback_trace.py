@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Optional
 
 
 class PlaybackTraceRecorder:
@@ -54,10 +55,16 @@ class PlaybackTraceRecorder:
                 if getattr(agv, "current_node_id", None) and getattr(agv, "target_node_id", None)
                 else ""
             )
+            # 빨강 차단 edge는 "다른 AGV에 의해 막혔다"는 의미만 표현한다.
+            # 가감속/재출발 지연(_restart_delay_remaining) 같은 자체 대기는 표시하지 않는다.
             pending_src = getattr(agv, "_pending_edge_src", None)
             pending_dst = getattr(agv, "_pending_edge_dst", None)
             blocking_agv_id = snapshot["waiting_for"].get(agv.agv_id, "")
-            if pending_src and pending_dst:
+            collision_retry_count = int(getattr(agv, "collision_retry_count", 0) or 0)
+            actually_blocked = bool(blocking_agv_id) or collision_retry_count > 0
+            if not actually_blocked:
+                blocked_edge_key = ""
+            elif pending_src and pending_dst:
                 blocked_edge_key = f"{pending_src}__{pending_dst}"
             elif blocking_agv_id and agv.state.value == "WAITING_RESERVATION":
                 next_hop = None
@@ -117,12 +124,15 @@ class PlaybackTraceRecorder:
             })
         self.snapshots.append(snapshot)
 
-    def build_trace(self, duration_s: float) -> dict:
+    def build_trace(self, duration_s: float, extra_meta: Optional[dict] = None) -> dict:
+        meta = {
+            "duration_s": round(duration_s, 3),
+            "sample_interval_s": self.sample_interval_s,
+        }
+        if extra_meta:
+            meta.update(extra_meta)
         return {
-            "meta": {
-                "duration_s": round(duration_s, 3),
-                "sample_interval_s": self.sample_interval_s,
-            },
+            "meta": meta,
             "map": self._serialize_map(),
             "snapshots": self.snapshots,
             "events": self.events,
@@ -270,6 +280,40 @@ def build_playback_html(trace: dict) -> str:
     .header-title h1 {
       font-size: 22px;
       line-height: 1.1;
+      font-weight: 700;
+    }
+    .topology-headline-line {
+      margin: 4px 0 0 0;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .topology-headline-line:empty { display: none; }
+    .topology-meta-chips {
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .topology-meta-chips:empty { display: none; }
+    .topology-meta-chips .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface-3);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .topology-meta-chips .meta-chip strong {
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+    .topology-meta-chips .meta-chip.type-tag {
+      background: var(--accent-soft);
+      color: #1d4ed8;
       font-weight: 700;
     }
     .kpi-strip {
@@ -664,8 +708,10 @@ def build_playback_html(trace: dict) -> str:
     <section class="panel top">
       <div class="header-row">
         <div class="header-title">
-          <div class="header-eyebrow">Playback Trace</div>
-          <h1>시뮬레이션 재생</h1>
+          <div class="header-eyebrow" id="topology-eyebrow">Playback Trace</div>
+          <h1 id="topology-title">시뮬레이션 재생</h1>
+          <p id="topology-headline" class="topology-headline-line"></p>
+          <div id="topology-meta-chips" class="topology-meta-chips"></div>
         </div>
         <div class="kpi-strip" id="kpi-strip">
           <span class="kpi-chip">스냅샷 <strong id="snapshot-count">—</strong></span>
@@ -1473,6 +1519,39 @@ def build_playback_html(trace: dict) -> str:
       resetZoom();
       render();
     });
+    function renderTopologyMeta() {
+      const meta = trace.meta || {};
+      const desc = meta.description || {};
+      const ttype = meta.topology_type || '';
+      const variant = meta.topology_variant || '';
+      const eyebrow = ttype
+        ? (ttype === variant ? `Type ${ttype}` : `Type ${ttype} · ${variant}`)
+        : 'Playback Trace';
+      document.getElementById('topology-eyebrow').textContent = eyebrow;
+      const titleEl = document.getElementById('topology-title');
+      if (variant && variant !== ttype) {
+        titleEl.textContent = `${variant} 시뮬레이션`;
+      } else if (ttype) {
+        titleEl.textContent = `Type ${ttype} 시뮬레이션`;
+      }
+      const headlineEl = document.getElementById('topology-headline');
+      headlineEl.textContent = desc.headline || '';
+      const chipBox = document.getElementById('topology-meta-chips');
+      const chips = [];
+      if (ttype) chips.push(`<span class="meta-chip type-tag">Type ${ttype}</span>`);
+      if (desc.lanes) chips.push(`<span class="meta-chip">차선 <strong>${desc.lanes}</strong></span>`);
+      if (desc.direction) chips.push(`<span class="meta-chip">방향 <strong>${desc.direction}</strong></span>`);
+      if (desc.conflict) chips.push(`<span class="meta-chip">충돌 <strong>${desc.conflict}</strong></span>`);
+      if (meta.n_agv) chips.push(`<span class="meta-chip">AGV <strong>${meta.n_agv}</strong></span>`);
+      if (meta.random_seed !== undefined) chips.push(`<span class="meta-chip">seed <strong>${meta.random_seed}</strong></span>`);
+      if (meta.demand_count) chips.push(`<span class="meta-chip">demands <strong>${meta.demand_count}</strong></span>`);
+      if (meta.duration_s) chips.push(`<span class="meta-chip">duration <strong>${meta.duration_s}s</strong></span>`);
+      chipBox.innerHTML = chips.join('');
+      if (ttype) {
+        document.title = `Type ${ttype} · ${variant || ttype} — Playback`;
+      }
+    }
+    renderTopologyMeta();
     populateAgvFocusOptions();
     render();
   </script>

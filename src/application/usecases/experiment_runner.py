@@ -365,7 +365,20 @@ async def _run_single(
             if duration_s > 0 else 0.0
         )
         if trace_recorder is not None:
-            result.diagnostics["playback_trace"] = trace_recorder.build_trace(duration_s)
+            extra_meta = {
+                "topology_type": result.topology_type,
+                "topology_variant": _topology_variant_label(asdict(result)),
+                "n_agv": result.n_agv,
+                "random_seed": result.random_seed,
+                "siding_placement": result.siding_placement,
+                "siding_policy": result.siding_policy,
+                "demand_mode": result.demand_mode,
+                "demand_count": demand_count if demand_count is not None else 0,
+                "description": _topology_description(result.topology_type, "ko"),
+            }
+            result.diagnostics["playback_trace"] = trace_recorder.build_trace(
+                duration_s, extra_meta=extra_meta
+            )
 
     except Exception as e:
         result.error = str(e)

@@ -944,7 +944,16 @@ class AGV:
             )
             await self._navigate_to_next_node(sim_time)
         else:
-            self._fsm.force(AGVState.IDLE)
+            # 우회 경로가 없다 — 베이/access 처럼 외길인 경우가 대표적이다.
+            # active 태스크가 있는 한 IDLE로 방치하지 않고 retry 카운터만 리셋해
+            # 원 경로 위에서 막힘이 풀리길 기다린다 (베이 통로 IDLE 금지 원칙).
+            self.collision_retry_count = 0
+            self._wait_time_s = 0.0
+            self._sched.clear_waiting(self.agv_id)
+            if self._current_demand_id is not None or self._charge_request_active:
+                self._fsm.force(AGVState.WAITING_RESERVATION)
+            else:
+                self._fsm.force(AGVState.IDLE)
             self._trace(
                 "reroute_failed",
                 sim_time,
