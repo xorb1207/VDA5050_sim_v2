@@ -77,6 +77,11 @@ class TimeWindowScheduler:
         self._waiting_for: dict[str, str] = {}
         self._trace_recorder = None
 
+        # AGV가 명시적으로 hold 중인 sections (베이/사이딩처럼 시간 만료가 아닌
+        # 물리 위치 기반으로 점유돼야 하는 영역). _has_section_capacity_conflict가
+        # 시간 만료 + 명시적 hold 둘 다 본다.
+        self._agv_held_sections: dict[str, set[str]] = defaultdict(set)
+
     # ── 노드 예약 (기존 유지) ──────────────────────────────────
 
     async def reserve(
@@ -146,14 +151,28 @@ class TimeWindowScheduler:
 
             for segment in segments:
                 if segment.section_key:
-                    self._section_reservations[segment.section_key].append(
-                        Reservation(
-                            segment.section_key,
-                            segment.agv_id,
-                            segment.start_time,
-                            segment.end_time,
-                        )
+                    # 같은 (section_key, agv_id) 활성 항목이 있으면 새로 append하지 않고
+                    # end_time을 확장한다 (베이/사이딩처럼 한 AGV가 여러 edge를 거치는
+                    # 동안 점유가 지속되도록).
+                    same_active = next(
+                        (
+                            r for r in self._section_reservations[segment.section_key]
+                            if r.agv_id == segment.agv_id and not r.released
+                        ),
+                        None,
                     )
+                    if same_active is not None:
+                        if segment.end_time > same_active.end_time:
+                            same_active.end_time = segment.end_time
+                    else:
+                        self._section_reservations[segment.section_key].append(
+                            Reservation(
+                                segment.section_key,
+                                segment.agv_id,
+                                segment.start_time,
+                                segment.end_time,
+                            )
+                        )
                 if segment.segment_type == "node":
                     self._reservations[segment.key].append(
                         Reservation(
@@ -197,7 +216,8 @@ class TimeWindowScheduler:
                 for r in reservations:
                     if r.agv_id == agv_id and not r.released:
                         r.released = True
-    
+            self._agv_held_sections.pop(agv_id, None)
+
     async def reserve_edge(
         self,
         src_id: str,
@@ -239,11 +259,17 @@ class TimeWindowScheduler:
                     return False
 
             if section_key:
+                # 명시적 hold 중인 다른 AGV는 시간 만료와 무관하게 차단해야 한다.
+                holders = sum(
+                    1 for other_id, sections in self._agv_held_sections.items()
+                    if other_id != agv_id and section_key in sections
+                )
                 section_active = [
                     r for r in self._section_reservations[section_key]
                     if not r.released and r.agv_id != agv_id
                 ]
-                if self._has_section_capacity_conflict(
+                cap = max(1, section_capacity)
+                if holders >= cap or self._has_section_capacity_conflict(
                     section_active,
                     start_time,
                     end_time,
@@ -315,9 +341,27 @@ class TimeWindowScheduler:
 
             # 예약 확정
             if section_key:
-                self._section_reservations[section_key].append(
-                    Reservation(section_key, agv_id, start_time, end_time)
+                # 같은 (section_key, agv_id)가 이미 활성 상태이면 새로 append하지 않고
+                # 기존 reservation의 end_time을 확장한다. 베이/사이딩처럼 한 AGV가
+                # 여러 edge를 거치는 동안 section 점유가 지속되어야 하는 영역에서,
+                # 이전 edge end_time이 만료되어 다른 AGV가 진입하는 버그를 막는다.
+                same_active = next(
+                    (
+                        r for r in self._section_reservations[section_key]
+                        if r.agv_id == agv_id and not r.released
+                    ),
+                    None,
                 )
+                if same_active is not None:
+                    if end_time > same_active.end_time:
+                        same_active.end_time = end_time
+                else:
+                    self._section_reservations[section_key].append(
+                        Reservation(section_key, agv_id, start_time, end_time)
+                    )
+                # 명시적 hold: AGV가 이 section을 점유 중임을 시간 만료와 무관하게
+                # 표시. release_section()으로 명시적 해제 시까지 다른 AGV 진입 차단.
+                self._agv_held_sections[agv_id].add(section_key)
             self._edge_reservations[edge_key].append(
                 EdgeReservation(edge_key, agv_id, start_time, end_time)
             )
@@ -340,6 +384,17 @@ class TimeWindowScheduler:
                 if r.agv_id == agv_id and not r.released:
                     r.released = True
                     break
+
+    def release_section(self, section_key: str, agv_id: str) -> None:
+        """AGV가 더 이상 이 section을 점유하지 않음을 명시적으로 표시.
+        시간 만료에 의존하지 않고, AGV가 베이/사이딩 등에서 빠져나갈 때 호출."""
+        held = self._agv_held_sections.get(agv_id)
+        if held and section_key in held:
+            held.discard(section_key)
+        # 같은 (section_key, agv_id) 활성 reservation도 released=True로 표시
+        for r in self._section_reservations.get(section_key, []):
+            if r.agv_id == agv_id and not r.released:
+                r.released = True
 
     def is_head_on(self, src_id: str, dst_id: str, sim_time: float) -> bool:
         """

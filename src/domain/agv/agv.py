@@ -375,6 +375,9 @@ class AGV:
                 self._held_charge_edge = (prev, self.current_node_id)
             if prev:
                 asyncio.create_task(self._sched.release(prev, self.agv_id))
+            # 막 빠져나온 edge의 section과, 다음으로 갈 edge의 section을 비교해
+            # 더 이상 점유하지 않는 section은 명시적으로 release.
+            self._maybe_release_completed_sections(prev, self.current_node_id)
 
             self._sched.clear_waiting(self.agv_id)
             self.collision_retry_count = 0  # 도착 시 retry 초기화
@@ -1082,13 +1085,45 @@ class AGV:
             return self._dropoff_processing_time_s
         return fallback_processing_time_s
 
+    def _maybe_release_completed_sections(self, prev: Optional[str], curr: Optional[str]) -> None:
+        """edge_exit 시점에 AGV가 빠져나온 section을 release.
+        이전 edge에 section_key가 있고, 다음으로 진입할 edge가 그 section에 속하지 않으면
+        해당 section을 release한다 (베이 통과 직후 다른 AGV 진입 허용)."""
+        if not prev or not curr:
+            return
+        held = self._sched._agv_held_sections.get(self.agv_id)
+        if not held:
+            return
+        next_section_keys: set[str] = set()
+        if self._path and self._path_index < len(self._path):
+            next_dst = self._path[self._path_index]
+            if next_dst and next_dst != curr:
+                next_edge = self._find_edge(curr, next_dst)
+                if next_edge is not None:
+                    nk = self._critical_section_key(next_edge)
+                    if nk:
+                        next_section_keys.add(nk)
+        # held 중에서 다음 edge section과 다른 것은 release
+        for section in list(held):
+            if section not in next_section_keys:
+                self._sched.release_section(section, self.agv_id)
+
     def _critical_section_key(self, edge) -> str:
         topology_type = getattr(self._graph, "_topology_type", "")
         if edge.access_type:
             facility_node_id = self._access_facility_node_id(edge)
             return f"access:{edge.access_type}:{facility_node_id}"
         if edge.corridor == "bay":
-            return f"bay:{edge.start_node_id.split('_')[-1]}"
+            # 한 베이 칼럼 전체(진입 edge + 내부 edge + 진출 edge)는 단일 section으로
+            # 묶여 capacity=1을 유지해야 한다. BAY_{dir}_{x}_{seg}_{hop} 패턴에서
+            # bay_x를 추출. (이전엔 마지막 토큰을 썼는데 hop_idx별로 쪼개져 같은
+            # 베이에 두 AGV가 동시 진입 가능했음.)
+            for nid in (edge.start_node_id, edge.end_node_id):
+                if nid.startswith("BAY_"):
+                    parts = nid.split("_")
+                    if len(parts) >= 3 and parts[2].isdigit():
+                        return f"bay:{parts[2]}"
+            return f"bay:{edge.start_node_id}"
         if edge.corridor == "siding":
             return f"siding:{edge.start_node_id}->{edge.end_node_id}"
         if topology_type in ("B", "E") and edge.corridor in ("north", "center", "south"):
