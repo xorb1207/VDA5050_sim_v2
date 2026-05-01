@@ -1874,6 +1874,81 @@ def test_start_pool_is_corridor_distributed():
     )
 
 
+async def _test_kpi_distribution_fields():
+    print("\n[T60] KPI distribution + bottleneck_stations fields")
+    graph = make_graph()
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    gen = TaskGenerator(graph, bus, task_interval_s=1000.0)
+    engine = SimulationEngine(graph, sched, task_generator=gen)
+
+    agv = AGV("AGV_001", bus, graph, sched)
+    agv.current_node_id = "node_charger_01"
+    agv.physics.x = graph.nodes["node_charger_01"].x
+    agv.physics.y = graph.nodes["node_charger_01"].y
+    engine.register_agv(agv)
+
+    # Sample 20 미만이라 p95는 0.0이어야 한다 (구체적으로 0건이라 모두 0).
+    results = await engine.run(duration_s=1.0)
+    for key in (
+        "wait_time_p95_s",
+        "travel_time_avg_s",
+        "travel_time_p95_s",
+        "bottleneck_stations",
+    ):
+        assert_true(f"{key} 포함", key in results)
+    assert_true(
+        "wait_time_p95_s float 타입",
+        isinstance(results["wait_time_p95_s"], (int, float)),
+    )
+    assert_true(
+        "travel_time_avg_s float 타입",
+        isinstance(results["travel_time_avg_s"], (int, float)),
+    )
+    assert_true(
+        "travel_time_p95_s float 타입",
+        isinstance(results["travel_time_p95_s"], (int, float)),
+    )
+    assert_true(
+        "bottleneck_stations list 타입",
+        isinstance(results["bottleneck_stations"], list),
+    )
+    assert_eq("샘플 부족 시 wait p95=0.0", results["wait_time_p95_s"], 0.0)
+    assert_eq("샘플 부족 시 travel p95=0.0", results["travel_time_p95_s"], 0.0)
+    assert_true(
+        "bottleneck_stations 항목 구조",
+        all(
+            isinstance(item, dict)
+            and "node_id" in item
+            and "occupancy_time_s" in item
+            and "visit_count" in item
+            for item in results["bottleneck_stations"]
+        ),
+    )
+
+    # 인공 표본 25건으로 _p95 분기 확인
+    agv._wait_times = [float(i) for i in range(25)]
+    agv._travel_times = [float(i) for i in range(25)]
+    from src.analytics.kpi import KPICalculator
+    kpi = KPICalculator()
+    res2 = kpi.compute(
+        agvs={agv.agv_id: agv},
+        scheduler=sched,
+        sim_time_s=1.0,
+    )
+    # 25건이면 sorted[int(25*0.95)] = sorted[23]
+    assert_eq("wait p95 with 25 samples", res2["wait_time_p95_s"], 23.0)
+    assert_eq("travel p95 with 25 samples", res2["travel_time_p95_s"], 23.0)
+    assert_true(
+        "travel_avg with samples > 0",
+        res2["travel_time_avg_s"] > 0.0,
+    )
+
+
+def test_kpi_distribution_fields():
+    run(_test_kpi_distribution_fields())
+
+
 async def _test_critical_section_capacity_allows_overlap_until_limit():
     print("\n[T40] Critical section capacity")
     from src.domain.reservation.scheduler import ItinerarySegment
@@ -2121,6 +2196,8 @@ if __name__ == "__main__":
         test_report_json_schema_builder,
         test_report_html_builder,
         test_playback_trace_generation,
+        # KPI 분포 + bottleneck stations (T60)
+        test_kpi_distribution_fields,
     ]
     passed = failed = 0
     for t in tests:

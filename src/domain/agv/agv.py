@@ -98,6 +98,10 @@ class AGV:
         # Conflict Resolution
         self.collision_retry_count: int   = 0
         self._edge_wait_elapsed:    float = 0.0
+        # _edge_wait_elapsed는 retry 간격마다 리셋되므로 KPI 용 누적은 별도 필드.
+        # _current_edge_wait_total: 한 edge 진입 시도 동안 WAITING으로 쌓인 총 시간.
+        # _try_reserve_edge_and_move 성공 시점에 _wait_times로 옮기고 0으로 리셋.
+        self._current_edge_wait_total: float = 0.0
         self._pending_edge_src:  Optional[str] = None
         self._pending_edge_dst:  Optional[str] = None
         self._pre_reserved_edges: set[tuple[str, str]] = set()
@@ -109,6 +113,11 @@ class AGV:
         self._wait_time_s:       float = 0.0
         self._travel_distance_m: float = 0.0
         self._task_count:        int   = 0
+        # KPI 분포 분석용: edge 단위 wait/travel 기록
+        self._wait_times:    list[float] = []
+        self._travel_times:  list[float] = []
+        # _edge_time은 같은 edge_key 재방문 시 누적되므로 per-traversal 측정용 별도 누적기.
+        self._current_edge_travel: float = 0.0
         self._state_time:        dict[str, float] = {}
         self._task_completion_times: list[float] = []
         self._task_start_time:   float = 0.0
@@ -242,6 +251,7 @@ class AGV:
                 return
             self._wait_time_s      += dt
             self._edge_wait_elapsed += dt
+            self._current_edge_wait_total += dt
             self._motion.state.speed = max(
                 0.0,
                 self._motion.state.speed - self._motion.deceleration * dt,
@@ -331,6 +341,7 @@ class AGV:
         if self.current_node_id and self.target_node_id:
             eid = f"{self.current_node_id}__{self.target_node_id}"
             self._edge_time[eid] = self._edge_time.get(eid, 0.0) + dt
+            self._current_edge_travel += dt
 
         effective_speed = self._get_effective_speed(sim_time)
         self._motion.max_speed = effective_speed
@@ -339,6 +350,10 @@ class AGV:
         self._travel_distance_m += dist_moved
         if arrived:
             prev = self.current_node_id
+            # KPI 기록: 이번 traversal 동안 NAVIGATING으로 보낸 시간.
+            if self._current_edge_travel > 0.0:
+                self._travel_times.append(self._current_edge_travel)
+            self._current_edge_travel = 0.0
             self.current_node_id = self.target_node_id
             self.target_node_id  = None
             self._trace(
@@ -546,6 +561,10 @@ class AGV:
             self._pending_edge_dst  = None
             self._sched.clear_waiting(self.agv_id)
             self.collision_retry_count = 0
+            # 이 edge 진입 직전까지 누적된 wait를 KPI 기록에 남기고 리셋.
+            if self._current_edge_wait_total > 0.0:
+                self._wait_times.append(self._current_edge_wait_total)
+            self._current_edge_wait_total = 0.0
             self.target_node_id  = dst
             self._path_index    += 1
             self._fsm.force(AGVState.NAVIGATING)

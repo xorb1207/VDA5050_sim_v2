@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import statistics
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -132,6 +133,48 @@ class KPICalculator:
 
         total_wait   = sum(a._wait_time_s for a in agvs.values())
         avg_wait     = round(total_wait / n_agv, 2)
+
+        # 분포 KPI: edge 단위 wait/travel 기록을 모두 모아 p95 계산.
+        # 표본이 20건 미만이면 p95는 불안정하므로 0.0 반환.
+        wait_times_all = [t for a in agvs.values() for t in a._wait_times]
+        travel_times_all = [t for a in agvs.values() for t in a._travel_times]
+
+        def _p95(samples: list[float]) -> float:
+            if len(samples) < 20:
+                return 0.0
+            ordered = sorted(samples)
+            idx = min(int(len(ordered) * 0.95), len(ordered) - 1)
+            return round(ordered[idx], 2)
+
+        wait_p95 = _p95(wait_times_all)
+        travel_avg = (
+            round(statistics.mean(travel_times_all), 2)
+            if travel_times_all else 0.0
+        )
+        travel_p95 = _p95(travel_times_all)
+
+        # bottleneck_stations: scheduler._node_occupancy_time 중 ST_ 노드 상위 5.
+        # visit_count는 해당 노드를 거쳐간 횟수로, agvs._task_completion_times 같은 직접 필드가 없으므로
+        # node 점유 reservation의 release 횟수가 가장 가깝다 — scheduler에 저장된 reservations 길이 사용.
+        node_occ = getattr(scheduler, "_node_occupancy_time", {})
+        node_visits: dict[str, int] = {}
+        for nid, reservations in getattr(scheduler, "_reservations", {}).items():
+            node_visits[nid] = len(reservations)
+        station_entries = [
+            (nid, occ_time)
+            for nid, occ_time in node_occ.items()
+            if isinstance(nid, str) and nid.startswith("ST_")
+        ]
+        station_entries.sort(key=lambda kv: kv[1], reverse=True)
+        bottleneck_stations = [
+            {
+                "node_id": nid,
+                "occupancy_time_s": round(occ_time, 2),
+                "visit_count": node_visits.get(nid, 0),
+            }
+            for nid, occ_time in station_entries[:5]
+        ]
+
         total_restart_delay = sum(a._restart_delay_time_s for a in agvs.values())
         charging_sessions = sum(a._charging_sessions for a in agvs.values())
         total_charging_time = sum(a._charging_time_s for a in agvs.values())
@@ -246,6 +289,10 @@ class KPICalculator:
             "avg_task_completion_time_s":  avg_task_completion,
             "avg_wait_time_s":             avg_wait,
             "total_wait_time_s":           round(total_wait, 2),
+            "wait_time_p95_s":             wait_p95,
+            "travel_time_avg_s":           travel_avg,
+            "travel_time_p95_s":           travel_p95,
+            "bottleneck_stations":         bottleneck_stations,
             "total_restart_delay_s":       round(total_restart_delay, 2),
             "charging_sessions":           charging_sessions,
             "total_charging_time_s":       round(total_charging_time, 2),
