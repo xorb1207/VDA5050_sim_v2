@@ -1686,6 +1686,81 @@ def test_itinerary_reservation_atomic_conflict():
     run(_test_itinerary_reservation_atomic_conflict())
 
 
+async def _test_itinerary_populates_held_sections():
+    """리그레션: pre-reserve된 itinerary도 _agv_held_sections를 채워야 한다.
+
+    이게 빠지면 베이/사이딩 통과 후 _maybe_release_completed_sections가
+    release_section 을 호출하지 못하고, 다음 itinerary 가 stale reservation 을
+    coalesce 하면서 end_time 을 무한 확장하는 버그가 발생한다 (bay_dup 원인).
+    """
+    print("\n[T37b] Itinerary 가 _agv_held_sections 등록")
+    from src.domain.reservation.scheduler import ItinerarySegment
+
+    s = TimeWindowScheduler()
+    ok = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="WP_N_320__BAY_NS_320_1_1",
+            agv_id="AGV_001",
+            start_time=0.0,
+            end_time=12.5,
+            src_id="WP_N_320",
+            dst_id="BAY_NS_320_1_1",
+            section_key="bay:320",
+        ),
+        ItinerarySegment(
+            segment_type="edge",
+            key="BAY_NS_320_1_1__WP_C_320",
+            agv_id="AGV_001",
+            start_time=12.5,
+            end_time=25.0,
+            src_id="BAY_NS_320_1_1",
+            dst_id="WP_C_320",
+            section_key="bay:320",
+        ),
+    ])
+    assert_eq("itinerary 예약 성공", ok, True)
+    assert_true(
+        "AGV_001 이 bay:320 hold 등록됨",
+        "bay:320" in s._agv_held_sections.get("AGV_001", set()),
+    )
+    # release_section 호출 시 hold 해제 + reservation released
+    s.release_section("bay:320", "AGV_001")
+    assert_true(
+        "release 후 hold 해제",
+        "bay:320" not in s._agv_held_sections.get("AGV_001", set()),
+    )
+    assert_true(
+        "release 후 reservation released",
+        all(
+            r.released for r in s._section_reservations["bay:320"]
+            if r.agv_id == "AGV_001"
+        ),
+    )
+    # release 이후 동일 section 새 itinerary는 stale 확장 대신 새 reservation 추가
+    ok2 = await s.reserve_itinerary([
+        ItinerarySegment(
+            segment_type="edge",
+            key="WP_N_320__BAY_NS_320_1_1",
+            agv_id="AGV_001",
+            start_time=600.0,
+            end_time=612.5,
+            src_id="WP_N_320",
+            dst_id="BAY_NS_320_1_1",
+            section_key="bay:320",
+        ),
+    ])
+    assert_eq("두 번째 itinerary 예약 성공", ok2, True)
+    bay_reservations = [
+        r for r in s._section_reservations["bay:320"] if r.agv_id == "AGV_001"
+    ]
+    assert_eq("AGV_001 bay:320 reservation 2개 (stale 확장 X)", len(bay_reservations), 2)
+
+
+def test_itinerary_populates_held_sections():
+    run(_test_itinerary_populates_held_sections())
+
+
 async def _test_critical_section_conflict_blocks_itinerary():
     print("\n[T38] Critical section conflict")
     from src.domain.reservation.scheduler import ItinerarySegment
@@ -2178,6 +2253,7 @@ if __name__ == "__main__":
         test_follow_on_headway_blocks_close_entry,
         test_type_d_follow_on_headway_shorter_than_c,
         test_itinerary_reservation_atomic_conflict,
+        test_itinerary_populates_held_sections,
         test_critical_section_conflict_blocks_itinerary,
         test_critical_section_key_generation,
         test_critical_section_capacity_allows_overlap_until_limit,

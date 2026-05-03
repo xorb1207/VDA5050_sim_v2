@@ -173,6 +173,11 @@ class TimeWindowScheduler:
                                 segment.end_time,
                             )
                         )
+                    # 명시적 hold 등록: 경로 종료 후 _maybe_release_completed_sections이
+                    # release_section을 호출할 수 있도록. 이게 빠지면 pre-reserve된 path는
+                    # 다음 itinerary가 같은 section을 활성 reservation으로 보고 end_time을
+                    # 무한 확장하는 stale-extension 버그가 발생함.
+                    self._agv_held_sections[segment.agv_id].add(segment.section_key)
                 if segment.segment_type == "node":
                     self._reservations[segment.key].append(
                         Reservation(
