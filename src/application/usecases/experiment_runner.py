@@ -116,6 +116,8 @@ class ExperimentConfig:
     report_language: str = "ko"
     playback_trace_enabled: bool = False
     playback_sample_interval_s: float = 0.5
+    # 실험 정의 yaml 파일 stem (load_from_yaml이 자동 채움). index.html 라벨용.
+    experiment_yaml: Optional[str] = None
 
     def __post_init__(self):
         if self.run_id is None:
@@ -1418,6 +1420,7 @@ def _build_report(config: ExperimentConfig, results: list[RunResult], out_dir: O
         "overview": {
             "run_id": config.run_id,
             "experiment_name": config.run_id,
+            "experiment_yaml": config.experiment_yaml,
             "objective": "Topology comparison with decision-ready KPI summary",
             "input_parameters": _build_input_parameters(config, results),
             "ranking_policy": _ranking_policy(),
@@ -1731,7 +1734,11 @@ def _build_report_html(report: dict) -> str:
     <section class="hero">
       <div class="hero-top">
         <div>
-          <div class="eyebrow" id="eyebrow"></div>
+          <div class="eyebrow">
+            <a href="../index.html" style="color:#1f6feb;text-decoration:none">← 인덱스</a>
+            &nbsp;·&nbsp;
+            <span id="eyebrow"></span>
+          </div>
           <h1 id="title"></h1>
         </div>
         <div class="metric-kv">
@@ -2168,6 +2175,14 @@ class ExperimentRunner:
         report_html_path = self.out_dir / "report.html"
         report_html_path.write_text(_build_report_html(report), encoding="utf-8")
 
+        # 인덱스 자동 갱신 — outputs/experiments/index.html
+        try:
+            from src.tools.build_index import rebuild_index
+            rebuild_index(self.out_dir.parent)
+        except Exception as exc:
+            # 인덱스 실패가 실험 자체를 깨뜨리진 않게 — 경고만.
+            print(f"  [warn] index.html 갱신 실패: {exc}")
+
         print(f"\n결과 저장: {self.out_dir}/")
         print(f"  summary.csv  ({len(results)}행)")
         print(f"  summary.json")
@@ -2176,6 +2191,7 @@ class ExperimentRunner:
         print(f"  ranking_aggregate.json")
         print(f"  report.json")
         print(f"  report.html")
+        print(f"  index 갱신: {self.out_dir.parent}/index.html")
 
     def _print_matrix(self, results: list[RunResult]) -> None:
         """처리량 매트릭스 콘솔 출력."""
@@ -2267,8 +2283,10 @@ class ExperimentRunner:
 # ── YAML 기반 실험 설정 ────────────────────────────────────────
 def load_from_yaml(path: str) -> ExperimentConfig:
     import yaml
+    import os as _os
     with open(path) as f:
         raw = yaml.safe_load(f)
+    yaml_stem = _os.path.splitext(_os.path.basename(path))[0]
     random_seeds = raw.get("random_seeds")
     siding_placements = raw.get("siding_placements")
     type_b_siding_policies = raw.get("type_b_siding_policies")
@@ -2319,6 +2337,7 @@ def load_from_yaml(path: str) -> ExperimentConfig:
         report_language = str(raw.get("report_language", "ko")),
         playback_trace_enabled = bool(raw.get("playback_trace_enabled", False)),
         playback_sample_interval_s = float(raw.get("playback_sample_interval_s", 0.5)),
+        experiment_yaml = raw.get("experiment_yaml", yaml_stem),
     )
 
 

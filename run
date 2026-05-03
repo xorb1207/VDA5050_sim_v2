@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# vda5050_sim_v2 실험 단축어
+#
+# 사용법:
+#   ./run <yaml-stem>     # experiments/<yaml-stem>.yaml 실행
+#   ./run open            # outputs/experiments/index.html 열기
+#   ./run open last       # 가장 최근 run의 report.html 열기
+#   ./run open last/<v>   # 가장 최근 run의 <v> variant playback 열기
+#   ./run list            # 최근 10개 run 표
+#   ./run rebuild-index   # index.html 만 재생성
+#   ./run -h              # 도움말
+
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXP_ROOT="${ROOT}/outputs/experiments"
+
+usage() {
+    sed -n '3,12p' "${BASH_SOURCE[0]}" | sed 's|^# \?||'
+}
+
+# OS-aware open
+xopen() {
+    if command -v open >/dev/null 2>&1; then
+        open "$1"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$1"
+    else
+        echo "open command not found. path: $1"
+    fi
+}
+
+latest_run() {
+    ls -1 "${EXP_ROOT}" 2>/dev/null \
+        | grep -E '^[0-9]{8}T[0-9]{4,6}$' \
+        | sort \
+        | tail -1
+}
+
+cmd="${1:-}"
+
+case "${cmd}" in
+    -h|--help|help|"")
+        usage
+        ;;
+
+    open)
+        target="${2:-}"
+        if [[ -z "${target}" ]]; then
+            xopen "${EXP_ROOT}/index.html"
+        elif [[ "${target}" == "last" ]]; then
+            run="$(latest_run)"
+            [[ -z "${run}" ]] && { echo "최근 run 없음"; exit 1; }
+            xopen "${EXP_ROOT}/${run}/report.html"
+        elif [[ "${target}" == last/* ]]; then
+            variant="${target#last/}"
+            run="$(latest_run)"
+            [[ -z "${run}" ]] && { echo "최근 run 없음"; exit 1; }
+            playback="${EXP_ROOT}/${run}/${variant}/playback.html"
+            if [[ ! -f "${playback}" ]]; then
+                echo "playback 없음: ${playback}"
+                echo "사용 가능한 variant:"
+                ls -1 "${EXP_ROOT}/${run}" | grep -v '\.' | sed 's/^/  /'
+                exit 1
+            fi
+            xopen "${playback}"
+        else
+            echo "알 수 없는 open 대상: ${target}"
+            exit 1
+        fi
+        ;;
+
+    list)
+        n="${2:-10}"
+        ls -1t "${EXP_ROOT}" 2>/dev/null \
+            | grep -E '^[0-9]{8}T[0-9]{4,6}$' \
+            | head -"${n}" \
+            | while read -r run; do
+                meta=""
+                if [[ -f "${EXP_ROOT}/${run}/report.json" ]]; then
+                    meta="$(python3 -c "
+import json, sys
+try:
+    r = json.load(open('${EXP_ROOT}/${run}/report.json'))
+    ov = r.get('overview', {}) or {}
+    ip = ov.get('input_parameters', {}) or {}
+    yaml_name = ov.get('experiment_yaml') or '?'
+    types = ','.join(ip.get('types') or [])
+    agvs = ip.get('agv_counts') or []
+    agv_label = f'{min(agvs)}~{max(agvs)}' if agvs and len(agvs)>1 else (str(agvs[0]) if agvs else '?')
+    win = ov.get('top_winner') or '-'
+    print(f'{yaml_name:<32} types={types:<11} agv={agv_label:<6} winner={win}')
+except Exception:
+    print('(report.json 손상)')
+" 2>/dev/null)"
+                fi
+                printf "%-18s  %s\n" "${run}" "${meta}"
+              done
+        ;;
+
+    rebuild-index)
+        cd "${ROOT}"
+        python -m src.tools.build_index "${EXP_ROOT}"
+        ;;
+
+    *)
+        # yaml-stem 으로 가정. experiments/<stem>.yaml 실행.
+        yaml_path="${ROOT}/experiments/${cmd}.yaml"
+        if [[ ! -f "${yaml_path}" ]]; then
+            echo "experiments/${cmd}.yaml 없음."
+            echo ""
+            echo "사용 가능한 yaml:"
+            ls -1 "${ROOT}/experiments"/*.yaml 2>/dev/null \
+                | xargs -n1 basename \
+                | sed 's/\.yaml$//' \
+                | sed 's/^/  /'
+            exit 1
+        fi
+        cd "${ROOT}"
+        shift
+        python -m src.application.usecases.experiment_runner \
+            --experiment "${yaml_path}" "$@"
+        ;;
+esac
