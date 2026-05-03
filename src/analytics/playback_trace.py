@@ -430,6 +430,29 @@ def build_playback_html(trace: dict) -> str:
       border-color: var(--accent);
     }
     .speed-btn.active:hover { background: #1d4ed8; border-color: #1d4ed8; }
+    /* Heatmap toggle 활성 상태 */
+    #heatmap-toggle.active {
+      background: #c0392b;
+      color: #fff;
+      border-color: #c0392b;
+    }
+    /* Heatmap 범례 (활성 시만 표시) */
+    .heatmap-legend {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--muted);
+      padding: 4px 10px;
+      background: var(--surface-2);
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+    .heatmap-legend.active { display: inline-flex; }
+    .heatmap-legend .gradient {
+      width: 80px; height: 6px; border-radius: 3px;
+      background: linear-gradient(90deg, #fde6e2 0%, #f5a695 50%, #c0392b 100%);
+    }
     /* Range slider polish */
     input[type=range] {
       -webkit-appearance: none;
@@ -467,6 +490,42 @@ def build_playback_html(trace: dict) -> str:
       border: 2px solid #fff;
       box-shadow: 0 0 0 1px var(--accent), 0 1px 2px rgba(15,23,42,0.2);
     }
+    /* Timeline event markers — 슬라이더 위에 사고 시점 점 표시 */
+    .slider-wrap {
+      position: relative;
+      width: min(540px, 100%);
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .slider-wrap input[type=range] { display: block; }
+    .event-markers {
+      position: absolute;
+      left: 0; right: 0;
+      top: -4px;            /* 슬라이더 트랙 위로 살짝 띄움 */
+      height: 8px;
+      pointer-events: none; /* 마커가 슬라이더 드래그 막지 않도록. 마커 자체는 다시 enable */
+    }
+    .event-marker {
+      position: absolute;
+      width: 4px;
+      height: 8px;
+      border-radius: 1px;
+      transform: translateX(-50%);
+      pointer-events: auto;
+      cursor: pointer;
+      opacity: 0.85;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+    .event-marker:hover {
+      opacity: 1;
+      transform: translateX(-50%) scaleY(1.4);
+    }
+    .event-marker[data-kind="headon_block"]      { background: #c0392b; }
+    .event-marker[data-kind="section_conflict"]  { background: #c77700; }
+    .event-marker[data-kind="followon_block"]    { background: #b85450; }
+    .event-marker[data-kind="deadlock_resolved"] { background: #6c3aa6; }
+    .event-marker[data-kind="reroute"]           { background: #1f6feb; }
+    .event-marker[data-kind="reroute_via_siding"]{ background: #4f8df0; }
     .hint {
       color: var(--muted);
       font-size: 11.5px;
@@ -726,7 +785,10 @@ def build_playback_html(trace: dict) -> str:
             <button id="play-toggle" class="play-toggle" type="button">재생</button>
           </div>
           <div class="toolbar-group" style="flex: 1 1 320px;">
-            <input id="time-slider" type="range" min="0" max="0" step="1" value="0" />
+            <div class="slider-wrap">
+              <input id="time-slider" type="range" min="0" max="0" step="1" value="0" />
+              <div id="event-markers" class="event-markers"></div>
+            </div>
             <span class="time-pill"><span class="meta">t</span><span id="time-label">0.00s</span></span>
           </div>
           <div class="toolbar-group">
@@ -741,9 +803,17 @@ def build_playback_html(trace: dict) -> str:
               <option value="">전체</option>
             </select>
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
+            <button id="heatmap-toggle" type="button" title="엣지별 사고 누적 히트맵 토글">🔥 히트맵</button>
           </div>
         </div>
-        <div class="hint">맵: 휠 확대/축소, 드래그 이동, 더블클릭 줌 초기화. AGV 클릭 시 포커스. 우측 사고 묶음 클릭 시 해당 시점으로 점프합니다.</div>
+        <div class="hint">
+          맵: 휠 확대/축소, 드래그 이동, 더블클릭 줌 초기화. AGV 클릭 시 포커스. 우측 사고 묶음 클릭 시 해당 시점으로 점프합니다.
+          <span class="heatmap-legend" id="heatmap-legend">
+            누적 사고 강도
+            <span class="gradient"></span>
+            <span id="heatmap-max-label">최대 —</span>
+          </span>
+        </div>
       </div>
     </section>
 
@@ -809,6 +879,26 @@ def build_playback_html(trace: dict) -> str:
     let zoomScale = 1;
     let zoomPanX = 0;
     let zoomPanY = 0;
+    let heatmapMode = false;
+    // 엣지별 누적 사고 카운트 — heatmap mode 에서 색조로 표시.
+    // 사고 종류: headon_block, section_conflict, followon_block (실제 충돌만 가산).
+    // reroute / deadlock_resolved 는 결과적 사건이라 가산 제외.
+    const HEATMAP_KINDS = new Set(['headon_block', 'section_conflict', 'followon_block']);
+    const heatmapCounts = (() => {
+      const m = new Map();
+      for (const ev of events) {
+        if (!HEATMAP_KINDS.has(ev.kind)) continue;
+        const k = ev.edge_key || '';
+        if (!k) continue;
+        m.set(k, (m.get(k) || 0) + 1);
+      }
+      return m;
+    })();
+    const heatmapMax = (() => {
+      let mx = 0;
+      for (const v of heatmapCounts.values()) if (v > mx) mx = v;
+      return mx;
+    })();
     let isDragging = false;
     let dragStart = null;
     // Pre-compute one-way edge keys (no reverse counterpart) on main corridors.
@@ -1126,6 +1216,23 @@ def build_playback_html(trace: dict) -> str:
         };
         edgeStyles.set(edgeKey, { ...prev, ...patch });
       };
+      // 히트맵 모드: 다른 path 스타일 그리기 전에 베이스로 색을 깔아놓는다.
+      // log 스케일로 노멀라이즈해서 1회 짜리 사건도 식별 가능하게.
+      if (heatmapMode && heatmapMax > 0) {
+        const logMax = Math.log(heatmapMax + 1);
+        for (const [edgeKey, count] of heatmapCounts) {
+          const t = Math.log(count + 1) / Math.max(logMax, 0.0001); // 0..1
+          // 그라데이션: #fde6e2 (옅음) → #c0392b (진함)
+          // R,G,B 보간
+          const lerp = (a, b) => Math.round(a + (b - a) * t);
+          const r = lerp(0xfd, 0xc0);
+          const g = lerp(0xe6, 0x39);
+          const b = lerp(0xe2, 0x2b);
+          const stroke = `rgb(${r},${g},${b})`;
+          const width = 3 + t * 5;  // 3 → 8
+          applyEdgeStyle(edgeKey, { stroke, width, opacity: 0.92, dash: '' });
+        }
+      }
       for (const agv of visibleAgvs) {
         const planned = agv.planned_edge_keys || [];
         // Planned: depth-based opacity ramp so the immediate next hops stand out
@@ -1340,6 +1447,44 @@ def build_playback_html(trace: dict) -> str:
       renderIncidents();
       renderEvents();
       renderAgvDetail();
+      renderEventMarkers();
+    }
+    // ── 타임라인 사고 마커 ───────────────────────────────
+    // 슬라이더 위에 사고 시점을 색깔 점으로 찍어 시간대별 군집 즉시 인지.
+    // 클릭 시 해당 시점으로 점프(+해당 사고 group의 첫 사건을 강조).
+    let _eventMarkersBuiltKey = '';
+    function renderEventMarkers() {
+      const container = document.getElementById('event-markers');
+      if (!container) return;
+      const duration = (trace.meta && trace.meta.duration_s) || (snapshots.length * (trace.meta.sample_interval_s || 0.5));
+      // AGV 필터 반영 (전체 또는 focus AGV의 사고만)
+      const filtered = incidents.filter(filteredEventAgv);
+      const groups = buildIncidentGroups(filtered);
+      // 캐시: 같은 데이터셋이면 다시 안 그림
+      const key = focusedAgvId + '|' + groups.length + '|' + (groups[0] ? groups[0].start_t : 0) + '|' + (groups[groups.length-1] ? groups[groups.length-1].start_t : 0);
+      if (key === _eventMarkersBuiltKey) return;
+      _eventMarkersBuiltKey = key;
+      if (!duration || groups.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      container.innerHTML = groups.map(group => {
+        const pct = Math.max(0, Math.min(100, (group.start_t / duration) * 100));
+        const title = `${eventLabel(group.kind)} · t=${group.start_t.toFixed(2)}s · ${group.count}회`;
+        return `<div class="event-marker" data-kind="${group.kind}" data-time="${group.start_t}" data-edge-key="${group.edge_key || ''}" data-agv-id="${group.agv_id || ''}" style="left:${pct}%" title="${title}"></div>`;
+      }).join('');
+      container.querySelectorAll('.event-marker').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          pause();
+          const t = Number(el.dataset.time || 0);
+          setIndexFromTime(t);
+          const agvId = el.dataset.agvId || '';
+          const { chain, cycle } = agvId ? chainAtTime(t, agvId) : { chain: [], cycle: false };
+          setHighlight(el.dataset.edgeKey || '', agvId, { chain, cycle });
+          render();
+        });
+      });
     }
     function buildBlockingChainFor(snapshot, startAgvId) {
       const map = new Map();
@@ -1466,6 +1611,18 @@ def build_playback_html(trace: dict) -> str:
     });
     document.getElementById('agv-focus').addEventListener('change', (e) => {
       focusedAgvId = e.target.value || '';
+      render();
+    });
+    document.getElementById('heatmap-toggle').addEventListener('click', () => {
+      heatmapMode = !heatmapMode;
+      const btn = document.getElementById('heatmap-toggle');
+      btn.classList.toggle('active', heatmapMode);
+      const legend = document.getElementById('heatmap-legend');
+      legend.classList.toggle('active', heatmapMode);
+      const lab = document.getElementById('heatmap-max-label');
+      if (lab) {
+        lab.textContent = heatmapMax > 0 ? `최대 ${heatmapMax}회` : '데이터 없음';
+      }
       render();
     });
     document.getElementById('zoom-reset-btn').addEventListener('click', () => {

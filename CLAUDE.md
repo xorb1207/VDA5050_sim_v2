@@ -77,9 +77,9 @@ python scripts/merge_showcase_into_saturation.py <SAT_DIR> <SHOWCASE_DIR>
 
 다음 세 갈래로 진행:
 
-- [ ] **(b) 시각화 2차** ← 1순위, 새 실험 없이 도구만 — 3-pane / 사고 클릭→맵 강조 / reserved path depth / blocking chain / 방향 마커. 부분 진행 중.
-- [ ] **(a) 혼합 토폴로지 실험** ← 2순위, 엔진 확장 선행 (corridor별 type 분리)
-- [ ] **(c) 24h 호라이즌 시나리오** ← 3순위, b 끝난 뒤. battery/charging이 의미를 갖는 구간
+- [x] **(b) 시각화 2차** — 3-pane / 사고 클릭→맵 강조 / reserved path depth (opacity ramp) / blocking chain (체인 AGV 펄스 링) / 방향 마커 (chevron) 모두 playback에 들어감. 추가로 타임라인 사고 마커 + 핫스팟 히트맵 토글까지 완료.
+- [ ] **(a) 혼합 토폴로지 실험** ← 1순위 (b 종료), 엔진 확장 선행 (corridor별 type 분리)
+- [ ] **(c) 24h 호라이즌 시나리오** ← 2순위, a 끝난 뒤. battery/charging이 의미를 갖는 구간
 
 ### 보류 (현 단계 ROI 낮음)
 charging contention / priority reservation / 회전 감속 / wait_time 통합 / reachable siding 정밀화 / 세부 공간 설계 / failure injection — 새 질문이 생기기 전까지 보류.
