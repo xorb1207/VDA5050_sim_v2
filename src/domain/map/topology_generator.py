@@ -118,11 +118,46 @@ class MapTopologyGenerator:
                            role=NodeRole.APPROACH)
         self._add_corridor(g, Y_SOUTH, "S", bidirectional=False,
                            direction="east_to_west", corridor="south")
-        self._add_bays(g)
+        self._add_bays_type_a(g)
         self._add_stations(g)
         self._add_chargers(g)
         self._add_holding_points(g)
         return g
+
+    def _add_bays_type_a(self, g: MapGraph) -> None:
+        """Type A 전용 베이 레이아웃.
+
+        북(E→W) + 중앙(W→E) + 남(E→W) 세 통로가 모두 단방향이므로 양끝(x=0, x=640)에서
+        루프 접속점이 필요하다.
+
+          서측 끝(x=0):  북 출구(N_000) → 중앙 진입(C_000)  [NC 미니 베이]
+                         남 출구(S_000) → 중앙 진입(C_000)  [SC 미니 베이]  ← S_000 탈출 경로
+          동측 끝(x=640): 중앙 출구(C_640) → 북 진입(N_640) [CN 미니 베이]  ← N_640 재진입
+                         중앙 출구(C_640) → 남 진입(S_640)  [CS 미니 베이]  ← S_640 진입
+          중간(x=160,320,480): 표준 교대 단방향 (i=1→SN, i=2→NS, i=3→SN)
+        """
+        # 서측 끝: 북 출구·남 출구 → 중앙 합류
+        self._add_bay_path(g, ["WP_N_000", "WP_C_000"], 0, "NC")
+        self._add_bay_path(g, ["WP_S_000", "WP_C_000"], 0, "SC")
+
+        # 동측 끝: 중앙 출구 → 북 진입·남 진입 분기
+        self._add_bay_path(g, ["WP_C_640", "WP_N_640"], 640, "CN")
+        self._add_bay_path(g, ["WP_C_640", "WP_S_640"], 640, "CS")
+
+        # 중간 베이 (표준 교대 방향, BAY_X 인덱스 기준)
+        mid_bays = [(1, 160), (2, 320), (3, 480)]  # (원래 BAY_X 인덱스, x좌표)
+        for orig_i, bx in mid_bays:
+            north_to_south = (orig_i % 2 == 0)  # i=1→SN, i=2→NS, i=3→SN
+            n_nid = f"WP_N_{bx:03d}"
+            c_nid = f"WP_C_{bx:03d}"
+            s_nid = f"WP_S_{bx:03d}"
+            if n_nid not in g.nodes or c_nid not in g.nodes or s_nid not in g.nodes:
+                continue
+            dir_label = "NS" if north_to_south else "SN"
+            if north_to_south:
+                self._add_bay_path(g, [n_nid, c_nid, s_nid], bx, dir_label)
+            else:
+                self._add_bay_path(g, [s_nid, c_nid, n_nid], bx, dir_label)
 
     # ── Type B ────────────────────────────────────────────────
     def _build_type_b(self, siding_placement: str = "base") -> MapGraph:
