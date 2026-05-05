@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>FAB AMR What-if Simulator — Live</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* 목업 디자인 그대로 — 색·간격·타이포 보존. */
+  :root{
+    --bg:#0f1117; --panel:#1a1d27; --panel-2:#222633;
+    --line:#2a2f3d; --line-2:#363c4d;
+    --text:#e6e8ef; --text-dim:#8a92a6; --text-mute:#5a6178;
+    --accent:#5b9dff; --accent-2:#3a7be0;
+    --green:#27c281; --red:#ef4f5e; --yellow:#e9b949;
+    --blue:#3a8dff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:"Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+    font-size:13px;-webkit-font-smoothing:antialiased;height:100%;overflow:hidden}
+  .mono{font-family:"JetBrains Mono","SF Mono",Menlo,monospace}
+  button{font-family:inherit;color:inherit;cursor:pointer}
+  button:disabled{cursor:not-allowed;opacity:0.4}
+  input[type="range"]{width:100%}
+  input[type="range"]:disabled{opacity:0.4;cursor:not-allowed}
+  select:disabled{opacity:0.4;cursor:not-allowed}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<!-- React + ReactDOM + Babel via CDN. 인터넷 없을 때 vendor/ 로 옮기면 됨. -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- 어댑터: backend REST/WS 결선. window.QuickRunAdapter 노출 -->
+<script src="/static/adapters.js"></script>
+
+<!-- React 앱 본체. window.QuickRunAdapter 사용. -->
+<script type="text/babel" data-presets="react" data-type="module" src="/static/app.jsx"></script>
+
+</body>
+</html>

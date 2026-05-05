@@ -8,6 +8,7 @@
 #   ./run open last/<v>   # 가장 최근 run의 <v> variant playback 열기
 #   ./run list            # 최근 10개 run 표
 #   ./run rebuild-index   # index.html 만 재생성
+#   ./run quickrun        # Quick Sim 라이브 페이지 (localhost:8765)
 #   ./run -h              # 도움말
 
 set -euo pipefail
@@ -100,6 +101,14 @@ except Exception:
     rebuild-index)
         cd "${ROOT}"
         python -m src.tools.build_index "${EXP_ROOT}"
+        ;;
+
+    quickrun)
+        cd "${ROOT}"
+        echo "Quick Sim 서버 시작: http://127.0.0.1:8765/"
+        # 자동 브라우저 오픈 (1초 후)
+        ( sleep 1 && xopen http://127.0.0.1:8765/ ) &
+        python -m src.interfaces.quickrun.server
         ;;
 
     *)
