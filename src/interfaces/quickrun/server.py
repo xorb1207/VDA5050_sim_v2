@@ -28,15 +28,32 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from src.analytics.playback_trace import build_live_html
 from src.interfaces.quickrun.runner import RealRunner
 
 # ── 정적 자원 경로 ─────────────────────────────────────────────
 STATIC_DIR = Path(__file__).parent / "static"
 INDEX_HTML = STATIC_DIR / "index.html"
+
+_LIVE_HTML_CACHE: str | None = None
+
+
+def _get_live_html() -> str:
+    global _LIVE_HTML_CACHE
+    if _LIVE_HTML_CACHE is None:
+        _LIVE_HTML_CACHE = build_live_html(
+            default_params={
+                "topology": "A",
+                "agv_count": 12,
+                "speed": 2.0,
+                "duration": 600,
+            }
+        )
+    return _LIVE_HTML_CACHE
 
 
 # ── 요청/응답 모델 ─────────────────────────────────────────────
@@ -210,9 +227,7 @@ async def healthz():
 
 @app.get("/")
 async def index():
-    if INDEX_HTML.exists():
-        return FileResponse(INDEX_HTML)
-    return {"error": "static/index.html not built yet"}
+    return HTMLResponse(_get_live_html())
 
 
 @app.post("/init")
@@ -257,7 +272,7 @@ async def init_sim(req: InitRequest):
     except Exception as exc:
         raise HTTPException(400, f"setup failed: {exc}")
     runner.real_runner = real
-    runner.map_data = real.map_json
+    runner.map_data = real.map_json_for_live
 
     async def _runner_task():
         try:

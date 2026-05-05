@@ -19,6 +19,7 @@ from collections import deque
 from typing import Awaitable, Callable, Optional
 
 from src.adapters.bus.adapters import LocalMemoryBus
+from src.analytics.playback_trace import PlaybackTraceRecorder
 from src.application.engine.simulation_engine import SimulationEngine
 from src.application.scenario.task_generator import TaskGenerator
 from src.domain.agv.agv import AGV
@@ -42,53 +43,45 @@ def _node_kind(node) -> str:
 
 
 def graph_to_map_json(graph: MapGraph) -> dict:
-    """엔진 MapGraph → 프론트 SVG 가 그대로 쓸 수 있는 정규화 형태.
-    좌표는 원본 유지(프론트에서 fit). viewBox 는 padding 40 포함."""
-    nodes = [{
-        "id": n.node_id,
-        "x": float(n.x),
-        "y": float(n.y),
-        "kind": _node_kind(n),
-    } for n in graph.nodes.values()]
+    """엔진 MapGraph → playback_trace._serialize_map 과 동일한 형태.
+    node_id/role/is_charger 등 playback JS 가 기대하는 필드명 사용."""
+    nodes = []
+    for n in graph.nodes.values():
+        nodes.append({
+            "node_id": n.node_id,
+            "x": float(n.x),
+            "y": float(n.y),
+            "role": n.role.value if hasattr(n.role, "value") else str(n.role),
+            "is_charger": bool(n.is_charger),
+            "is_parking_spot": bool(getattr(n, "is_parking_spot", False)),
+        })
     edges = []
     for e in graph.edges.values():
+        src = graph.nodes.get(e.start_node_id)
+        dst = graph.nodes.get(e.end_node_id)
+        if src is None or dst is None:
+            continue
         edges.append({
-            "id": e.edge_id,
-            "src": e.start_node_id,
-            "dst": e.end_node_id,
-            "directed": not e.bidirectional,
+            "edge_id": e.edge_id,
+            "edge_key": f"{e.start_node_id}__{e.end_node_id}",
+            "start_node_id": e.start_node_id,
+            "end_node_id": e.end_node_id,
+            "x1": float(src.x),
+            "y1": float(src.y),
+            "x2": float(dst.x),
+            "y2": float(dst.y),
             "corridor": e.corridor or "",
-            "speed": float(e.max_speed),
+            "access_type": e.access_type or "",
+            "width_m": float(getattr(e, "width_m", 0.0)),
+            "bidirectional": bool(getattr(e, "bidirectional", False)),
         })
-    if nodes:
-        xs = [n["x"] for n in nodes]
-        ys = [n["y"] for n in nodes]
-        x_min, x_max = min(xs), max(xs)
-        y_min, y_max = min(ys), max(ys)
-        pad = max(40.0, (x_max - x_min) * 0.04)
-        view = [x_min - pad, y_min - pad,
-                (x_max - x_min) + 2 * pad, (y_max - y_min) + 2 * pad]
-    else:
-        view = [0, 0, 1000, 600]
-    return {
-        "viewBox": view,
-        "nodes": nodes,
-        "edges": edges,
-    }
+    return {"nodes": nodes, "edges": edges}
 
 
 # ── 상태 매핑 ──────────────────────────────────────────────────
 def _agv_state_to_ui(state: AGVState) -> str:
-    if state == AGVState.NAVIGATING:
-        return "NAVIGATING"
-    if state == AGVState.WAITING_RESERVATION:
-        return "WAITING"
-    if state == AGVState.PROCESSING:
-        return "PROCESSING"
-    if state == AGVState.CHARGING:
-        return "CHARGING"
-    # IDLE / ERROR 는 mockup 슬롯에 없음 → WAITING 으로 표시
-    return "WAITING"
+    """playback_trace snapshot 과 동일한 state 문자열 반환."""
+    return state.value if hasattr(state, "value") else str(state)
 
 
 # ── Rolling KPI ────────────────────────────────────────────────
@@ -213,6 +206,8 @@ class RealRunner:
         self._agvs: list[AGV] = []
         self._scheduler: Optional[TimeWindowScheduler] = None
         self._task_gen: Optional[TaskGenerator] = None
+        self._recorder: Optional[PlaybackTraceRecorder] = None
+        self._last_sent_event_idx: int = 0
 
     # ── 외부 컨트롤 ─────────────────────────────────────────
     def stop(self) -> None:
@@ -223,6 +218,13 @@ class RealRunner:
         if self._graph is None:
             raise RuntimeError("graph not built yet (call setup() first)")
         return graph_to_map_json(self._graph)
+
+    @property
+    def map_json_for_live(self) -> dict:
+        """playback JS 와 동일한 node_id/edge_key 형태. live HTML 이 사용."""
+        if self._recorder is None:
+            raise RuntimeError("setup() not called")
+        return self._recorder._serialize_map()
 
     # ── 엔진 셋업 ──────────────────────────────────────────
     def setup(self) -> None:
@@ -245,8 +247,13 @@ class RealRunner:
         self._scheduler = TimeWindowScheduler()
         bus = LocalMemoryBus()
         self._task_gen = TaskGenerator(graph, bus, task_interval_s=5.0)
-        self._engine = SimulationEngine(graph, self._scheduler,
-                                        task_generator=self._task_gen)
+        # recorder 를 엔진에 연결 → AGV/스케줄러가 이벤트 자동 기록
+        self._recorder = PlaybackTraceRecorder(graph, sample_interval_s=0.5)
+        self._engine = SimulationEngine(
+            graph, self._scheduler,
+            task_generator=self._task_gen,
+            trace_recorder=self._recorder,
+        )
         chargers = [n.node_id for n in graph.get_chargers()]
         if not chargers:
             raise RuntimeError("no chargers in topology")
@@ -309,11 +316,23 @@ class RealRunner:
 
     # ── snapshot 변환 ──────────────────────────────────────
     async def _publish_snapshot(self) -> None:
-        if not self._engine or not self._scheduler:
+        if not self._engine or not self._scheduler or not self._recorder:
             return
+        # recorder 가 engine._tick() 에서 이미 sample() 을 호출했으므로
+        # 최신 snapshot 을 그대로 가져온다.
+        rec_snaps = self._recorder.snapshots
+        rec_events = self._recorder.events
+        if not rec_snaps:
+            return
+        snapshot = rec_snaps[-1]
+
+        # 이전 push 이후에 추가된 이벤트만 전송
+        new_events = rec_events[self._last_sent_event_idx:]
+        self._last_sent_event_idx = len(rec_events)
+
+        # Rolling KPI
         agv_states = [a._fsm.state for a in self._agvs]
         ho_summary = self._scheduler.get_headon_summary()
-        # demand 완료 누계: TaskGenerator._diagnostics.demands_completed
         demand_done = 0
         if self._task_gen is not None and hasattr(self._task_gen, "_diagnostics"):
             demand_done = getattr(self._task_gen._diagnostics, "demands_completed", 0)
@@ -323,19 +342,11 @@ class RealRunner:
             demand_completed_total=demand_done,
             headon_total=ho_summary["headon_total"],
         )
-        agvs_payload = []
-        for agv in self._agvs:
-            agvs_payload.append({
-                "id": agv.agv_id,
-                "x": float(agv.physics.x),
-                "y": float(agv.physics.y),
-                "state": _agv_state_to_ui(agv._fsm.state),
-                "blockingAgv": "",  # 향후 채우기
-            })
+
         await self.broadcast({
             "type": "tick",
-            "simTime": round(self.sim_time, 3),
-            "agvs": agvs_payload,
+            "snapshot": snapshot,
+            "new_events": new_events,
             "kpi": kpi,
         })
 
