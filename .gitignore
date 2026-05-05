@@ -19,3 +19,6 @@ outputs/
 # Optional: virtualenvs
 .venv/
 venv/
+mockup.html
+mockup_app.html
+mockup_blob_*.js
