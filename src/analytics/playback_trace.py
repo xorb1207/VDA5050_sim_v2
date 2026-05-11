@@ -1950,7 +1950,14 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <option value="C"{' selected' if topo == 'C' else ''}>Type C — 단방향 대형</option>
             <option value="D"{' selected' if topo == 'D' else ''}>Type D — 이중 루프</option>
             <option value="E"{' selected' if topo == 'E' else ''}>Type E — 크립 양방향</option>
+            <!-- 업로드된 임포트 맵은 fetch /imported-maps 로 동적 채워짐 -->
           </select>
+          <button type="button" id="upload-map-btn"
+            style="height:30px; padding:0 10px; margin-left:6px; border:1px dashed var(--border-strong);
+                   background:transparent; border-radius:var(--radius-sm); color:var(--muted);
+                   font-size:12px; cursor:pointer;">📂 외부 맵 업로드</button>
+          <input type="file" id="upload-map-input" accept=".json"
+            style="display:none;" multiple>
         </div>
         <div class="param-group">
           <span class="param-label">AGV</span>
@@ -1973,6 +1980,12 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           <input type="range" id="live-duration" min="60" max="7200" step="60" value="{duration}"
             oninput="document.getElementById('live-dur-val').textContent=fmtDur(this.value)" style="width:120px">
           <span class="param-value" id="live-dur-val">{_fmt_dur(duration)}</span>
+        </div>
+        <div class="param-group">
+          <span class="param-label">잡 주기</span>
+          <input type="range" id="live-task-interval" min="1" max="30" step="1" value="5"
+            oninput="document.getElementById('live-task-val').textContent=this.value+'s'" style="width:100px">
+          <span class="param-value" id="live-task-val">5s</span>
         </div>
       </div>
       <div class="playback-stage">
@@ -2162,10 +2175,17 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
 
     // ── 라이브 실행 ───────────────────────────────────────────────
     async function doRun() {{
-      const topology = document.getElementById('live-topology').value;
+      const topoSel = document.getElementById('live-topology').value;
+      // 업로드된 임포트 맵은 옵션 value 가 "imported:<id>" 형식
+      let topology = topoSel, importedMapId = null;
+      if (topoSel.startsWith('imported:')) {{
+        importedMapId = topoSel.slice('imported:'.length);
+        topology = 'A'; // 무시되지만 placeholder
+      }}
       const agvCount = Number(document.getElementById('live-agv-count').value);
       const simSpeed = Number(document.getElementById('live-sim-speed').value);
       const duration = Number(document.getElementById('live-duration').value);
+      const taskIntervalS = Number(document.getElementById('live-task-interval').value);
 
       // 기존 연결 종료 + 상태 초기화
       if (liveWs) {{ try {{ liveWs.close(); }} catch(e) {{}} liveWs = null; }}
@@ -2188,7 +2208,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
         const resp = await fetch('/init', {{
           method: 'POST',
           headers: {{'Content-Type': 'application/json'}},
-          body: JSON.stringify({{ topology, agvCount, speed: simSpeed, duration, blockedEdges: [] }}),
+          body: JSON.stringify({{ topology, agvCount, speed: simSpeed, duration, blockedEdges: [],
+                                  taskIntervalS, importedMapId }}),
         }});
         if (!resp.ok) throw new Error('init failed: ' + resp.status + ' ' + await resp.text());
         const data = await resp.json();
@@ -2781,6 +2802,78 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       if (!timer) return;
       clearInterval(timer); timer=null;
     }}
+
+    // ── 외부 맵 업로드 ───────────────────────────────────────────
+    async function refreshImportedMaps() {{
+      try {{
+        const resp = await fetch('/imported-maps');
+        if (!resp.ok) return;
+        const list = await resp.json();
+        const sel = document.getElementById('live-topology');
+        // 기존 imported 옵션 제거
+        const opts = Array.from(sel.querySelectorAll('option'));
+        for (const o of opts) {{
+          if (o.value.startsWith('imported:')) o.remove();
+        }}
+        // 새로 추가
+        if (list.length > 0) {{
+          const sep = document.createElement('option');
+          sep.disabled = true;
+          sep.textContent = '── Imported Maps ──';
+          sel.appendChild(sep);
+        }}
+        for (const m of list) {{
+          const opt = document.createElement('option');
+          opt.value = 'imported:' + m.id;
+          opt.textContent = `📂 ${{m.name}} (${{m.stats.nodes}}n/${{m.stats.edges}}e)`;
+          sel.appendChild(opt);
+        }}
+      }} catch(e) {{ /* server 안 떠있을 수도 — 무시 */ }}
+    }}
+
+    document.getElementById('upload-map-btn').addEventListener('click', ()=>{{
+      document.getElementById('upload-map-input').click();
+    }});
+    document.getElementById('upload-map-input').addEventListener('change', async (e)=>{{
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      // 파일 분류: 일반 JSON (nodes/links) vs *.edit.json
+      let mapFile = null, editsFile = null;
+      for (const f of files) {{
+        if (f.name.endsWith('.edit.json')) editsFile = f;
+        else mapFile = f;
+      }}
+      if (!mapFile) {{
+        alert('원본 맵 JSON (nodes/links) 파일을 선택해 주세요. .edit.json 만으로는 업로드 불가.');
+        return;
+      }}
+      try {{
+        const mapText = await mapFile.text();
+        const mapJson = JSON.parse(mapText);
+        let editsJson = null;
+        if (editsFile) {{
+          editsJson = JSON.parse(await editsFile.text());
+        }}
+        const stem = mapFile.name.replace(/\\.json$/, '');
+        const resp = await fetch('/upload-map', {{
+          method:'POST', headers:{{'Content-Type':'application/json'}},
+          body: JSON.stringify({{ name: stem, map_json: mapJson, edits_json: editsJson }}),
+        }});
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        await refreshImportedMaps();
+        // 자동으로 새 옵션 선택
+        const sel = document.getElementById('live-topology');
+        sel.value = 'imported:' + data.importedMapId;
+        const editPart = editsJson ? ' (+edits)' : '';
+        alert(`업로드 성공: ${{data.name}}${{editPart}}\\n  ${{data.stats.nodes}} nodes / ${{data.stats.edges}} edges\\n  chargers ${{data.stats.chargers}} · stations ${{data.stats.stations}}`);
+      }} catch (err) {{
+        alert('업로드 실패: ' + err.message);
+      }}
+      e.target.value = ''; // input 리셋
+    }});
+    // 페이지 로드 시 한 번 채움 (이미 업로드된 맵이 있을 수도)
+    refreshImportedMaps();
 
     // ── 이벤트 핸들러 ─────────────────────────────────────────────
     document.getElementById('run-btn').addEventListener('click', doRun);

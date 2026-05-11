@@ -549,6 +549,109 @@ def _count_weak_components(nodes: list[ImportedNode], edges: list[ImportedEdge])
 
 
 # ────────────────────────────────────────────────────────────────────
+# Edit.json 적용 (Editor 페이지에서 Save 한 결과)
+# ────────────────────────────────────────────────────────────────────
+def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
+    """ImportedMap + edit.json → 편집 적용된 ImportedMap.
+
+    edits 포맷: editor_html.exportEdits() 결과 (format_version=1)
+      · deleted_node_ids / deleted_edge_ids
+      · added_nodes [{id, x, y, role, is_charger, is_holding}]
+      · added_edges [{id, src, dst, bidir}]
+      · node_overrides {id: {role?, is_charger?, is_holding?}}
+      · edge_overrides {id: {bidir?, src?, dst?}}
+
+    원본 ImportedMap 은 mutate 하지 않고 새 ImportedMap 반환.
+    """
+    if isinstance(edits, (str, Path)):
+        edits = json.loads(Path(edits).read_text(encoding="utf-8"))
+
+    # 깊은 복사 (필드 단위)
+    nodes = []
+    for n in imported.nodes:
+        nn = ImportedNode(
+            node_id=n.node_id, x=n.x, y=n.y, name=n.name,
+            inferred_role=n.inferred_role,
+            inferred_is_charger=n.inferred_is_charger,
+            inferred_is_holding=n.inferred_is_holding,
+            raw_node_type_cd=n.raw_node_type_cd,
+            raw_align_type_cd=n.raw_align_type_cd,
+            degree_in=n.degree_in, degree_out=n.degree_out,
+        )
+        nodes.append(nn)
+    edges = []
+    for e in imported.edges:
+        ee = ImportedEdge(
+            edge_id=e.edge_id, src=e.src, dst=e.dst,
+            inferred_bidirectional=e.inferred_bidirectional,
+            inferred_corridor=e.inferred_corridor,
+            inferred_access_type=e.inferred_access_type,
+            raw_link_type_cd=e.raw_link_type_cd,
+            merged_from=list(e.merged_from),
+        )
+        edges.append(ee)
+
+    # 1. 삭제
+    deleted_nodes = set(edits.get("deleted_node_ids", []))
+    deleted_edges = set(edits.get("deleted_edge_ids", []))
+    nodes = [n for n in nodes if n.node_id not in deleted_nodes]
+    edges = [e for e in edges if e.edge_id not in deleted_edges]
+    # 삭제된 노드와 연결된 엣지도 같이 정리 (방어적)
+    nodes_set = {n.node_id for n in nodes}
+    edges = [e for e in edges if e.src in nodes_set and e.dst in nodes_set]
+
+    # 2. node_overrides
+    node_overrides = edits.get("node_overrides", {})
+    for n in nodes:
+        ov = node_overrides.get(n.node_id)
+        if not ov:
+            continue
+        if "role" in ov:
+            n.inferred_role = ov["role"]
+        if "is_charger" in ov:
+            n.inferred_is_charger = bool(ov["is_charger"])
+        if "is_holding" in ov:
+            n.inferred_is_holding = bool(ov["is_holding"])
+
+    # 3. edge_overrides
+    edge_overrides = edits.get("edge_overrides", {})
+    for e in edges:
+        ov = edge_overrides.get(e.edge_id)
+        if not ov:
+            continue
+        if "bidir" in ov:
+            e.inferred_bidirectional = bool(ov["bidir"])
+        if "src" in ov:
+            e.src = ov["src"]
+        if "dst" in ov:
+            e.dst = ov["dst"]
+
+    # 4. added_nodes
+    for an in edits.get("added_nodes", []):
+        nodes.append(ImportedNode(
+            node_id=an["id"], x=float(an["x"]), y=float(an["y"]),
+            name=an.get("name", an["id"]),
+            inferred_role=an.get("role", "standard"),
+            inferred_is_charger=bool(an.get("is_charger", False)),
+            inferred_is_holding=bool(an.get("is_holding", False)),
+        ))
+
+    # 5. added_edges
+    for ae in edits.get("added_edges", []):
+        edges.append(ImportedEdge(
+            edge_id=ae["id"], src=ae["src"], dst=ae["dst"],
+            inferred_bidirectional=bool(ae.get("bidir", False)),
+        ))
+
+    # 차수 + 리포트 재계산
+    _compute_degrees(nodes, edges)
+    raw_edges_count = len(imported.edges) - len(deleted_edges) + len(edits.get("added_edges", []))
+    report = _build_report(nodes, edges, raw_edges_count)
+
+    return ImportedMap(nodes=nodes, edges=edges, report=report, config=imported.config)
+
+
+# ────────────────────────────────────────────────────────────────────
 # ImportedMap → MapGraph 빌드 (simulation 에 넘길 때 사용)
 # ────────────────────────────────────────────────────────────────────
 def build_map_graph(imported: ImportedMap) -> MapGraph:

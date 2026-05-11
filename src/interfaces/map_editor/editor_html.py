@@ -19,9 +19,14 @@ import json
 from src.domain.map.external_importer import ImportedMap
 
 
-def build_editor_html(imported: ImportedMap, title: str = "Map Editor") -> str:
+def build_editor_html(
+    imported: ImportedMap,
+    title: str = "Map Editor",
+    source_name: str = "imported_map",
+) -> str:
     """ImportedMap → self-contained HTML 페이지 문자열.
 
+    source_name: Save 시 다운로드 파일명 (예: "synthetic_plant") → "synthetic_plant.edit.json"
     페이지는 외부 의존성 없음 (모든 JS 인라인). 폐쇄망에서도 그대로 동작.
     """
     # ── 데이터 직렬화 (JS 가 그대로 사용) ──────────────────────────
@@ -65,6 +70,7 @@ def build_editor_html(imported: ImportedMap, title: str = "Map Editor") -> str:
 
     payload = {
         "title": title,
+        "source_name": source_name,
         "nodes": nodes_payload,
         "edges": edges_payload,
         "report": report_payload,
@@ -396,10 +402,14 @@ _TEMPLATE = r"""<!doctype html>
   <script>
     // ── 데이터 로드 ─────────────────────────────────────────────
     const PAYLOAD = __PAYLOAD_JSON__;
+    const SOURCE_NAME = PAYLOAD.source_name || "imported_map";
     const nodes = PAYLOAD.nodes;            // 편집 대상 (mutable)
     const edges = PAYLOAD.edges;            // 편집 대상 (mutable)
     const report = PAYLOAD.report;
     const nodeById = new Map(nodes.map(n => [n.id, n]));
+    // 원본 상태 보존 (Save 시 diff 계산용)
+    const ORIGINAL_NODES = new Map(PAYLOAD.nodes.map(n => [n.id, JSON.parse(JSON.stringify(n))]));
+    const ORIGINAL_EDGES = new Map(PAYLOAD.edges.map(e => [e.id, JSON.parse(JSON.stringify(e))]));
 
     // ── 편집 상태 ───────────────────────────────────────────────
     let mode = "paint";              // paint / stamp / build
@@ -864,14 +874,25 @@ _TEMPLATE = r"""<!doctype html>
       return {x: local.x, y: local.y};
     }
 
+    // 휠 버튼 클릭 시 브라우저 autoscroll 방지
+    document.getElementById("map").addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
     document.getElementById("map").addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 && e.button !== 2) return;
       const onNode = !!e.target.closest("[data-node-id]");
       const onEdge = !onNode && !!e.target.closest("[data-edge-id]");
       const svg = e.currentTarget;
       const pt = clientToSvg(svg, e.clientX, e.clientY);
       const localX = (pt.x - panX) / zoomScale;
       const localY = (pt.y - panY) / zoomScale;
+
+      // ★ 휠(가운데) 버튼 = 어떤 모드든 pan (Photoshop / IDE 표준)
+      if (e.button === 1) {
+        isPanning = true;
+        panStart = {x: e.clientX, y: e.clientY, panX, panY};
+        document.querySelector(".map-shell").classList.add("dragging");
+        e.preventDefault();
+        return;
+      }
+      if (e.button !== 0 && e.button !== 2) return;
 
       // Space + 좌클릭 = pan (모드 무관)
       if (spaceKeyDown && e.button === 0) {
@@ -1276,19 +1297,83 @@ _TEMPLATE = r"""<!doctype html>
     });
 
     function exportEdits() {
-      // override-only 메타: 원본에서 바뀐 것만 기록
+      // 원본 vs 현재 diff 를 정확하게 기록.
+      // 임포트 시 apply_edits(original, edits) 로 재현 가능한 형태.
+      const currentNodeIds = new Set(nodes.map(n => n.id));
+      const currentEdgeIds = new Set(edges.map(e => e.id));
+
+      // 삭제된 항목 = 원본에 있었지만 현재 없는 것
+      const deleted_node_ids = [];
+      for (const id of ORIGINAL_NODES.keys()) {
+        if (!currentNodeIds.has(id)) deleted_node_ids.push(id);
+      }
+      const deleted_edge_ids = [];
+      for (const id of ORIGINAL_EDGES.keys()) {
+        if (!currentEdgeIds.has(id)) deleted_edge_ids.push(id);
+      }
+
+      // 추가된 항목 = 원본에 없던 것 (Build 모드로 생성)
+      const added_nodes = [];
+      for (const n of nodes) {
+        if (!ORIGINAL_NODES.has(n.id)) {
+          added_nodes.push({
+            id: n.id, x: n.x, y: n.y, name: n.name || n.id,
+            role: n.role || "standard",
+            is_charger: !!n.is_charger,
+            is_holding: !!n.is_holding,
+          });
+        }
+      }
+      const added_edges = [];
+      for (const e of edges) {
+        if (!ORIGINAL_EDGES.has(e.id)) {
+          added_edges.push({id: e.id, src: e.src, dst: e.dst, bidir: !!e.bidir});
+        }
+      }
+
+      // override = 원본에 있었지만 속성이 바뀐 것
       const node_overrides = {};
       for (const n of nodes) {
-        if (n.role !== "standard" || n.is_charger || n.is_holding) {
-          node_overrides[n.id] = {role: n.role, is_charger: n.is_charger, is_holding: n.is_holding};
-        }
+        const orig = ORIGINAL_NODES.get(n.id);
+        if (!orig) continue;
+        const diff = {};
+        if ((n.role || "standard") !== (orig.role || "standard")) diff.role = n.role;
+        if (!!n.is_charger !== !!orig.is_charger) diff.is_charger = !!n.is_charger;
+        if (!!n.is_holding !== !!orig.is_holding) diff.is_holding = !!n.is_holding;
+        if (Object.keys(diff).length > 0) node_overrides[n.id] = diff;
       }
       const edge_overrides = {};
       for (const e of edges) {
-        // Phase 2 에서 inferred vs current 비교해 기록 (지금은 모든 엣지 기록)
-        edge_overrides[e.id] = {bidirectional: e.bidir, corridor: e.corridor};
+        const orig = ORIGINAL_EDGES.get(e.id);
+        if (!orig) continue;
+        const diff = {};
+        if (!!e.bidir !== !!orig.bidir) diff.bidir = !!e.bidir;
+        // 단방향에서 src/dst 가 스왑됐는지 (Paint Alt 또는 Build edge)
+        if (e.src !== orig.src || e.dst !== orig.dst) {
+          diff.src = e.src; diff.dst = e.dst;
+        }
+        if (Object.keys(diff).length > 0) edge_overrides[e.id] = diff;
       }
-      return {node_overrides, edge_overrides, timestamp: new Date().toISOString()};
+
+      return {
+        format_version: 1,
+        source: SOURCE_NAME,
+        timestamp: new Date().toISOString(),
+        counts: {
+          deleted_nodes: deleted_node_ids.length,
+          deleted_edges: deleted_edge_ids.length,
+          added_nodes: added_nodes.length,
+          added_edges: added_edges.length,
+          overridden_nodes: Object.keys(node_overrides).length,
+          overridden_edges: Object.keys(edge_overrides).length,
+        },
+        deleted_node_ids,
+        deleted_edge_ids,
+        added_nodes,
+        added_edges,
+        node_overrides,
+        edge_overrides,
+      };
     }
 
     function downloadEdits(edits) {
@@ -1296,7 +1381,7 @@ _TEMPLATE = r"""<!doctype html>
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "map_edits.edit.json";
+      a.download = `${SOURCE_NAME}.edit.json`;
       a.click();
       URL.revokeObjectURL(url);
     }

@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 from src.analytics.playback_trace import PlaybackTraceRecorder, build_playback_html
-from src.domain.map.external_importer import build_map_graph, import_map_json
+from src.domain.map.external_importer import apply_edits, build_map_graph, import_map_json
 from src.interfaces.map_editor import build_editor_html
 
 
@@ -35,6 +35,8 @@ def main():
     parser.add_argument("--open", action="store_true", help="auto-open in browser")
     parser.add_argument("--edit", action="store_true",
                         help="open in Map Editor (편집 UI) instead of read-only preview")
+    parser.add_argument("--edits", default=None,
+                        help="apply edit.json before rendering/editing")
     args = parser.parse_args()
 
     json_path = Path(args.json_path)
@@ -45,6 +47,14 @@ def main():
     # 1단계: import + infer
     print(f"━━━ Importing {json_path} ━━━")
     imp = import_map_json(json_path)
+    # 1.5단계: --edits 가 있으면 적용
+    if args.edits:
+        edits_path = Path(args.edits)
+        if not edits_path.exists():
+            print(f"✗ edits not found: {edits_path}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Applying edits from {edits_path}")
+        imp = apply_edits(imp, edits_path)
     r = imp.report
     print(f"Nodes: {r.node_count}")
     print(f"Edges (raw → merged): {r.edge_count_raw} → {r.edge_count_after_merge}")
@@ -64,7 +74,11 @@ def main():
     # 2단계: 시각화 (편집 모드 vs 정적 미리보기)
     if args.edit:
         # Map Editor — 인터랙티브 편집 페이지
-        html = build_editor_html(imp, title=f"Map Editor — {json_path.stem}")
+        html = build_editor_html(
+            imp,
+            title=f"Map Editor — {json_path.stem}",
+            source_name=json_path.stem,
+        )
         out_path = Path(args.out) if args.out else json_path.with_suffix(".editor.html")
         out_path.write_text(html, encoding="utf-8")
         print(f"✓ Map Editor written: {out_path}")

@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.analytics.playback_trace import build_live_html
+from src.domain.map.external_importer import apply_edits, build_map_graph, import_map_json
 from src.interfaces.quickrun.runner import RealRunner
 
 # ── 정적 자원 경로 ─────────────────────────────────────────────
@@ -63,11 +64,24 @@ class InitRequest(BaseModel):
     speed: float = 2.0
     duration: float = 600.0   # sim 초 단위
     blockedEdges: list[str] = []
+    taskIntervalS: float = 5.0   # 잡 생성 주기 (sim 초)
+    importedMapId: str | None = None  # 업로드된 임포트 맵 ID (있으면 토폴로지 대신 사용)
 
 
 class ControlRequest(BaseModel):
     runId: str
     action: str  # "stop" | "reset"
+
+
+class UploadMapRequest(BaseModel):
+    name: str                  # 사용자 친화적 이름 (예: "synthetic_plant")
+    map_json: dict             # 원본 외부 맵 JSON (nodes/links)
+    edits_json: dict | None = None   # 선택: editor 의 *.edit.json 결과
+
+
+# 업로드된 임포트 맵을 메모리에 보관 (단일 사용자 로컬 도구라 OK)
+# key: importedMapId, value: {"name": str, "graph": MapGraph}
+_imported_maps: dict[str, dict] = {}
 
 
 # ── Snapshot publisher 추상 ────────────────────────────────────
@@ -230,6 +244,45 @@ async def index():
     return HTMLResponse(_get_live_html())
 
 
+@app.post("/upload-map")
+async def upload_map(req: UploadMapRequest):
+    """외부 맵 JSON 업로드 → ImportedMap → (edits 있으면) apply_edits → MapGraph 메모리 보관.
+
+    응답에 importedMapId 반환. 이후 /init 호출 시 이 id 를 importedMapId 로 넘기면
+    그 맵으로 시뮬 시작.
+    """
+    try:
+        imp = import_map_json(req.map_json)
+        if req.edits_json:
+            imp = apply_edits(imp, req.edits_json)
+        graph = build_map_graph(imp)
+    except Exception as exc:
+        raise HTTPException(400, f"map import failed: {exc}")
+
+    map_id = "map_" + uuid.uuid4().hex[:8]
+    _imported_maps[map_id] = {
+        "name": req.name,
+        "graph": graph,
+        "stats": {
+            "nodes": len(imp.nodes),
+            "edges": len(imp.edges),
+            "chargers": imp.report.inferred_chargers,
+            "stations": imp.report.inferred_stations,
+        },
+    }
+    return {
+        "importedMapId": map_id,
+        "name": req.name,
+        "stats": _imported_maps[map_id]["stats"],
+    }
+
+
+@app.get("/imported-maps")
+async def list_imported_maps():
+    """현재 메모리에 있는 임포트 맵 목록. Quickrun 페이지 토폴로지 드롭다운 채울 때 사용."""
+    return [{"id": k, "name": v["name"], "stats": v["stats"]} for k, v in _imported_maps.items()]
+
+
 @app.post("/init")
 async def init_sim(req: InitRequest):
     global _active_runner
@@ -259,6 +312,14 @@ async def init_sim(req: InitRequest):
     async def _bcast(msg):
         await runner.broadcast(msg)
 
+    # 임포트 맵 사용 시 메모리에서 graph 가져옴
+    imported_graph = None
+    if req.importedMapId:
+        entry = _imported_maps.get(req.importedMapId)
+        if entry is None:
+            raise HTTPException(404, f"unknown importedMapId: {req.importedMapId}")
+        imported_graph = entry["graph"]
+
     real = RealRunner(
         topology=req.topology,
         agv_count=req.agvCount,
@@ -266,6 +327,8 @@ async def init_sim(req: InitRequest):
         duration=req.duration,
         blocked_edges=set(req.blockedEdges),
         broadcast=_bcast,
+        task_interval_s=req.taskIntervalS,
+        imported_graph=imported_graph,
     )
     try:
         real.setup()

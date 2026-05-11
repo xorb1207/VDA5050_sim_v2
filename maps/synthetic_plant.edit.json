@@ -1,0 +1,35 @@
+{
+  "format_version": 1,
+  "source": "synthetic_plant",
+  "timestamp": "test",
+  "counts": {
+    "deleted_nodes": 0,
+    "deleted_edges": 0,
+    "added_nodes": 0,
+    "added_edges": 0,
+    "overridden_nodes": 3,
+    "overridden_edges": 0
+  },
+  "deleted_node_ids": [],
+  "deleted_edge_ids": [],
+  "added_nodes": [],
+  "added_edges": [],
+  "node_overrides": {
+    "N0045": {
+      "role": "charger",
+      "is_charger": true,
+      "is_holding": false
+    },
+    "N0046": {
+      "role": "charger",
+      "is_charger": true,
+      "is_holding": false
+    },
+    "N0047": {
+      "role": "charger",
+      "is_charger": true,
+      "is_holding": false
+    }
+  },
+  "edge_overrides": {}
+}

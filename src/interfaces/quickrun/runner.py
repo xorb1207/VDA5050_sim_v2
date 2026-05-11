@@ -189,6 +189,8 @@ class RealRunner:
         broadcast: Callable[[dict], Awaitable[None]],
         random_seed: int = 42,
         push_interval_s: float = 0.1,  # wall-clock push 주기
+        task_interval_s: float = 5.0,
+        imported_graph: Optional[MapGraph] = None,  # 외부 맵 임포트 시 전달
     ) -> None:
         self.topology = topology
         self.agv_count = max(1, agv_count)
@@ -198,6 +200,8 @@ class RealRunner:
         self.broadcast = broadcast
         self.random_seed = random_seed
         self.push_interval_s = push_interval_s
+        self.task_interval_s = max(0.5, task_interval_s)
+        self._imported_graph = imported_graph
         self._stop = False
         self.sim_time = 0.0
         self._kpi = RollingKpi()
@@ -229,16 +233,18 @@ class RealRunner:
     # ── 엔진 셋업 ──────────────────────────────────────────
     def setup(self) -> None:
         random.seed(self.random_seed)
-        tgen = MapTopologyGenerator()
-        # topology 형식: "A" 또는 "B/mid/reachable" 같은 variant 도 향후 지원.
-        # phase 2 첫 단계에선 단일 type code 만.
-        type_code = self.topology.split("/")[0]
-        siding_placement = "base"
-        if type_code == "B" and "/" in self.topology:
-            parts = self.topology.split("/")
-            if len(parts) >= 2:
-                siding_placement = parts[1]
-        graph = tgen.generate(type_code, siding_placement=siding_placement)
+        if self._imported_graph is not None:
+            # 외부 맵: topology generator 안 거치고 그대로 사용
+            graph = self._imported_graph
+        else:
+            tgen = MapTopologyGenerator()
+            type_code = self.topology.split("/")[0]
+            siding_placement = "base"
+            if type_code == "B" and "/" in self.topology:
+                parts = self.topology.split("/")
+                if len(parts) >= 2:
+                    siding_placement = parts[1]
+            graph = tgen.generate(type_code, siding_placement=siding_placement)
         # 사용자가 미리 지정한 차단 엣지: 그래프에 표시만 (실제 차단 X — 엔진 mutation
         # 금지 원칙. 향후 path-find 시 blocked_edges 인자로 전달하는 식으로 결선).
         # MVP: 시각적으로만 빨간색으로 노출, 경로 차단은 안 함 (B-pure 의 한계 명시).
@@ -246,7 +252,7 @@ class RealRunner:
         self._graph = graph
         self._scheduler = TimeWindowScheduler()
         bus = LocalMemoryBus()
-        self._task_gen = TaskGenerator(graph, bus, task_interval_s=5.0)
+        self._task_gen = TaskGenerator(graph, bus, task_interval_s=self.task_interval_s)
         # recorder 를 엔진에 연결 → AGV/스케줄러가 이벤트 자동 기록
         self._recorder = PlaybackTraceRecorder(graph, sample_interval_s=0.5)
         self._engine = SimulationEngine(
