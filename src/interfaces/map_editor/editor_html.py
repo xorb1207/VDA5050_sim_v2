@@ -394,17 +394,78 @@ _TEMPLATE = r"""<!doctype html>
       document.getElementById("chip-components").style.color = "var(--danger)";
     }
 
-    // ── 검증 패널 ───────────────────────────────────────────────
-    document.getElementById("vstat-cc").textContent = report.connected_components;
-    document.getElementById("vstat-iso").textContent = report.isolated_nodes.length;
-    document.getElementById("vstat-de").textContent = report.dead_end_nodes.length;
-    const vlist = document.getElementById("validation-list");
-    if (report.warnings.length === 0) {
-      vlist.innerHTML = `<div class="warn-item info">✓ 검증 통과</div>`;
-    } else {
-      vlist.innerHTML = report.warnings.map(w =>
-        `<div class="warn-item ${w.severity}"><strong>[${w.severity}]</strong> ${w.message}</div>`
-      ).join("");
+    // ── 검증 패널 (실시간 재계산) ───────────────────────────────
+    // 정적 import report 가 아니라 매번 nodes/edges 현재 상태로 다시 계산.
+    // 사용자가 charger 마킹하거나 방향 바꾸면 즉시 반영됨.
+    function recomputeValidation() {
+      // 1) degree 재계산 (방향 변경 반영)
+      for (const n of nodes) { n.degree_in = 0; n.degree_out = 0; }
+      for (const e of edges) {
+        const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+        if (!a || !b) continue;
+        a.degree_out += 1;
+        b.degree_in += 1;
+        if (e.bidir) {
+          a.degree_in += 1;
+          b.degree_out += 1;
+        }
+      }
+      // 2) connected components (weakly)
+      const parent = new Map(nodes.map(n => [n.id, n.id]));
+      const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+      const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+      for (const e of edges) {
+        if (parent.has(e.src) && parent.has(e.dst)) union(e.src, e.dst);
+      }
+      const cc = new Set(nodes.map(n => find(n.id))).size;
+      // 3) isolated / dead-end
+      const isolated = nodes.filter(n => n.degree_in === 0 && n.degree_out === 0);
+      const deadEnds = nodes.filter(n =>
+        n.degree_in > 0 && n.degree_out === 0 && !n.is_charger && n.role !== "holding"
+      );
+      // 4) chargers / stations count
+      const chargerCount = nodes.filter(n => n.is_charger || n.role === "charger").length;
+      const stationCount = nodes.filter(n => n.role === "station" || n.role === "work").length;
+      const holdingCount = nodes.filter(n => n.is_holding || n.role === "holding" || n.role === "holding_candidate").length;
+
+      // ── 패널 업데이트 ──
+      document.getElementById("vstat-cc").textContent = cc;
+      document.getElementById("vstat-iso").textContent = isolated.length;
+      document.getElementById("vstat-de").textContent = deadEnds.length;
+
+      const warnings = [];
+      // error: 시뮬 불가능 수준
+      if (isolated.length > 0) {
+        warnings.push({sev: "error", msg: `${isolated.length} 개 노드가 어떤 링크에도 연결 안 됨`});
+      }
+      if (cc > 1) {
+        warnings.push({sev: "error", msg: `그래프가 ${cc} 개 단편으로 나뉨 (AGV 도달 불가 구간)`});
+      }
+      // warn: 시뮬은 가능하지만 문제 잠재
+      if (deadEnds.length > 0) {
+        const sample = deadEnds.slice(0, 3).map(n => n.id).join(", ");
+        warnings.push({sev: "warn", msg: `${deadEnds.length} 개 dead-end (들어오기만 가능): ${sample}${deadEnds.length > 3 ? ' …' : ''}`});
+      }
+      if (chargerCount === 0) {
+        warnings.push({sev: "warn", msg: `Charger 미지정 (배터리 모드 사용 시 필요). Stamp [3] 으로 지정`});
+      }
+      // 통계 정보 (warning 아닌 좋은 상태도 표시)
+      const okMsg = [];
+      if (chargerCount > 0) okMsg.push(`✓ ${chargerCount} chargers`);
+      if (stationCount > 0) okMsg.push(`✓ ${stationCount} stations`);
+      if (holdingCount > 0) okMsg.push(`✓ ${holdingCount} holding`);
+
+      const vlist = document.getElementById("validation-list");
+      let html = "";
+      if (warnings.length === 0 && okMsg.length === 0) {
+        html = `<div class="warn-item info">✓ 검증 통과 (아직 노드 역할 미지정)</div>`;
+      } else {
+        html = warnings.map(w => `<div class="warn-item ${w.sev}"><strong>[${w.sev}]</strong> ${w.msg}</div>`).join("");
+        if (okMsg.length > 0) {
+          html += `<div class="warn-item info" style="font-size:11px; color:var(--success);">${okMsg.join(' · ')}</div>`;
+        }
+      }
+      document.getElementById("validation-list").innerHTML = html;
     }
 
     // ── 모드 토글 ───────────────────────────────────────────────
@@ -540,6 +601,8 @@ _TEMPLATE = r"""<!doctype html>
       svg.innerHTML = `<g transform="translate(${panX} ${panY}) scale(${zoomScale})">
         ${edgesSvg}${nodesSvg}${trajSvg}
       </g>`;
+      // 사용자 액션 마다 validation 자동 재계산
+      recomputeValidation();
     }
 
     function roleColor(role, isCharger, isHolding) {
