@@ -1,0 +1,12 @@
+# 합성 plant 의 정책 변형 비교 — PoC 예시.
+# 실제 폐쇄망 진입 후엔 source_map / edit_file 만 본인 경로로 교체.
+
+source_map: maps/synthetic_plant.json
+agv_count: 6
+duration_s: 300
+task_interval_s: 4.0
+random_seeds: [42, 43]
+
+variants:
+  - {label: "v0_baseline_minimal"}                                         # role 미지정 (charger 없으면 fail)
+  - {label: "v1_with_chargers",   edit_file: maps/synthetic_plant.edit.json}  # 충전·스테이션·홀딩 마킹

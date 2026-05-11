@@ -436,6 +436,12 @@ def build_playback_html(trace: dict) -> str:
       color: #fff;
       border-color: #c0392b;
     }
+    /* Collision toggle 활성 상태 */
+    #collision-toggle.active {
+      background: #f59e0b;
+      color: #fff;
+      border-color: #f59e0b;
+    }
     /* Heatmap 범례 (활성 시만 표시) */
     .heatmap-legend {
       display: none;
@@ -804,6 +810,7 @@ def build_playback_html(trace: dict) -> str:
             </select>
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
             <button id="heatmap-toggle" type="button" title="엣지별 사고 누적 히트맵 토글">🔥 히트맵</button>
+            <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커 토글 (같은 노드/엣지 점유)">⚠ 충돌</button>
           </div>
         </div>
         <div class="hint">
@@ -880,6 +887,7 @@ def build_playback_html(trace: dict) -> str:
     let zoomPanX = 0;
     let zoomPanY = 0;
     let heatmapMode = false;
+    let collisionMode = false;   // ⚠ 충돌 의심 마커 토글
     // 엣지별 누적 사고 카운트 — heatmap mode 에서 색조로 표시.
     // 사고 종류: headon_block, section_conflict, followon_block (실제 충돌만 가산).
     // reroute / deadlock_resolved 는 결과적 사건이라 가산 제외.
@@ -1233,27 +1241,29 @@ def build_playback_html(trace: dict) -> str:
           applyEdgeStyle(edgeKey, { stroke, width, opacity: 0.92, dash: '' });
         }
       }
-      for (const agv of visibleAgvs) {
-        const planned = agv.planned_edge_keys || [];
-        // Planned: depth-based opacity ramp so the immediate next hops stand out
-        // and farther-out plans fade. Cap depth at 8 to avoid invisible tails.
-        planned.forEach((edgeKey, depth) => {
-          const t = Math.min(depth, 8) / 8;
-          const opacity = 0.95 - t * 0.65; // 0.95 → 0.30
-          applyEdgeStyle(edgeKey, { stroke: '#8bb4ff', width: 3, opacity, dash: '6 5' });
-        });
-        const reserved = agv.reserved_edge_keys || [];
-        reserved.forEach((edgeKey, depth) => {
-          const t = Math.min(depth, 6) / 6;
-          const opacity = 1.0 - t * 0.45; // 1.0 → 0.55
-          const width = 4 - t * 1.2;        // 4 → 2.8
-          applyEdgeStyle(edgeKey, { stroke: '#2459d1', width, opacity, dash: '' });
-        });
-        if (agv.current_edge_key) {
-          applyEdgeStyle(agv.current_edge_key, { stroke: '#0f9d58', width: 6, opacity: 1, dash: '' });
-        }
-        if (agv.blocked_edge_key && agv.state === 'WAITING_RESERVATION') {
-          applyEdgeStyle(agv.blocked_edge_key, { stroke: '#c0392b', width: 6, opacity: 1, dash: '' });
+      // ★ 히트맵 모드일 때는 AGV 오버레이 (planned/reserved/current/blocked) skip.
+      //   사고 누적 패턴에 집중하는 뷰 — AGV planned 색이 히트맵을 덮어 가리지 않게.
+      if (!heatmapMode) {
+        for (const agv of visibleAgvs) {
+          const planned = agv.planned_edge_keys || [];
+          planned.forEach((edgeKey, depth) => {
+            const t = Math.min(depth, 8) / 8;
+            const opacity = 0.95 - t * 0.65;
+            applyEdgeStyle(edgeKey, { stroke: '#8bb4ff', width: 3, opacity, dash: '6 5' });
+          });
+          const reserved = agv.reserved_edge_keys || [];
+          reserved.forEach((edgeKey, depth) => {
+            const t = Math.min(depth, 6) / 6;
+            const opacity = 1.0 - t * 0.45;
+            const width = 4 - t * 1.2;
+            applyEdgeStyle(edgeKey, { stroke: '#2459d1', width, opacity, dash: '' });
+          });
+          if (agv.current_edge_key) {
+            applyEdgeStyle(agv.current_edge_key, { stroke: '#0f9d58', width: 6, opacity: 1, dash: '' });
+          }
+          if (agv.blocked_edge_key && agv.state === 'WAITING_RESERVATION') {
+            applyEdgeStyle(agv.blocked_edge_key, { stroke: '#c0392b', width: 6, opacity: 1, dash: '' });
+          }
         }
       }
       const labelScale = 1 / Math.max(zoomScale, 0.0001);
@@ -1371,6 +1381,23 @@ def build_playback_html(trace: dict) -> str:
               overlays.push(`<g transform="translate(${cx} ${cy}) scale(${labelScale})"><circle r="16" fill="none" stroke="${color}" stroke-width="3"><animate attributeName="r" values="14;22;14" dur="1.1s" repeatCount="indefinite" /><animate attributeName="stroke-opacity" values="1;0.4;1" dur="1.1s" repeatCount="indefinite" /></circle></g>`);
             }
             return overlays.join('');
+          })()}
+          ${(() => {
+            // ⚠ 실시간 충돌 의심 마커 (collisionMode 토글 시만)
+            if (!collisionMode) return '';
+            const collisions = detectCollisions(snapshot);
+            if (collisions.length === 0) return '';
+            return collisions.map(c => {
+              const color = c.type === 'node' ? '#dc2626' : '#f59e0b';
+              const label = c.type === 'node' ? '⚠' : '!';
+              return `<g transform="translate(${c.x} ${c.y}) scale(${labelScale})">
+                <circle r="14" fill="${color}" opacity="0.25" />
+                <circle r="9" fill="${color}" opacity="0.85">
+                  <animate attributeName="r" values="9;13;9" dur="0.8s" repeatCount="indefinite" />
+                </circle>
+                <text y="3.5" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">${label}</text>
+              </g>`;
+            }).join('');
           })()}
         </g>
       `;
@@ -1625,6 +1652,57 @@ def build_playback_html(trace: dict) -> str:
       }
       render();
     });
+    document.getElementById('collision-toggle').addEventListener('click', () => {
+      collisionMode = !collisionMode;
+      document.getElementById('collision-toggle').classList.toggle('active', collisionMode);
+      render();
+    });
+
+    // ── 실시간 충돌 의심 감지 ─────────────────────────────────
+    // 같은 노드에 둘 이상 anchored 또는 같은 엣지에 둘 이상 NAVIGATING + 거리 가까움.
+    // 결과: [{type:'node'|'edge', key, agv_ids:[...], x, y}]
+    function detectCollisions(snapshot) {
+      const out = [];
+      const byNode = new Map();   // node_id → [agv_id, ...]
+      const byEdge = new Map();   // edge_key → [agv]
+      for (const a of (snapshot.agvs || [])) {
+        if (isAnchoredOnNode(a) && a.current_node) {
+          if (!byNode.has(a.current_node)) byNode.set(a.current_node, []);
+          byNode.get(a.current_node).push(a);
+        } else if (a.current_edge_key) {
+          if (!byEdge.has(a.current_edge_key)) byEdge.set(a.current_edge_key, []);
+          byEdge.get(a.current_edge_key).push(a);
+        }
+      }
+      // 같은 노드 anchored 둘 이상 = 진성 충돌
+      for (const [nid, list] of byNode.entries()) {
+        if (list.length < 2) continue;
+        // charger 노드에 IDLE/CHARGING 다중 점유는 OK
+        const allChargingOrIdle = list.every(a => a.state === 'CHARGING' || a.state === 'IDLE');
+        const isCharger = (nodeIndex.get(nid) || {}).is_charger ||
+                          (nodeIndex.get(nid) || {}).role === 'charger';
+        if (allChargingOrIdle && isCharger) continue;
+        const node = nodeIndex.get(nid);
+        if (!node) continue;
+        out.push({type:'node', key:nid, agv_ids:list.map(a=>a.agv_id),
+                  x:sx(node.x), y:sy(node.y)});
+      }
+      // 같은 엣지 위 둘 이상 + 거리 매우 가까움 (1m 미만) = 진성 의심
+      for (const [ek, list] of byEdge.entries()) {
+        if (list.length < 2) continue;
+        for (let i = 0; i < list.length; i++) {
+          for (let j = i+1; j < list.length; j++) {
+            const a = list[i], b = list[j];
+            const dist = Math.hypot(a.x - b.x, a.y - b.y);
+            if (dist < 1.0) {  // 1m 이내
+              out.push({type:'edge', key:ek, agv_ids:[a.agv_id, b.agv_id],
+                        x:sx((a.x + b.x)/2), y:sy((a.y + b.y)/2)});
+            }
+          }
+        }
+      }
+      return out;
+    }
     document.getElementById('zoom-reset-btn').addEventListener('click', () => {
       resetZoom();
       render();
@@ -1814,6 +1892,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     .speed-btn.active {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
     .speed-btn.active:hover {{ background:#1d4ed8; border-color:#1d4ed8; }}
     #heatmap-toggle.active {{ background:#c0392b; color:#fff; border-color:#c0392b; }}
+    #collision-toggle.active {{ background:#f59e0b; color:#fff; border-color:#f59e0b; }}
     .heatmap-legend {{ display:none; align-items:center; gap:8px; font-size:11.5px;
       color:var(--muted); padding:4px 10px; background:var(--surface-2); border-radius:6px; margin-left:8px; }}
     .heatmap-legend.active {{ display:inline-flex; }}
@@ -2025,6 +2104,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <select id="agv-focus"><option value="">전체</option></select>
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
             <button id="heatmap-toggle" type="button" title="히트맵 토글">🔥 히트맵</button>
+            <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커">⚠ 충돌</button>
           </div>
         </div>
         <div class="hint">
@@ -2154,6 +2234,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     let focusedAgvId = '';
     let zoomScale = 1, zoomPanX = 0, zoomPanY = 0;
     let heatmapMode = false;
+    let collisionMode = false;
     let isDragging = false, dragStart = null;
     let highlightedIncident = null, highlightTimer = null;
     const HIGHLIGHT_DURATION_MS = 4500;
@@ -2541,20 +2622,23 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           applyEdgeStyle(edgeKey,{{stroke,width:3+t*5,opacity:0.92,dash:''}});
         }}
       }}
-      for (const agv of visibleAgvs) {{
-        const planned=agv.planned_edge_keys||[];
-        planned.forEach((edgeKey,depth)=>{{
-          const t=Math.min(depth,8)/8;
-          applyEdgeStyle(edgeKey,{{stroke:'#8bb4ff',width:3,opacity:0.95-t*0.65,dash:'6 5'}});
-        }});
-        const reserved=agv.reserved_edge_keys||[];
-        reserved.forEach((edgeKey,depth)=>{{
-          const t=Math.min(depth,6)/6;
-          applyEdgeStyle(edgeKey,{{stroke:'#2459d1',width:4-t*1.2,opacity:1.0-t*0.45,dash:''}});
-        }});
-        if (agv.current_edge_key) applyEdgeStyle(agv.current_edge_key,{{stroke:'#0f9d58',width:6,opacity:1,dash:''}});
-        if (agv.blocked_edge_key && agv.state==='WAITING_RESERVATION')
-          applyEdgeStyle(agv.blocked_edge_key,{{stroke:'#c0392b',width:6,opacity:1,dash:''}});
+      // ★ 히트맵 모드일 때 AGV 오버레이 skip (히트맵 전용 뷰)
+      if (!heatmapMode) {{
+        for (const agv of visibleAgvs) {{
+          const planned=agv.planned_edge_keys||[];
+          planned.forEach((edgeKey,depth)=>{{
+            const t=Math.min(depth,8)/8;
+            applyEdgeStyle(edgeKey,{{stroke:'#8bb4ff',width:3,opacity:0.95-t*0.65,dash:'6 5'}});
+          }});
+          const reserved=agv.reserved_edge_keys||[];
+          reserved.forEach((edgeKey,depth)=>{{
+            const t=Math.min(depth,6)/6;
+            applyEdgeStyle(edgeKey,{{stroke:'#2459d1',width:4-t*1.2,opacity:1.0-t*0.45,dash:''}});
+          }});
+          if (agv.current_edge_key) applyEdgeStyle(agv.current_edge_key,{{stroke:'#0f9d58',width:6,opacity:1,dash:''}});
+          if (agv.blocked_edge_key && agv.state==='WAITING_RESERVATION')
+            applyEdgeStyle(agv.blocked_edge_key,{{stroke:'#c0392b',width:6,opacity:1,dash:''}});
+        }}
       }}
       const labelScale=1/Math.max(zoomScale,0.0001);
       svg.innerHTML=`
@@ -2631,6 +2715,23 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
               overlays.push(`<g transform="translate(${{sx(agv.x)}} ${{sy(agv.y)}}) scale(${{labelScale}})"><circle r="16" fill="none" stroke="${{color}}" stroke-width="3"><animate attributeName="r" values="14;22;14" dur="1.1s" repeatCount="indefinite" /><animate attributeName="stroke-opacity" values="1;0.4;1" dur="1.1s" repeatCount="indefinite" /></circle></g>`);
             }}
             return overlays.join('');
+          }})()}}
+          ${{(()=>{{
+            // ⚠ 실시간 충돌 의심 마커
+            if (!collisionMode) return '';
+            const collisions = detectCollisions(snapshot);
+            if (collisions.length === 0) return '';
+            return collisions.map(c => {{
+              const color = c.type === 'node' ? '#dc2626' : '#f59e0b';
+              const label = c.type === 'node' ? '⚠' : '!';
+              return `<g transform="translate(${{c.x}} ${{c.y}}) scale(${{labelScale}})">
+                <circle r="14" fill="${{color}}" opacity="0.25" />
+                <circle r="9" fill="${{color}}" opacity="0.85">
+                  <animate attributeName="r" values="9;13;9" dur="0.8s" repeatCount="indefinite" />
+                </circle>
+                <text y="3.5" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">${{label}}</text>
+              </g>`;
+            }}).join('');
           }})()}}
         </g>`;
     }}
@@ -2933,6 +3034,47 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       if (lab) lab.textContent=heatmapMax>0?`최대 ${{heatmapMax}}회`:'데이터 없음';
       render();
     }});
+    document.getElementById('collision-toggle').addEventListener('click',()=>{{
+      collisionMode=!collisionMode;
+      document.getElementById('collision-toggle').classList.toggle('active',collisionMode);
+      render();
+    }});
+    // ── 실시간 충돌 의심 감지 (같은 노드/엣지 점유) ──
+    function detectCollisions(snapshot) {{
+      const out = [];
+      const byNode = new Map(), byEdge = new Map();
+      for (const a of (snapshot.agvs||[])) {{
+        if (isAnchoredOnNode(a) && a.current_node) {{
+          if (!byNode.has(a.current_node)) byNode.set(a.current_node, []);
+          byNode.get(a.current_node).push(a);
+        }} else if (a.current_edge_key) {{
+          if (!byEdge.has(a.current_edge_key)) byEdge.set(a.current_edge_key, []);
+          byEdge.get(a.current_edge_key).push(a);
+        }}
+      }}
+      for (const [nid, list] of byNode.entries()) {{
+        if (list.length < 2) continue;
+        const allChargingOrIdle = list.every(a => a.state === 'CHARGING' || a.state === 'IDLE');
+        const node = nodeIndex.get(nid);
+        const isCharger = node && (node.is_charger || node.role === 'charger');
+        if (allChargingOrIdle && isCharger) continue;
+        if (!node) continue;
+        out.push({{type:'node', x:sx(node.x), y:sy(node.y), agv_ids:list.map(a=>a.agv_id)}});
+      }}
+      for (const [ek, list] of byEdge.entries()) {{
+        if (list.length < 2) continue;
+        for (let i = 0; i < list.length; i++) {{
+          for (let j = i+1; j < list.length; j++) {{
+            const a = list[i], b = list[j];
+            if (Math.hypot(a.x - b.x, a.y - b.y) < 1.0) {{
+              out.push({{type:'edge', x:sx((a.x+b.x)/2), y:sy((a.y+b.y)/2),
+                         agv_ids:[a.agv_id, b.agv_id]}});
+            }}
+          }}
+        }}
+      }}
+      return out;
+    }}
     document.getElementById('zoom-reset-btn').addEventListener('click',()=>{{ resetZoom(); render(); }});
     document.getElementById('map').addEventListener('wheel',(e)=>{{
       e.preventDefault();
