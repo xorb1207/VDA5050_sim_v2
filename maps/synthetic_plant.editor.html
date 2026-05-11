@@ -92,16 +92,6 @@
     }
     .mode-toggle button.active { background:var(--surface); color:var(--ink); box-shadow:var(--shadow-sm); }
 
-    /* Paint 방향 토글 */
-    .dir-toggle { display:flex; gap:6px; margin-top:8px; }
-    .dir-toggle button {
-      flex:1; height:36px; border:1px solid var(--border);
-      background:var(--surface); border-radius:var(--radius-sm);
-      font-size:14px; font-weight:600; color:var(--muted);
-    }
-    .dir-toggle button.active {
-      background:var(--accent-soft); color:var(--accent); border-color:var(--accent);
-    }
     .hint-key {
       display:inline-block; padding:1px 6px; font-family:var(--font-mono); font-size:10px;
       background:var(--surface-3); border-radius:3px; color:var(--muted-2);
@@ -155,23 +145,6 @@
     }
     .inspector-row .k { color:var(--muted); }
     .inspector-row .v { font-family:var(--font-mono); }
-
-    /* 우클릭 컨텍스트 메뉴 (Phase 3 에서 사용) */
-    .ctx-menu {
-      position:fixed; background:var(--surface);
-      border:1px solid var(--border-strong); border-radius:var(--radius-sm);
-      box-shadow:0 4px 14px rgba(15,23,42,0.15);
-      padding:4px; min-width:140px; z-index:1000;
-      display:none;
-    }
-    .ctx-menu.show { display:block; }
-    .ctx-menu button {
-      display:flex; align-items:center; gap:8px;
-      width:100%; padding:6px 10px; border:0; background:transparent;
-      text-align:left; font-size:12px; color:var(--ink);
-      border-radius:4px;
-    }
-    .ctx-menu button:hover { background:var(--surface-3); }
 
     /* Paint trajectory preview (드래그 중 시각 피드백) */
     .traj-preview {
@@ -234,15 +207,15 @@
           숫자키 2~5 누르면 자동으로 Stamp 모드로 전환됩니다
         </div>
 
-        <!-- Paint 모드 옵션 -->
-        <div id="paint-options" style="margin-top:12px;">
-          <div class="hint" style="font-size:11.5px; color:var(--muted);">
-            드래그로 화살표 쫙 → 가까운 엣지 일괄 방향
-          </div>
-          <div class="dir-toggle">
-            <button data-dir="uni" class="active">→ 단방향<span class="hint-key">drag</span></button>
-            <button data-dir="bi">↔ 양방향<span class="hint-key">Shift</span></button>
-          </div>
+        <!-- Paint 모드 옵션 — 마우스 버튼으로 방향 결정 (토글 UI 불필요) -->
+        <div id="paint-options" style="margin-top:12px; font-size:11.5px; color:var(--muted); line-height:1.6;">
+          드래그로 화살표 쫙 → 가까운 엣지 일괄 방향
+          <ul style="margin:6px 0 0 0; padding-left:18px;">
+            <li><strong style="color:var(--edge-unidir)">좌클릭 드래그</strong> → 단방향 (→)</li>
+            <li><strong style="color:var(--edge-bidir)">우클릭 드래그</strong> → 양방향 (↔)</li>
+            <li><strong>Alt + 드래그</strong> → 단방향 역방향 강제 (←)</li>
+            <li><strong>Space + 드래그</strong> → 일시 pan</li>
+          </ul>
         </div>
       </div>
 
@@ -295,15 +268,6 @@
     </aside>
   </div>
 
-  <!-- 우클릭 컨텍스트 메뉴 (노드 우클릭 시) -->
-  <div class="ctx-menu" id="node-ctx-menu">
-    <button data-stamp="station">🟢 Station 으로</button>
-    <button data-stamp="charger">🔵 Charger 로</button>
-    <button data-stamp="holding">⚪ Holding 으로</button>
-    <button data-stamp="siding">🟡 Siding 으로</button>
-    <button data-stamp="reset">⬜ Standard 로 (Reset)</button>
-  </div>
-
   <div class="toast" id="toast"></div>
 
   <script>
@@ -316,8 +280,8 @@
 
     // ── 편집 상태 ───────────────────────────────────────────────
     let mode = "paint";              // paint / stamp / single
-    let paintDir = "uni";            // uni / bi (Paint 모드 방향 토글)
     let stampTool = "inspect";       // inspect / station / charger / holding / siding / reset
+    let paintTrajectoryButton = -1;  // 진행 중 trajectory 의 마우스 버튼 (0=좌, 2=우)
     let zoomScale = 1, panX = 0, panY = 0;
     let isPanning = false, panStart = null;
     let hoveredNodeId = "", hoveredEdgeId = "";
@@ -377,14 +341,6 @@
       const btn = e.target.closest("button[data-mode]");
       if (!btn) return;
       setMode(btn.dataset.mode);
-    });
-
-    // Paint 방향 토글
-    document.querySelectorAll(".dir-toggle button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        paintDir = btn.dataset.dir;
-        document.querySelectorAll(".dir-toggle button").forEach(b => b.classList.toggle("active", b === btn));
-      });
     });
 
     // ── Stamp 도구 선택 ─────────────────────────────────────────
@@ -608,29 +564,33 @@
     }
 
     document.getElementById("map").addEventListener("pointerdown", (e) => {
+      // 좌(0) / 우(2) 만 처리. 가운데 버튼은 무시.
+      if (e.button !== 0 && e.button !== 2) return;
       const onNode = !!e.target.closest("[data-node-id]");
       const svg = e.currentTarget;
       const pt = clientToSvg(svg, e.clientX, e.clientY);
 
       // ── 분기 ──────────────────────────────────────────────
-      // 1) Space 누르고 있으면 → 무조건 pan (어느 모드든)
-      // 2) Paint 모드 → trajectory 그리기 시작 (노드 위에서도 OK)
-      // 3) Stamp / Single 모드 + 노드 위 → drag 시작 안 함 (mouseup 에서 click 처리)
-      // 4) Stamp / Single 모드 + 빈 공간 → pan
-      if (spaceKeyDown) {
+      // 1) Space 누르고 있으면 → 무조건 pan (어느 모드든, 좌클릭만)
+      // 2) Paint 모드 → trajectory 그리기 시작 (좌=단방향, 우=양방향)
+      // 3) Stamp 모드 + 노드 위 → drag 시작 안 함 (click/contextmenu 에서 처리)
+      // 4) Stamp 모드 + 빈 공간 + 좌클릭 → pan
+      if (spaceKeyDown && e.button === 0) {
         isPanning = true;
         panStart = {x: e.clientX, y: e.clientY, panX, panY};
         document.querySelector(".map-shell").classList.add("dragging");
         return;
       }
       if (mode === "paint") {
-        // Paint 모드 — 위치와 무관하게 trajectory
+        // 좌/우 모두 trajectory. mouseup 에서 button 보고 단방/양방 결정.
         paintTrajectory = [{x: (pt.x - panX) / zoomScale, y: (pt.y - panY) / zoomScale}];
+        paintTrajectoryButton = e.button;
         e.preventDefault();
         return;
       }
       // Stamp / Single 모드
-      if (onNode) return; // 노드 클릭은 mouseup 에서 stamp 처리
+      if (onNode) return; // 노드 클릭은 click / contextmenu 핸들러로 처리
+      if (e.button !== 0) return; // 우클릭은 pan 안 함
       isPanning = true;
       panStart = {x: e.clientX, y: e.clientY, panX, panY};
       document.querySelector(".map-shell").classList.add("dragging");
@@ -662,30 +622,32 @@
       }
       if (paintTrajectory) {
         if (paintTrajectory.length >= 2) {
-          applyPaint(paintTrajectory, e.shiftKey, e.altKey);
+          // 마우스 버튼이 곧 방향: 좌(0)=단방향, 우(2)=양방향
+          const isBidir = (paintTrajectoryButton === 2);
+          applyPaint(paintTrajectory, isBidir, e.altKey);
         }
         paintTrajectory = null;
+        paintTrajectoryButton = -1;
         render();
       }
     });
     document.getElementById("map").addEventListener("pointerleave", (e) => {
-      // 맵 밖으로 나가면 진행 중인 인터랙션 cancel
       document.querySelector(".map-shell").classList.remove("dragging");
       if (paintTrajectory && paintTrajectory.length >= 2) {
-        applyPaint(paintTrajectory, false, false);
+        const isBidir = (paintTrajectoryButton === 2);
+        applyPaint(paintTrajectory, isBidir, false);
       }
       paintTrajectory = null;
+      paintTrajectoryButton = -1;
       isPanning = false; panStart = null;
       render();
     });
 
     // ── Paint trajectory → 가까운 엣지 일괄 방향 변경 ─────────
-    function applyPaint(trajectory, shiftKey, altKey) {
-      // 키 조합 임시 override:
-      //   기본 → paintDir (uni/bi)
-      //   Shift → bi (양방향 강제)
-      //   Alt   → uni (역방향 강제, trajectory 와 반대로)
-      const effectiveDir = shiftKey ? "bi" : paintDir;
+    function applyPaint(trajectory, forceBidir, altKey) {
+      // forceBidir: 우클릭 드래그 였는지. true 면 양방향, false 면 단방향
+      // altKey: 단방향일 때 역방향 강제 (양방향엔 의미 없음)
+      const effectiveDir = forceBidir ? "bi" : "uni";
       const reverseUni = altKey;
 
       // trajectory 의 평균 방향 벡터 (시작점 → 끝점)
@@ -771,31 +733,18 @@
       }
     }
 
-    // ── 노드 우클릭 컨텍스트 메뉴 ───────────────────────────────
-    let ctxTargetNodeId = "";
+    // ── 우클릭: 브라우저 기본 메뉴 차단 + Stamp 모드 노드 우클릭 = Reset
     document.getElementById("map").addEventListener("contextmenu", (e) => {
+      // Paint 모드 우클릭은 pointerdown 에서 trajectory 시작에 이미 사용 → 메뉴 무조건 막음
+      e.preventDefault();
+      if (mode !== "stamp") return;
       const nodeHit = e.target.closest("[data-node-id]");
       if (!nodeHit) return;
-      e.preventDefault();
-      ctxTargetNodeId = nodeHit.dataset.nodeId;
-      const menu = document.getElementById("node-ctx-menu");
-      menu.style.left = `${e.clientX}px`;
-      menu.style.top = `${e.clientY}px`;
-      menu.classList.add("show");
-    });
-    document.addEventListener("click", (e) => {
-      if (!e.target.closest("#node-ctx-menu")) {
-        document.getElementById("node-ctx-menu").classList.remove("show");
-      }
-    });
-    document.getElementById("node-ctx-menu").addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-stamp]");
-      if (!btn || !ctxTargetNodeId) return;
-      const n = nodeById.get(ctxTargetNodeId);
-      applyStamp(n, btn.dataset.stamp);
+      const n = nodeById.get(nodeHit.dataset.nodeId);
+      // 우클릭 = "되돌리기" → standard 로 reset
+      applyStamp(n, "reset");
       render();
-      showToast(`${n.id} → ${btn.dataset.stamp}`);
-      document.getElementById("node-ctx-menu").classList.remove("show");
+      showToast(`${n.id} → reset (standard)`);
     });
 
     // ── Reset View ──────────────────────────────────────────────
