@@ -1,0 +1,6305 @@
+{
+  "_meta": {
+    "source": "mock generator",
+    "based_on": "topology_generator output",
+    "note": "_truth_* fields are ground truth for importer validation. Importer should ignore them in production."
+  },
+  "nodes": [
+    {
+      "id": "WP_N_000",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_000",
+      "position": {
+        "x": 0.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_040",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_040",
+      "position": {
+        "x": 40.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_080",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_080",
+      "position": {
+        "x": 80.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_120",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_120",
+      "position": {
+        "x": 120.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_160",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_160",
+      "position": {
+        "x": 160.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_200",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_200",
+      "position": {
+        "x": 200.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_240",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_240",
+      "position": {
+        "x": 240.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_280",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_280",
+      "position": {
+        "x": 280.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_320",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_320",
+      "position": {
+        "x": 320.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_360",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_360",
+      "position": {
+        "x": 360.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_400",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_400",
+      "position": {
+        "x": 400.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_440",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_440",
+      "position": {
+        "x": 440.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_480",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_480",
+      "position": {
+        "x": 480.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_520",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_520",
+      "position": {
+        "x": 520.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_560",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_560",
+      "position": {
+        "x": 560.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_600",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_600",
+      "position": {
+        "x": 600.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_N_640",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_N_640",
+      "position": {
+        "x": 640.0,
+        "y": 100.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_000",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_000",
+      "position": {
+        "x": 0.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_040",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_040",
+      "position": {
+        "x": 40.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_080",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_080",
+      "position": {
+        "x": 80.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_120",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_120",
+      "position": {
+        "x": 120.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_160",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_160",
+      "position": {
+        "x": 160.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_200",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_200",
+      "position": {
+        "x": 200.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_240",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_240",
+      "position": {
+        "x": 240.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_280",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_280",
+      "position": {
+        "x": 280.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_320",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_320",
+      "position": {
+        "x": 320.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_360",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_360",
+      "position": {
+        "x": 360.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_400",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_400",
+      "position": {
+        "x": 400.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_440",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_440",
+      "position": {
+        "x": 440.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_480",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_480",
+      "position": {
+        "x": 480.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_520",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_520",
+      "position": {
+        "x": 520.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_560",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_560",
+      "position": {
+        "x": 560.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_600",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_600",
+      "position": {
+        "x": 600.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_C_640",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_C_640",
+      "position": {
+        "x": 640.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_000",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_000",
+      "position": {
+        "x": 0.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_040",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_040",
+      "position": {
+        "x": 40.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_080",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_080",
+      "position": {
+        "x": 80.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_120",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_120",
+      "position": {
+        "x": 120.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_160",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_160",
+      "position": {
+        "x": 160.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_200",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_200",
+      "position": {
+        "x": 200.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_240",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_240",
+      "position": {
+        "x": 240.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_280",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_280",
+      "position": {
+        "x": 280.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_320",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_320",
+      "position": {
+        "x": 320.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_360",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_360",
+      "position": {
+        "x": 360.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_400",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_400",
+      "position": {
+        "x": 400.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_440",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_440",
+      "position": {
+        "x": 440.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_480",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_480",
+      "position": {
+        "x": 480.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_520",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_520",
+      "position": {
+        "x": 520.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_560",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_560",
+      "position": {
+        "x": 560.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_600",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_600",
+      "position": {
+        "x": 600.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "WP_S_640",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "WP_S_640",
+      "position": {
+        "x": 640.0,
+        "y": 20.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NC_000_1_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NC_000_1_1",
+      "position": {
+        "x": 0.0,
+        "y": 90.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NC_000_1_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NC_000_1_2",
+      "position": {
+        "x": 0.0,
+        "y": 80.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NC_000_1_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NC_000_1_3",
+      "position": {
+        "x": 0.0,
+        "y": 70.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SC_000_1_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SC_000_1_1",
+      "position": {
+        "x": 0.0,
+        "y": 30.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SC_000_1_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SC_000_1_2",
+      "position": {
+        "x": 0.0,
+        "y": 40.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SC_000_1_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SC_000_1_3",
+      "position": {
+        "x": 0.0,
+        "y": 50.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_CN_640_1_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_CN_640_1_1",
+      "position": {
+        "x": 640.0,
+        "y": 70.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_CN_640_1_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_CN_640_1_2",
+      "position": {
+        "x": 640.0,
+        "y": 80.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_CN_640_1_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_CN_640_1_3",
+      "position": {
+        "x": 640.0,
+        "y": 90.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_CS_640_1_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_CS_640_1_1",
+      "position": {
+        "x": 640.0,
+        "y": 50.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_CS_640_1_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_CS_640_1_2",
+      "position": {
+        "x": 640.0,
+        "y": 40.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_CS_640_1_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_CS_640_1_3",
+      "position": {
+        "x": 640.0,
+        "y": 30.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_160_1_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_160_1_1",
+      "position": {
+        "x": 160.0,
+        "y": 30.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_160_1_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_160_1_2",
+      "position": {
+        "x": 160.0,
+        "y": 40.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_160_1_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_160_1_3",
+      "position": {
+        "x": 160.0,
+        "y": 50.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_160_2_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_160_2_1",
+      "position": {
+        "x": 160.0,
+        "y": 70.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_160_2_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_160_2_2",
+      "position": {
+        "x": 160.0,
+        "y": 80.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_160_2_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_160_2_3",
+      "position": {
+        "x": 160.0,
+        "y": 90.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NS_320_1_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NS_320_1_1",
+      "position": {
+        "x": 320.0,
+        "y": 90.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NS_320_1_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NS_320_1_2",
+      "position": {
+        "x": 320.0,
+        "y": 80.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NS_320_1_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NS_320_1_3",
+      "position": {
+        "x": 320.0,
+        "y": 70.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NS_320_2_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NS_320_2_1",
+      "position": {
+        "x": 320.0,
+        "y": 50.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NS_320_2_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NS_320_2_2",
+      "position": {
+        "x": 320.0,
+        "y": 40.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_NS_320_2_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_NS_320_2_3",
+      "position": {
+        "x": 320.0,
+        "y": 30.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_480_1_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_480_1_1",
+      "position": {
+        "x": 480.0,
+        "y": 30.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_480_1_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_480_1_2",
+      "position": {
+        "x": 480.0,
+        "y": 40.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_480_1_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_480_1_3",
+      "position": {
+        "x": 480.0,
+        "y": 50.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_480_2_1",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_480_2_1",
+      "position": {
+        "x": 480.0,
+        "y": 70.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_480_2_2",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_480_2_2",
+      "position": {
+        "x": 480.0,
+        "y": 80.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "BAY_SN_480_2_3",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "BAY_SN_480_2_3",
+      "position": {
+        "x": 480.0,
+        "y": 90.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_01",
+      "position": {
+        "x": 0.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_01",
+      "position": {
+        "x": 0.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_02",
+      "position": {
+        "x": 80.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_02",
+      "position": {
+        "x": 80.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_03",
+      "position": {
+        "x": 160.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_03",
+      "position": {
+        "x": 160.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_04",
+      "position": {
+        "x": 240.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_04",
+      "position": {
+        "x": 240.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_05",
+      "position": {
+        "x": 320.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_05",
+      "position": {
+        "x": 320.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_06",
+      "position": {
+        "x": 400.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_06",
+      "position": {
+        "x": 400.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_07",
+      "position": {
+        "x": 480.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_07",
+      "position": {
+        "x": 480.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_08",
+      "position": {
+        "x": 560.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_08",
+      "position": {
+        "x": 560.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_N_09",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_N_09",
+      "position": {
+        "x": 640.0,
+        "y": 98.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_N_09",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_N_09",
+      "position": {
+        "x": 640.0,
+        "y": 97.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_C_10",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_C_10",
+      "position": {
+        "x": 80.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_C_10",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_C_10",
+      "position": {
+        "x": 80.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_C_11",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_C_11",
+      "position": {
+        "x": 240.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_C_11",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_C_11",
+      "position": {
+        "x": 240.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_C_12",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_C_12",
+      "position": {
+        "x": 400.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_C_12",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_C_12",
+      "position": {
+        "x": 400.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_C_13",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_C_13",
+      "position": {
+        "x": 560.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_C_13",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_C_13",
+      "position": {
+        "x": 560.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_14",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_14",
+      "position": {
+        "x": 0.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_14",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_14",
+      "position": {
+        "x": 0.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_15",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_15",
+      "position": {
+        "x": 80.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_15",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_15",
+      "position": {
+        "x": 80.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_16",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_16",
+      "position": {
+        "x": 160.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_16",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_16",
+      "position": {
+        "x": 160.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_17",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_17",
+      "position": {
+        "x": 240.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_17",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_17",
+      "position": {
+        "x": 240.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_18",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_18",
+      "position": {
+        "x": 320.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_18",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_18",
+      "position": {
+        "x": 320.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_19",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_19",
+      "position": {
+        "x": 400.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_19",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_19",
+      "position": {
+        "x": 400.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_20",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_20",
+      "position": {
+        "x": 480.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_20",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_20",
+      "position": {
+        "x": 480.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_21",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_21",
+      "position": {
+        "x": 560.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_21",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_21",
+      "position": {
+        "x": 560.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "SA_S_22",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "SA_S_22",
+      "position": {
+        "x": 640.0,
+        "y": 21.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "ST_S_22",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "ST_S_22",
+      "position": {
+        "x": 640.0,
+        "y": 23.0,
+        "z": 0
+      },
+      "_truth_role": "work",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CA_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_01",
+      "position": {
+        "x": 0.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_01",
+      "position": {
+        "x": 0.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "CA_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_02",
+      "position": {
+        "x": 320.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_02",
+      "position": {
+        "x": 320.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "CA_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_03",
+      "position": {
+        "x": 640.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_03",
+      "position": {
+        "x": 640.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "CA_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_04",
+      "position": {
+        "x": -1.5,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_04",
+      "position": {
+        "x": -3.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "CA_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_05",
+      "position": {
+        "x": 641.5,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_05",
+      "position": {
+        "x": 643.0,
+        "y": 60.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "CA_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_06",
+      "position": {
+        "x": 0.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_06",
+      "position": {
+        "x": 0.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "CA_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_07",
+      "position": {
+        "x": 320.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_07",
+      "position": {
+        "x": 320.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "CA_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CA_08",
+      "position": {
+        "x": 640.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "CH_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "CH_08",
+      "position": {
+        "x": 640.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "charger",
+      "_truth_is_charger": true,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_01",
+      "position": {
+        "x": 40.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_01",
+      "position": {
+        "x": 40.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_01",
+      "position": {
+        "x": 40.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_01",
+      "position": {
+        "x": 40.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_01",
+      "position": {
+        "x": 40.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_01",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_01",
+      "position": {
+        "x": 40.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_02",
+      "position": {
+        "x": 120.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_02",
+      "position": {
+        "x": 120.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_02",
+      "position": {
+        "x": 120.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_02",
+      "position": {
+        "x": 120.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_02",
+      "position": {
+        "x": 120.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_02",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_02",
+      "position": {
+        "x": 120.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_03",
+      "position": {
+        "x": 200.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_03",
+      "position": {
+        "x": 200.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_03",
+      "position": {
+        "x": 200.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_03",
+      "position": {
+        "x": 200.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_03",
+      "position": {
+        "x": 200.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_03",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_03",
+      "position": {
+        "x": 200.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_04",
+      "position": {
+        "x": 280.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_04",
+      "position": {
+        "x": 280.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_04",
+      "position": {
+        "x": 280.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_04",
+      "position": {
+        "x": 280.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_04",
+      "position": {
+        "x": 280.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_04",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_04",
+      "position": {
+        "x": 280.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_05",
+      "position": {
+        "x": 360.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_05",
+      "position": {
+        "x": 360.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_05",
+      "position": {
+        "x": 360.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_05",
+      "position": {
+        "x": 360.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_05",
+      "position": {
+        "x": 360.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_05",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_05",
+      "position": {
+        "x": 360.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_06",
+      "position": {
+        "x": 440.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_06",
+      "position": {
+        "x": 440.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_06",
+      "position": {
+        "x": 440.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_06",
+      "position": {
+        "x": 440.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_06",
+      "position": {
+        "x": 440.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_06",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_06",
+      "position": {
+        "x": 440.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_07",
+      "position": {
+        "x": 520.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_07",
+      "position": {
+        "x": 520.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_07",
+      "position": {
+        "x": 520.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_07",
+      "position": {
+        "x": 520.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_07",
+      "position": {
+        "x": 520.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_07",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_07",
+      "position": {
+        "x": 520.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_N_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_N_08",
+      "position": {
+        "x": 600.0,
+        "y": 101.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_N_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_N_08",
+      "position": {
+        "x": 600.0,
+        "y": 103.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_C_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_C_08",
+      "position": {
+        "x": 600.0,
+        "y": 61.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_C_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_C_08",
+      "position": {
+        "x": 600.0,
+        "y": 63.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    },
+    {
+      "id": "HA_S_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HA_S_08",
+      "position": {
+        "x": 600.0,
+        "y": 18.5,
+        "z": 0
+      },
+      "_truth_role": "approach",
+      "_truth_is_charger": false,
+      "_truth_is_holding": false
+    },
+    {
+      "id": "HP_S_08",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "HP_S_08",
+      "position": {
+        "x": 600.0,
+        "y": 17.0,
+        "z": 0
+      },
+      "_truth_role": "standard",
+      "_truth_is_charger": false,
+      "_truth_is_holding": true
+    }
+  ],
+  "links": [
+    {
+      "id": "e_N_00000",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_640",
+        "to": "WP_N_600"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00001",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_600",
+        "to": "WP_N_560"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00002",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_560",
+        "to": "WP_N_520"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00003",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_520",
+        "to": "WP_N_480"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00004",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_480",
+        "to": "WP_N_440"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00005",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_440",
+        "to": "WP_N_400"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00006",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_400",
+        "to": "WP_N_360"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00007",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_360",
+        "to": "WP_N_320"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00008",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_320",
+        "to": "WP_N_280"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00009",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_280",
+        "to": "WP_N_240"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00010",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_240",
+        "to": "WP_N_200"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00011",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_200",
+        "to": "WP_N_160"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00012",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_160",
+        "to": "WP_N_120"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00013",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_120",
+        "to": "WP_N_080"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00014",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_080",
+        "to": "WP_N_040"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_N_00015",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_040",
+        "to": "WP_N_000"
+      },
+      "_truth_corridor": "north",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00016",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_000",
+        "to": "WP_C_040"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00017",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_040",
+        "to": "WP_C_080"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00018",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_080",
+        "to": "WP_C_120"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00019",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_120",
+        "to": "WP_C_160"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00020",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_160",
+        "to": "WP_C_200"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00021",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_200",
+        "to": "WP_C_240"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00022",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_240",
+        "to": "WP_C_280"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00023",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_280",
+        "to": "WP_C_320"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00024",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_320",
+        "to": "WP_C_360"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00025",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_360",
+        "to": "WP_C_400"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00026",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_400",
+        "to": "WP_C_440"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00027",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_440",
+        "to": "WP_C_480"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00028",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_480",
+        "to": "WP_C_520"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00029",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_520",
+        "to": "WP_C_560"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00030",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_560",
+        "to": "WP_C_600"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_C_00031",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_600",
+        "to": "WP_C_640"
+      },
+      "_truth_corridor": "center",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00032",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_640",
+        "to": "WP_S_600"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00033",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_600",
+        "to": "WP_S_560"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00034",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_560",
+        "to": "WP_S_520"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00035",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_520",
+        "to": "WP_S_480"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00036",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_480",
+        "to": "WP_S_440"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00037",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_440",
+        "to": "WP_S_400"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00038",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_400",
+        "to": "WP_S_360"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00039",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_360",
+        "to": "WP_S_320"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00040",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_320",
+        "to": "WP_S_280"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00041",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_280",
+        "to": "WP_S_240"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00042",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_240",
+        "to": "WP_S_200"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00043",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_200",
+        "to": "WP_S_160"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00044",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_160",
+        "to": "WP_S_120"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00045",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_120",
+        "to": "WP_S_080"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00046",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_080",
+        "to": "WP_S_040"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_S_00047",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_040",
+        "to": "WP_S_000"
+      },
+      "_truth_corridor": "south",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NC_000_01",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_000",
+        "to": "BAY_NC_000_1_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NC_000_02",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NC_000_1_1",
+        "to": "BAY_NC_000_1_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NC_000_03",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NC_000_1_2",
+        "to": "BAY_NC_000_1_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NC_000_04",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NC_000_1_3",
+        "to": "WP_C_000"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SC_000_01",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_000",
+        "to": "BAY_SC_000_1_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SC_000_02",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SC_000_1_1",
+        "to": "BAY_SC_000_1_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SC_000_03",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SC_000_1_2",
+        "to": "BAY_SC_000_1_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SC_000_04",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SC_000_1_3",
+        "to": "WP_C_000"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CN_640_01",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_640",
+        "to": "BAY_CN_640_1_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CN_640_02",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_CN_640_1_1",
+        "to": "BAY_CN_640_1_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CN_640_03",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_CN_640_1_2",
+        "to": "BAY_CN_640_1_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CN_640_04",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_CN_640_1_3",
+        "to": "WP_N_640"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CS_640_01",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_640",
+        "to": "BAY_CS_640_1_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CS_640_02",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_CS_640_1_1",
+        "to": "BAY_CS_640_1_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CS_640_03",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_CS_640_1_2",
+        "to": "BAY_CS_640_1_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_CS_640_04",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_CS_640_1_3",
+        "to": "WP_S_640"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_01",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_160",
+        "to": "BAY_SN_160_1_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_02",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_160_1_1",
+        "to": "BAY_SN_160_1_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_03",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_160_1_2",
+        "to": "BAY_SN_160_1_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_04",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_160_1_3",
+        "to": "WP_C_160"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_05",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_160",
+        "to": "BAY_SN_160_2_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_06",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_160_2_1",
+        "to": "BAY_SN_160_2_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_07",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_160_2_2",
+        "to": "BAY_SN_160_2_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_160_08",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_160_2_3",
+        "to": "WP_N_160"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_01",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_320",
+        "to": "BAY_NS_320_1_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_02",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NS_320_1_1",
+        "to": "BAY_NS_320_1_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_03",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NS_320_1_2",
+        "to": "BAY_NS_320_1_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_04",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NS_320_1_3",
+        "to": "WP_C_320"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_05",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_320",
+        "to": "BAY_NS_320_2_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_06",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NS_320_2_1",
+        "to": "BAY_NS_320_2_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_07",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NS_320_2_2",
+        "to": "BAY_NS_320_2_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_NS_320_08",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_NS_320_2_3",
+        "to": "WP_S_320"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_01",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_480",
+        "to": "BAY_SN_480_1_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_02",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_480_1_1",
+        "to": "BAY_SN_480_1_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_03",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_480_1_2",
+        "to": "BAY_SN_480_1_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_04",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_480_1_3",
+        "to": "WP_C_480"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_05",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_480",
+        "to": "BAY_SN_480_2_1"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_06",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_480_2_1",
+        "to": "BAY_SN_480_2_2"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_07",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_480_2_2",
+        "to": "BAY_SN_480_2_3"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_bay_SN_480_08",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "BAY_SN_480_2_3",
+        "to": "WP_N_480"
+      },
+      "_truth_corridor": "bay",
+      "_truth_bidirectional": false,
+      "_truth_access_type": ""
+    },
+    {
+      "id": "e_station_access_st_n_01_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_000",
+        "to": "SA_N_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_01_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_01",
+        "to": "WP_N_000"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_01_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_01",
+        "to": "ST_N_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_01_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_01",
+        "to": "SA_N_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_02_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_080",
+        "to": "SA_N_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_02_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_02",
+        "to": "WP_N_080"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_02_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_02",
+        "to": "ST_N_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_02_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_02",
+        "to": "SA_N_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_03_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_160",
+        "to": "SA_N_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_03_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_03",
+        "to": "WP_N_160"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_03_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_03",
+        "to": "ST_N_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_03_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_03",
+        "to": "SA_N_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_04_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_240",
+        "to": "SA_N_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_04_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_04",
+        "to": "WP_N_240"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_04_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_04",
+        "to": "ST_N_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_04_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_04",
+        "to": "SA_N_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_05_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_320",
+        "to": "SA_N_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_05_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_05",
+        "to": "WP_N_320"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_05_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_05",
+        "to": "ST_N_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_05_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_05",
+        "to": "SA_N_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_06_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_400",
+        "to": "SA_N_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_06_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_06",
+        "to": "WP_N_400"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_06_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_06",
+        "to": "ST_N_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_06_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_06",
+        "to": "SA_N_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_07_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_480",
+        "to": "SA_N_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_07_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_07",
+        "to": "WP_N_480"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_07_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_07",
+        "to": "ST_N_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_07_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_07",
+        "to": "SA_N_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_08_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_560",
+        "to": "SA_N_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_08_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_08",
+        "to": "WP_N_560"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_08_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_08",
+        "to": "ST_N_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_08_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_08",
+        "to": "SA_N_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_09_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_640",
+        "to": "SA_N_09"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_09_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_09",
+        "to": "WP_N_640"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_09_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_N_09",
+        "to": "ST_N_09"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_n_09_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_N_09",
+        "to": "SA_N_09"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_10_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_080",
+        "to": "SA_C_10"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_10_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_10",
+        "to": "WP_C_080"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_10_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_10",
+        "to": "ST_C_10"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_10_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_C_10",
+        "to": "SA_C_10"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_11_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_240",
+        "to": "SA_C_11"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_11_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_11",
+        "to": "WP_C_240"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_11_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_11",
+        "to": "ST_C_11"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_11_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_C_11",
+        "to": "SA_C_11"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_12_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_400",
+        "to": "SA_C_12"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_12_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_12",
+        "to": "WP_C_400"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_12_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_12",
+        "to": "ST_C_12"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_12_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_C_12",
+        "to": "SA_C_12"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_13_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_560",
+        "to": "SA_C_13"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_13_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_13",
+        "to": "WP_C_560"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_13_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_C_13",
+        "to": "ST_C_13"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_c_13_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_C_13",
+        "to": "SA_C_13"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_14_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_000",
+        "to": "SA_S_14"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_14_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_14",
+        "to": "WP_S_000"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_14_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_14",
+        "to": "ST_S_14"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_14_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_14",
+        "to": "SA_S_14"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_15_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_080",
+        "to": "SA_S_15"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_15_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_15",
+        "to": "WP_S_080"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_15_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_15",
+        "to": "ST_S_15"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_15_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_15",
+        "to": "SA_S_15"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_16_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_160",
+        "to": "SA_S_16"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_16_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_16",
+        "to": "WP_S_160"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_16_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_16",
+        "to": "ST_S_16"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_16_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_16",
+        "to": "SA_S_16"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_17_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_240",
+        "to": "SA_S_17"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_17_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_17",
+        "to": "WP_S_240"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_17_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_17",
+        "to": "ST_S_17"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_17_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_17",
+        "to": "SA_S_17"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_18_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_320",
+        "to": "SA_S_18"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_18_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_18",
+        "to": "WP_S_320"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_18_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_18",
+        "to": "ST_S_18"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_18_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_18",
+        "to": "SA_S_18"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_19_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_400",
+        "to": "SA_S_19"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_19_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_19",
+        "to": "WP_S_400"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_19_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_19",
+        "to": "ST_S_19"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_19_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_19",
+        "to": "SA_S_19"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_20_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_480",
+        "to": "SA_S_20"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_20_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_20",
+        "to": "WP_S_480"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_20_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_20",
+        "to": "ST_S_20"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_20_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_20",
+        "to": "SA_S_20"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_21_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_560",
+        "to": "SA_S_21"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_21_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_21",
+        "to": "WP_S_560"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_21_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_21",
+        "to": "ST_S_21"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_21_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_21",
+        "to": "SA_S_21"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_22_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_640",
+        "to": "SA_S_22"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_22_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_22",
+        "to": "WP_S_640"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_22_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "SA_S_22",
+        "to": "ST_S_22"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_station_access_st_s_22_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "ST_S_22",
+        "to": "SA_S_22"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "station_access"
+    },
+    {
+      "id": "e_charger_access_ch_01_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_000",
+        "to": "CA_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_01_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_01",
+        "to": "WP_N_000"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_01_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_01",
+        "to": "CH_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_01_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_01",
+        "to": "CA_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_02_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_320",
+        "to": "CA_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_02_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_02",
+        "to": "WP_N_320"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_02_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_02",
+        "to": "CH_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_02_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_02",
+        "to": "CA_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_03_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_640",
+        "to": "CA_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_03_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_03",
+        "to": "WP_N_640"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_03_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_03",
+        "to": "CH_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_03_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_03",
+        "to": "CA_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_04_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_000",
+        "to": "CA_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_04_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_04",
+        "to": "WP_C_000"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_04_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_04",
+        "to": "CH_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_04_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_04",
+        "to": "CA_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_05_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_640",
+        "to": "CA_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_05_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_05",
+        "to": "WP_C_640"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_05_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_05",
+        "to": "CH_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_05_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_05",
+        "to": "CA_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_06_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_000",
+        "to": "CA_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_06_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_06",
+        "to": "WP_S_000"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_06_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_06",
+        "to": "CH_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_06_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_06",
+        "to": "CA_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_07_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_320",
+        "to": "CA_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_07_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_07",
+        "to": "WP_S_320"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_07_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_07",
+        "to": "CH_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_07_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_07",
+        "to": "CA_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_08_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_640",
+        "to": "CA_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_08_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_08",
+        "to": "WP_S_640"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_08_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CA_08",
+        "to": "CH_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_charger_access_ch_08_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "CH_08",
+        "to": "CA_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "charger_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_01_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_040",
+        "to": "HA_N_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_01_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_01",
+        "to": "WP_N_040"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_01_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_01",
+        "to": "HP_N_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_01_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_01",
+        "to": "HA_N_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_01_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_040",
+        "to": "HA_C_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_01_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_01",
+        "to": "WP_C_040"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_01_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_01",
+        "to": "HP_C_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_01_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_01",
+        "to": "HA_C_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_01_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_040",
+        "to": "HA_S_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_01_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_01",
+        "to": "WP_S_040"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_01_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_01",
+        "to": "HP_S_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_01_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_01",
+        "to": "HA_S_01"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_02_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_120",
+        "to": "HA_N_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_02_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_02",
+        "to": "WP_N_120"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_02_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_02",
+        "to": "HP_N_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_02_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_02",
+        "to": "HA_N_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_02_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_120",
+        "to": "HA_C_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_02_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_02",
+        "to": "WP_C_120"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_02_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_02",
+        "to": "HP_C_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_02_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_02",
+        "to": "HA_C_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_02_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_120",
+        "to": "HA_S_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_02_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_02",
+        "to": "WP_S_120"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_02_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_02",
+        "to": "HP_S_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_02_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_02",
+        "to": "HA_S_02"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_03_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_200",
+        "to": "HA_N_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_03_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_03",
+        "to": "WP_N_200"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_03_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_03",
+        "to": "HP_N_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_03_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_03",
+        "to": "HA_N_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_03_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_200",
+        "to": "HA_C_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_03_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_03",
+        "to": "WP_C_200"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_03_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_03",
+        "to": "HP_C_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_03_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_03",
+        "to": "HA_C_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_03_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_200",
+        "to": "HA_S_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_03_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_03",
+        "to": "WP_S_200"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_03_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_03",
+        "to": "HP_S_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_03_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_03",
+        "to": "HA_S_03"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_04_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_280",
+        "to": "HA_N_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_04_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_04",
+        "to": "WP_N_280"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_04_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_04",
+        "to": "HP_N_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_04_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_04",
+        "to": "HA_N_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_04_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_280",
+        "to": "HA_C_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_04_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_04",
+        "to": "WP_C_280"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_04_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_04",
+        "to": "HP_C_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_04_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_04",
+        "to": "HA_C_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_04_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_280",
+        "to": "HA_S_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_04_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_04",
+        "to": "WP_S_280"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_04_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_04",
+        "to": "HP_S_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_04_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_04",
+        "to": "HA_S_04"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_05_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_360",
+        "to": "HA_N_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_05_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_05",
+        "to": "WP_N_360"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_05_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_05",
+        "to": "HP_N_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_05_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_05",
+        "to": "HA_N_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_05_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_360",
+        "to": "HA_C_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_05_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_05",
+        "to": "WP_C_360"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_05_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_05",
+        "to": "HP_C_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_05_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_05",
+        "to": "HA_C_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_05_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_360",
+        "to": "HA_S_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_05_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_05",
+        "to": "WP_S_360"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_05_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_05",
+        "to": "HP_S_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_05_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_05",
+        "to": "HA_S_05"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_06_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_440",
+        "to": "HA_N_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_06_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_06",
+        "to": "WP_N_440"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_06_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_06",
+        "to": "HP_N_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_06_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_06",
+        "to": "HA_N_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_06_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_440",
+        "to": "HA_C_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_06_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_06",
+        "to": "WP_C_440"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_06_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_06",
+        "to": "HP_C_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_06_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_06",
+        "to": "HA_C_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_06_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_440",
+        "to": "HA_S_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_06_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_06",
+        "to": "WP_S_440"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_06_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_06",
+        "to": "HP_S_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_06_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_06",
+        "to": "HA_S_06"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_07_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_520",
+        "to": "HA_N_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_07_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_07",
+        "to": "WP_N_520"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_07_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_07",
+        "to": "HP_N_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_07_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_07",
+        "to": "HA_N_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_07_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_520",
+        "to": "HA_C_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_07_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_07",
+        "to": "WP_C_520"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_07_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_07",
+        "to": "HP_C_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_07_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_07",
+        "to": "HA_C_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_07_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_520",
+        "to": "HA_S_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_07_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_07",
+        "to": "WP_S_520"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_07_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_07",
+        "to": "HP_S_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_07_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_07",
+        "to": "HA_S_07"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_08_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_N_600",
+        "to": "HA_N_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_08_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_08",
+        "to": "WP_N_600"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_08_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_N_08",
+        "to": "HP_N_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_n_08_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_N_08",
+        "to": "HA_N_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_08_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_C_600",
+        "to": "HA_C_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_08_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_08",
+        "to": "WP_C_600"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_08_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_C_08",
+        "to": "HP_C_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_c_08_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_C_08",
+        "to": "HA_C_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_08_1",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "WP_S_600",
+        "to": "HA_S_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_08_1_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_08",
+        "to": "WP_S_600"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_08_final",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HA_S_08",
+        "to": "HP_S_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    },
+    {
+      "id": "e_holding_access_hp_s_08_final_rev",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "HP_S_08",
+        "to": "HA_S_08"
+      },
+      "_truth_corridor": "",
+      "_truth_bidirectional": true,
+      "_truth_access_type": "holding_access"
+    }
+  ]
+}

@@ -1,0 +1,603 @@
+"""
+external_importer.py — 폐쇄망 외부 맵 JSON 임포터.
+
+전제:
+  - 사용자가 제공하는 JSON 은 top-level 에 {nodes, links} 만 신뢰 가능
+  - 각 node 는 {id, name, position{x,y,z}, ...} 형식
+  - 각 link 는 {id, name, connected{from,to}, ...} 형식
+  - node_type_cd / link_type_cd / align_type_cd 같은 코드 필드는 들어와도 OK,
+    없어도 OK (importer 는 정책 추론에 쓰지 않음 — 좌표/연결만으로 추론)
+
+처리 흐름:
+  1. 구조 임포트 — 좌표/연결 그대로 받음
+  2. 자동 추론
+     a. 양방향 병합: (from,to) + (to,from) 짝 발견 시 1개 bidirectional edge 로
+     b. 코리도 클러스터링: y좌표 비슷 → 수평 코리도, x좌표 비슷 → 수직 코리도(bay)
+     c. role 추론: degree, 위치, hint code 종합해서 charger/holding/station/wp 후보 마킹
+     d. 도달성 분석: connected component, dead-end, 고립 노드 검출
+  3. ImportReport 로 모든 추론 결과 + 경고 반환 — UI 에서 검토/수정 가능
+
+자동 추론은 "초안" 일 뿐, 최종 정책은 사용자가 검토 UI 에서 확정. importer 는 그 초안을
+ImportedMap 으로 반환하고, 검증 리포트도 함께 제공.
+"""
+from __future__ import annotations
+
+import json
+import math
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterable, Optional
+
+from src.domain.map.graph import Edge, MapGraph, Node, NodeRole
+
+
+# ────────────────────────────────────────────────────────────────────
+# 자동 추론 파라미터 — 사용자가 override 가능하도록 dataclass 로 노출
+# ────────────────────────────────────────────────────────────────────
+@dataclass
+class InferenceConfig:
+    """좌표/연결만 보고 정책을 추론할 때 쓰는 하이퍼파라미터.
+
+    실제 데이터를 보고 튜닝하기 좋도록 모든 값을 노출.
+    """
+    # 코리도 추론: 같은 y좌표 ±tolerance 안에 있는 노드들은 같은 horizontal corridor
+    corridor_y_tolerance: float = 5.0   # m (사용자 데이터 단위에 맞춰서)
+    corridor_x_tolerance: float = 5.0
+    # 코리도 클러스터에 최소 몇 개 노드/링크 가 있어야 인정할지 (노이즈 컷)
+    min_corridor_size: int = 3
+    # role 추론: degree 가 이하면 terminal 후보 (charger/holding 가능성)
+    terminal_degree_threshold: int = 1
+    # 위치 라벨링: 좌표 기준 area name (UI 표시용)
+    horizontal_corridor_names: tuple[str, ...] = ("north", "center", "south")
+    # 정책 코드 힌트 (있으면 사용, 없어도 추론에 영향 없음)
+    use_code_hints: bool = True
+    # y 좌표계 방향: "y_up" (큰 y = 위쪽 = north, FAB 표준) / "y_down" (CAD 일부)
+    y_axis: str = "y_up"
+
+
+# ────────────────────────────────────────────────────────────────────
+# 결과 데이터 구조
+# ────────────────────────────────────────────────────────────────────
+@dataclass
+class ImportedNode:
+    node_id: str
+    x: float
+    y: float
+    name: str = ""
+    # 자동 추론된 role 후보 (사용자가 검토 UI 에서 확정/변경)
+    inferred_role: str = "standard"     # standard / charger / station / holding / siding
+    inferred_is_charger: bool = False
+    inferred_is_holding: bool = False
+    # 원본 코드 (참고용, 그대로 보존)
+    raw_node_type_cd: str = ""
+    raw_align_type_cd: str = ""
+    # 검증용 메타
+    degree_in: int = 0
+    degree_out: int = 0
+
+
+@dataclass
+class ImportedEdge:
+    edge_id: str
+    src: str
+    dst: str
+    # 자동 추론된 정책
+    inferred_bidirectional: bool = False
+    inferred_corridor: str = ""
+    inferred_access_type: str = ""      # bay / station_access / charger_access / ""
+    # 원본 보존
+    raw_link_type_cd: str = ""
+    # 만약 양방향으로 병합되었다면, 어떤 원본 링크 ID 들에서 왔는지
+    merged_from: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ImportWarning:
+    severity: str   # info / warn / error
+    code: str       # 분류 코드 (e.g. "isolated_node", "duplicate_link")
+    message: str
+    nodes: list[str] = field(default_factory=list)
+    edges: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ImportReport:
+    """임포트 결과 요약 + 자동 추론 통계 + 경고. UI 검증 패널이 사용."""
+    node_count: int = 0
+    edge_count_raw: int = 0
+    edge_count_after_merge: int = 0
+    bidirectional_count: int = 0
+    inferred_chargers: int = 0
+    inferred_stations: int = 0
+    inferred_holding: int = 0
+    connected_components: int = 0
+    isolated_nodes: list[str] = field(default_factory=list)
+    dead_end_nodes: list[str] = field(default_factory=list)
+    corridor_stats: dict[str, int] = field(default_factory=dict)  # corridor → edge count
+    warnings: list[ImportWarning] = field(default_factory=list)
+
+
+@dataclass
+class ImportedMap:
+    """임포터 출력 — 그대로 MapGraph 로 빌드할 수 있도록 정규화된 중간 표현."""
+    nodes: list[ImportedNode]
+    edges: list[ImportedEdge]
+    report: ImportReport
+    config: InferenceConfig
+
+
+# ────────────────────────────────────────────────────────────────────
+# 메인 임포터
+# ────────────────────────────────────────────────────────────────────
+def import_map_json(
+    path_or_data: str | Path | dict,
+    config: Optional[InferenceConfig] = None,
+) -> ImportedMap:
+    """JSON 경로 또는 dict 를 받아서 ImportedMap 반환.
+
+    호출자는 결과를 검토(UI / CLI) 한 뒤 build_map_graph() 로 MapGraph 변환.
+    """
+    cfg = config or InferenceConfig()
+
+    if isinstance(path_or_data, (str, Path)):
+        data = json.loads(Path(path_or_data).read_text(encoding="utf-8"))
+    else:
+        data = path_or_data
+
+    raw_nodes = data.get("nodes", [])
+    raw_links = data.get("links", [])
+
+    # 1단계: 구조만 임포트
+    nodes = _import_nodes(raw_nodes)
+    raw_edges_count = len(raw_links)
+
+    # 2단계: 자동 추론
+    edges = _detect_bidirectional(raw_links, cfg)
+    _compute_degrees(nodes, edges)
+    _infer_corridors(nodes, edges, cfg)
+    _infer_roles(nodes, edges, cfg, raw_nodes)
+
+    # 3단계: 검증 + 리포트
+    report = _build_report(nodes, edges, raw_edges_count)
+
+    return ImportedMap(nodes=nodes, edges=edges, report=report, config=cfg)
+
+
+# ────────────────────────────────────────────────────────────────────
+# 1단계: 구조 임포트
+# ────────────────────────────────────────────────────────────────────
+def _import_nodes(raw_nodes: list[dict]) -> list[ImportedNode]:
+    nodes = []
+    for raw in raw_nodes:
+        pos = raw.get("position", {}) or {}
+        nodes.append(ImportedNode(
+            node_id=str(raw.get("id", "")),
+            x=float(pos.get("x", 0.0)),
+            y=float(pos.get("y", 0.0)),
+            name=str(raw.get("name", "") or raw.get("id", "")),
+            raw_node_type_cd=str(raw.get("node_type_cd", "") or ""),
+            raw_align_type_cd=str(raw.get("align_type_cd", "") or ""),
+        ))
+    return nodes
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-a: 양방향 자동 병합
+# ────────────────────────────────────────────────────────────────────
+def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[ImportedEdge]:
+    """(from,to) + (to,from) 짝 발견 시 1개 양방향 엣지로 병합.
+
+    원본 link id 는 merged_from 에 보존. 병합되지 않은 단방향 링크는 그대로.
+    """
+    # 정규화: (from, to) → raw link
+    by_pair: dict[tuple[str, str], dict] = {}
+    for raw in raw_links:
+        conn = raw.get("connected") or {}
+        f, t = str(conn.get("from", "")), str(conn.get("to", ""))
+        if not f or not t:
+            continue
+        # 중복 (같은 방향) 링크가 있으면 첫 번째만 살림 (importer 단계에선 경고만)
+        if (f, t) not in by_pair:
+            by_pair[(f, t)] = raw
+
+    edges: list[ImportedEdge] = []
+    consumed: set[tuple[str, str]] = set()
+    for (f, t), raw in by_pair.items():
+        if (f, t) in consumed:
+            continue
+        reverse = (t, f)
+        if reverse in by_pair and reverse not in consumed:
+            # 양방향
+            rev_raw = by_pair[reverse]
+            edges.append(ImportedEdge(
+                edge_id=str(raw.get("id", "") or f"{f}__{t}"),
+                src=f, dst=t,
+                inferred_bidirectional=True,
+                raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
+                merged_from=[str(raw.get("id", "")), str(rev_raw.get("id", ""))],
+            ))
+            consumed.add((f, t))
+            consumed.add(reverse)
+        else:
+            # 단방향
+            edges.append(ImportedEdge(
+                edge_id=str(raw.get("id", "") or f"{f}__{t}"),
+                src=f, dst=t,
+                inferred_bidirectional=False,
+                raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
+                merged_from=[str(raw.get("id", ""))],
+            ))
+            consumed.add((f, t))
+    return edges
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-b: 차수 계산
+# ────────────────────────────────────────────────────────────────────
+def _compute_degrees(nodes: list[ImportedNode], edges: list[ImportedEdge]) -> None:
+    by_id = {n.node_id: n for n in nodes}
+    for e in edges:
+        if e.src in by_id:
+            by_id[e.src].degree_out += 1
+            if e.inferred_bidirectional:
+                by_id[e.src].degree_in += 1
+        if e.dst in by_id:
+            by_id[e.dst].degree_in += 1
+            if e.inferred_bidirectional:
+                by_id[e.dst].degree_out += 1
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-c: 코리도 추론
+# ────────────────────────────────────────────────────────────────────
+def _infer_corridors(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    cfg: InferenceConfig,
+) -> None:
+    """각 엣지의 corridor 라벨을 좌표 기반으로 추론.
+
+    전략:
+      1. 엣지의 방향(거의 수평/수직/대각선) 판정
+      2. 수평 엣지: 두 노드의 y좌표 평균으로 band 클러스터링 → north/center/south
+      3. 수직 엣지: x좌표 평균으로 band 클러스터링 → bay (vertical corridors)
+      4. 짧은 access 엣지 (길이 < threshold): station_access / charger_access 후보
+      5. 클러스터 크기가 min_corridor_size 미만이면 "misc" 처리
+    """
+    pos_by_id = {n.node_id: (n.x, n.y) for n in nodes}
+
+    horizontal_edges: list[tuple[ImportedEdge, float]] = []  # (edge, y_mid)
+    vertical_edges: list[tuple[ImportedEdge, float]] = []    # (edge, x_mid)
+    diagonal_edges: list[ImportedEdge] = []
+    short_edges: list[ImportedEdge] = []                     # access 후보
+
+    for e in edges:
+        if e.src not in pos_by_id or e.dst not in pos_by_id:
+            continue
+        x1, y1 = pos_by_id[e.src]
+        x2, y2 = pos_by_id[e.dst]
+        dx, dy = abs(x2 - x1), abs(y2 - y1)
+        length = math.hypot(x2 - x1, y2 - y1)
+
+        # 매우 짧은 엣지 (예: 10m 미만) 는 access 후보로 따로 빼둠
+        # 단위 추정: 전체 노드 분포를 보고 결정 (아래에서 length_short_threshold 자동 계산)
+        if length < 0.1:  # 거의 같은 위치 — 비정상
+            diagonal_edges.append(e)
+            continue
+        if dy <= cfg.corridor_y_tolerance and dx > dy * 2:
+            horizontal_edges.append((e, (y1 + y2) / 2))
+        elif dx <= cfg.corridor_x_tolerance and dy > dx * 2:
+            vertical_edges.append((e, (x1 + x2) / 2))
+        else:
+            diagonal_edges.append(e)
+
+    # 길이 분포로 short 엣지 자동 컷오프 (전체 길이의 25 percentile)
+    all_lengths = []
+    for e in edges:
+        if e.src in pos_by_id and e.dst in pos_by_id:
+            x1, y1 = pos_by_id[e.src]
+            x2, y2 = pos_by_id[e.dst]
+            all_lengths.append(math.hypot(x2 - x1, y2 - y1))
+    short_threshold = _percentile(all_lengths, 25) if all_lengths else 0.0
+
+    # 수평 클러스터링 → y band 별로 north/center/south 등 자동 라벨
+    h_clusters = _cluster_1d(horizontal_edges, cfg.corridor_y_tolerance)
+    # y_up 좌표계: 큰 y 가 north (위쪽). y_down: 작은 y 가 north.
+    reverse = (cfg.y_axis == "y_up")
+    h_clusters_sorted = sorted(h_clusters, key=lambda c: c["band_center"], reverse=reverse)
+    h_names = _assign_horizontal_names(h_clusters_sorted, cfg.horizontal_corridor_names)
+
+    for cluster, name in zip(h_clusters_sorted, h_names):
+        if len(cluster["edges"]) < cfg.min_corridor_size:
+            label = "misc"
+        else:
+            label = name
+        for e in cluster["edges"]:
+            e.inferred_corridor = label
+
+    # 수직 클러스터링 → bay (각 x 위치별로 bay_<index> 라벨)
+    v_clusters = _cluster_1d(vertical_edges, cfg.corridor_x_tolerance)
+    v_clusters_sorted = sorted(v_clusters, key=lambda c: c["band_center"])
+    for i, cluster in enumerate(v_clusters_sorted):
+        if len(cluster["edges"]) < cfg.min_corridor_size:
+            label = "misc"
+        else:
+            label = "bay"  # 우리 엔진 컨벤션에 맞춰 모두 'bay' 로 (구분 필요 시 bay_0, bay_1 ...)
+        for e in cluster["edges"]:
+            e.inferred_corridor = label
+
+    # 대각선 / 매우 짧은 엣지: access 후보
+    for e in diagonal_edges:
+        # 길이로 access type 판정
+        if e.src in pos_by_id and e.dst in pos_by_id:
+            x1, y1 = pos_by_id[e.src]
+            x2, y2 = pos_by_id[e.dst]
+            length = math.hypot(x2 - x1, y2 - y1)
+            if length <= short_threshold:
+                e.inferred_corridor = ""
+                # access_type 은 role 추론 단계에서 charger/station 인 노드와 연결 시 확정
+            else:
+                e.inferred_corridor = "misc"
+
+
+def _cluster_1d(items: list[tuple], tolerance: float) -> list[dict]:
+    """items = [(edge, value), ...] 를 value 기준으로 tolerance 이내 그룹핑.
+
+    반환: [{"band_center": float, "edges": [Edge, ...]}, ...]
+    """
+    if not items:
+        return []
+    sorted_items = sorted(items, key=lambda x: x[1])
+    clusters: list[dict] = []
+    current = {"band_center": sorted_items[0][1], "edges": [sorted_items[0][0]], "values": [sorted_items[0][1]]}
+    for edge, value in sorted_items[1:]:
+        if value - current["values"][-1] <= tolerance:
+            current["edges"].append(edge)
+            current["values"].append(value)
+            current["band_center"] = sum(current["values"]) / len(current["values"])
+        else:
+            clusters.append(current)
+            current = {"band_center": value, "edges": [edge], "values": [value]}
+    clusters.append(current)
+    return clusters
+
+
+def _assign_horizontal_names(clusters: list[dict], name_pool: tuple[str, ...]) -> list[str]:
+    """3개 풀(north/center/south) 을 클러스터 개수에 맞춰 분배.
+
+    클러스터 수가 풀보다 적으면 가운데부터 채움 (1개면 center, 2개면 north+south, 3개면 다, 4개+면 nothN/north/center/south/southS).
+    """
+    n = len(clusters)
+    if n == 0:
+        return []
+    if n == 1:
+        return ["center"]
+    if n == 2:
+        return ["north", "south"]
+    if n == 3:
+        return list(name_pool)
+    # 4개 이상: 양 끝부터 north/south 라벨 + 가운데는 center_0, center_1, ...
+    names = ["north"]
+    middle_count = n - 2
+    for i in range(middle_count):
+        if middle_count == 1:
+            names.append("center")
+        else:
+            names.append(f"center_{i}")
+    names.append("south")
+    return names
+
+
+def _percentile(values: list[float], p: float) -> float:
+    if not values:
+        return 0.0
+    sorted_v = sorted(values)
+    k = (len(sorted_v) - 1) * (p / 100.0)
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return sorted_v[int(k)]
+    return sorted_v[f] * (c - k) + sorted_v[c] * (k - f)
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-d: role 추론
+# ────────────────────────────────────────────────────────────────────
+def _infer_roles(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    cfg: InferenceConfig,
+    raw_nodes: list[dict],
+) -> None:
+    """각 노드의 role 후보를 마킹.
+
+    규칙:
+      - hint 코드 (node_type_cd) 가 명시적이면 우선 (charger/station 등 자주 쓰는 값 인식)
+      - 차수가 매우 낮은 terminal 노드 → charger / holding 후보
+      - degree_in == degree_out == 1 이고 라인 끝쪽 → standard waypoint
+      - 위 어디에도 안 맞으면 standard
+    """
+    by_id = {n.node_id: n for n in nodes}
+
+    # hint code 1차 적용 (있다면)
+    if cfg.use_code_hints:
+        for n in nodes:
+            cd = (n.raw_node_type_cd or "").upper()
+            if not cd:
+                continue
+            # 자주 쓸 법한 코드 별칭들 — 실제 데이터 보면 사용자가 매핑 yaml 로 override
+            if cd in ("CH", "CHARGER", "CHRG"):
+                n.inferred_role = "charger"
+                n.inferred_is_charger = True
+            elif cd in ("ST", "STN", "STATION", "WORK"):
+                n.inferred_role = "station"
+            elif cd in ("HP", "HOLD", "HOLDING", "IDLE"):
+                n.inferred_role = "holding"
+                n.inferred_is_holding = True
+            elif cd in ("SD", "SIDING"):
+                n.inferred_role = "siding"
+            # 그 외는 standard 유지
+
+    # 좌표/차수 기반 추론 (hint 가 없는 노드 만 보완)
+    for n in nodes:
+        if n.inferred_role != "standard":
+            continue
+        # terminal: degree (양방향 고려) 가 매우 낮음
+        total_degree = n.degree_in + n.degree_out
+        if total_degree <= cfg.terminal_degree_threshold:
+            # 끝점 — charger 또는 holding 후보. 어느 쪽인지 좌표만으로 단정 불가 →
+            # 일단 "holding" 후보로 마킹하고, 사용자가 검토 UI 에서 변경하게 함.
+            n.inferred_role = "holding_candidate"
+            n.inferred_is_holding = True
+
+
+# ────────────────────────────────────────────────────────────────────
+# 3단계: 검증 리포트
+# ────────────────────────────────────────────────────────────────────
+def _build_report(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    raw_edges_count: int,
+) -> ImportReport:
+    report = ImportReport(
+        node_count=len(nodes),
+        edge_count_raw=raw_edges_count,
+        edge_count_after_merge=len(edges),
+        bidirectional_count=sum(1 for e in edges if e.inferred_bidirectional),
+        inferred_chargers=sum(1 for n in nodes if n.inferred_is_charger),
+        inferred_stations=sum(1 for n in nodes if n.inferred_role == "station"),
+        inferred_holding=sum(1 for n in nodes if n.inferred_is_holding),
+    )
+
+    # corridor 통계
+    c = Counter(e.inferred_corridor or "(none)" for e in edges)
+    report.corridor_stats = dict(c)
+
+    # 고립 / dead-end 분석
+    by_id = {n.node_id: n for n in nodes}
+    for n in nodes:
+        if n.degree_in == 0 and n.degree_out == 0:
+            report.isolated_nodes.append(n.node_id)
+        elif n.degree_in > 0 and n.degree_out == 0 and not n.inferred_is_charger:
+            # 들어오기만 하고 나갈 수 없음 (one-way trap) — charger 가 아니면 경고
+            report.dead_end_nodes.append(n.node_id)
+
+    # connected components (양방향은 양방향, 단방향은 weak connect 로 카운트)
+    report.connected_components = _count_weak_components(nodes, edges)
+
+    # 경고 생성
+    if report.isolated_nodes:
+        report.warnings.append(ImportWarning(
+            severity="error",
+            code="isolated_nodes",
+            message=f"{len(report.isolated_nodes)} 개 노드가 어떤 링크에도 연결되지 않음",
+            nodes=report.isolated_nodes[:20],
+        ))
+    if report.dead_end_nodes:
+        report.warnings.append(ImportWarning(
+            severity="warn",
+            code="dead_end_nodes",
+            message=f"{len(report.dead_end_nodes)} 개 노드가 dead-end (들어오기만 가능)",
+            nodes=report.dead_end_nodes[:20],
+        ))
+    if report.connected_components > 1:
+        report.warnings.append(ImportWarning(
+            severity="warn",
+            code="multiple_components",
+            message=f"그래프가 {report.connected_components} 개 단편으로 나뉨 (AGV 도달 불가 구간 존재)",
+        ))
+    if report.inferred_chargers == 0:
+        report.warnings.append(ImportWarning(
+            severity="error",
+            code="no_chargers",
+            message="charger 로 추론된 노드가 없음. 검토 UI 에서 charger 지정 필요",
+        ))
+    misc_corridor = report.corridor_stats.get("misc", 0) + report.corridor_stats.get("(none)", 0)
+    if misc_corridor > 0:
+        report.warnings.append(ImportWarning(
+            severity="info",
+            code="unlabeled_corridor",
+            message=f"{misc_corridor} 개 엣지 corridor 추론 실패 (access/짧은 엣지일 수 있음)",
+        ))
+
+    return report
+
+
+def _count_weak_components(nodes: list[ImportedNode], edges: list[ImportedEdge]) -> int:
+    """weakly connected components (단방향도 양방향처럼 본 후 분리 카운트)."""
+    parent: dict[str, str] = {n.node_id: n.node_id for n in nodes}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for e in edges:
+        if e.src in parent and e.dst in parent:
+            union(e.src, e.dst)
+    roots = set(find(n.node_id) for n in nodes)
+    return len(roots)
+
+
+# ────────────────────────────────────────────────────────────────────
+# ImportedMap → MapGraph 빌드 (simulation 에 넘길 때 사용)
+# ────────────────────────────────────────────────────────────────────
+def build_map_graph(imported: ImportedMap) -> MapGraph:
+    """ImportedMap → 시뮬레이션이 쓰는 MapGraph 로 변환.
+
+    inferred_* 정책을 그대로 적용. 사용자가 검토 UI 에서 수정한 경우 그 결과를 반영한
+    ImportedMap 을 넘기면 됨.
+    """
+    role_map = {
+        "standard": NodeRole.STANDARD,
+        "approach": NodeRole.APPROACH,
+        "siding": NodeRole.SIDING,
+        "station": NodeRole.WORK,
+        "work": NodeRole.WORK,
+        "charger": NodeRole.CHARGER,
+        # holding 은 standard + is_holding_point=True 로 표현
+        "holding": NodeRole.STANDARD,
+        "holding_candidate": NodeRole.STANDARD,
+    }
+    g = MapGraph()
+    for n in imported.nodes:
+        node = Node(
+            node_id=n.node_id,
+            x=n.x, y=n.y,
+            role=role_map.get(n.inferred_role, NodeRole.STANDARD),
+            is_charger=n.inferred_is_charger,
+            is_holding_point=n.inferred_is_holding,
+        )
+        g.nodes[n.node_id] = node
+        g._out_edges.setdefault(n.node_id, [])
+
+    for e in imported.edges:
+        if e.src not in g.nodes or e.dst not in g.nodes:
+            continue
+        # 거리 계산
+        sx, sy = g.nodes[e.src].x, g.nodes[e.src].y
+        dx, dy = g.nodes[e.dst].x, g.nodes[e.dst].y
+        dist = math.hypot(dx - sx, dy - sy)
+        edge = Edge(
+            edge_id=e.edge_id,
+            start_node_id=e.src,
+            end_node_id=e.dst,
+            bidirectional=e.inferred_bidirectional,
+            distance=dist,
+            corridor=e.inferred_corridor,
+            access_type=e.inferred_access_type,
+        )
+        g.edges[e.edge_id] = edge
+        g._out_edges.setdefault(e.src, []).append(e.edge_id)
+        if e.inferred_bidirectional:
+            # 양방향: 반대 방향 entry 도 _out_edges 에 등록 (엔진 컨벤션)
+            g._out_edges.setdefault(e.dst, []).append(e.edge_id)
+
+    return g
