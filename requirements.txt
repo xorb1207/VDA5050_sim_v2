@@ -1,0 +1,8 @@
+# vda5050_sim_v2 — Python 3.12+
+# 폐쇄망 설치 시: pip download 로 wheel 미리 받아서 가져가기
+
+fastapi>=0.110,<1.0
+pydantic>=2.0,<3.0
+uvicorn[standard]>=0.27,<1.0
+pyyaml>=6.0
+websockets>=12.0
