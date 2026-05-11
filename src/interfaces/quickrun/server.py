@@ -34,6 +34,7 @@ from pydantic import BaseModel
 
 from src.analytics.playback_trace import build_live_html
 from src.domain.map.external_importer import apply_edits, build_map_graph, import_map_json
+from src.interfaces.map_editor import build_editor_html
 from src.interfaces.quickrun.runner import RealRunner
 
 # ── 정적 자원 경로 ─────────────────────────────────────────────
@@ -262,7 +263,8 @@ async def upload_map(req: UploadMapRequest):
     map_id = "map_" + uuid.uuid4().hex[:8]
     _imported_maps[map_id] = {
         "name": req.name,
-        "graph": graph,
+        "imported": imp,       # ImportedMap (Editor 페이지가 사용)
+        "graph": graph,        # MapGraph (시뮬 엔진이 사용)
         "stats": {
             "nodes": len(imp.nodes),
             "edges": len(imp.edges),
@@ -281,6 +283,49 @@ async def upload_map(req: UploadMapRequest):
 async def list_imported_maps():
     """현재 메모리에 있는 임포트 맵 목록. Quickrun 페이지 토폴로지 드롭다운 채울 때 사용."""
     return [{"id": k, "name": v["name"], "stats": v["stats"]} for k, v in _imported_maps.items()]
+
+
+@app.get("/edit/{map_id}")
+async def edit_page(map_id: str):
+    """업로드된 임포트 맵을 Map Editor 페이지로 즉시 진입."""
+    entry = _imported_maps.get(map_id)
+    if entry is None:
+        raise HTTPException(404, f"unknown map id: {map_id}")
+    html = build_editor_html(
+        entry["imported"],
+        title=f"Edit — {entry['name']}",
+        source_name=entry["name"],
+        server_map_id=map_id,
+    )
+    return HTMLResponse(html)
+
+
+class UpdateMapRequest(BaseModel):
+    edits: dict
+
+
+@app.post("/update-map/{map_id}")
+async def update_map(map_id: str, req: UpdateMapRequest):
+    """Editor 페이지의 Save → 서버 메모리 갱신.
+    cumulative: 현재 ImportedMap 위에 새 edits 적용 (이전 편집 누적된 상태).
+    """
+    entry = _imported_maps.get(map_id)
+    if entry is None:
+        raise HTTPException(404, f"unknown map id: {map_id}")
+    try:
+        imp_after = apply_edits(entry["imported"], req.edits)
+        graph_after = build_map_graph(imp_after)
+    except Exception as exc:
+        raise HTTPException(400, f"apply_edits failed: {exc}")
+    entry["imported"] = imp_after
+    entry["graph"] = graph_after
+    entry["stats"] = {
+        "nodes": len(imp_after.nodes),
+        "edges": len(imp_after.edges),
+        "chargers": imp_after.report.inferred_chargers,
+        "stations": imp_after.report.inferred_stations,
+    }
+    return {"ok": True, "stats": entry["stats"]}
 
 
 @app.post("/init")

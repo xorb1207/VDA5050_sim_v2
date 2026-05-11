@@ -23,10 +23,13 @@ def build_editor_html(
     imported: ImportedMap,
     title: str = "Map Editor",
     source_name: str = "imported_map",
+    server_map_id: str | None = None,
 ) -> str:
     """ImportedMap → self-contained HTML 페이지 문자열.
 
     source_name: Save 시 다운로드 파일명 (예: "synthetic_plant") → "synthetic_plant.edit.json"
+    server_map_id: 서버 메모리에 보관된 map id. 있으면 Save 시 서버에도 push 시도.
+                   None 이면 다운로드만.
     페이지는 외부 의존성 없음 (모든 JS 인라인). 폐쇄망에서도 그대로 동작.
     """
     # ── 데이터 직렬화 (JS 가 그대로 사용) ──────────────────────────
@@ -71,6 +74,7 @@ def build_editor_html(
     payload = {
         "title": title,
         "source_name": source_name,
+        "server_map_id": server_map_id,   # null 이면 다운로드만, 있으면 server 갱신도
         "nodes": nodes_payload,
         "edges": edges_payload,
         "report": report_payload,
@@ -403,6 +407,7 @@ _TEMPLATE = r"""<!doctype html>
     // ── 데이터 로드 ─────────────────────────────────────────────
     const PAYLOAD = __PAYLOAD_JSON__;
     const SOURCE_NAME = PAYLOAD.source_name || "imported_map";
+    const SERVER_MAP_ID = PAYLOAD.server_map_id || null;
     const nodes = PAYLOAD.nodes;            // 편집 대상 (mutable)
     const edges = PAYLOAD.edges;            // 편집 대상 (mutable)
     const report = PAYLOAD.report;
@@ -1286,14 +1291,38 @@ _TEMPLATE = r"""<!doctype html>
       zoomScale = 1; panX = 0; panY = 0; render();
     });
 
-    // ── Save / Save & Run (Phase 4 에서 풀 구현, 지금은 stub) ───
-    document.getElementById("btn-save").addEventListener("click", () => {
+    // ── Save / Save & Run ─────────────────────────────────────
+    async function saveEdits(opts = {}) {
       const edits = exportEdits();
-      downloadEdits(edits);
-      showToast("Saved");
-    });
-    document.getElementById("btn-save-run").addEventListener("click", () => {
-      showToast("Save & Run — Phase 4/5 에서 Quickrun 연결 예정");
+      // 1) 다운로드 (항상)
+      if (opts.download !== false) downloadEdits(edits);
+      // 2) 서버 메모리 갱신 (server_map_id 가 있을 때만)
+      if (SERVER_MAP_ID) {
+        try {
+          const resp = await fetch(`/update-map/${SERVER_MAP_ID}`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({edits}),
+          });
+          if (!resp.ok) throw new Error(await resp.text());
+          const data = await resp.json();
+          showToast(`Saved + applied (chargers=${data.stats.chargers}, stations=${data.stats.stations})`);
+        } catch (err) {
+          showToast(`Saved (download only) — server update 실패: ${err.message}`);
+        }
+      } else {
+        showToast("Saved (file download)");
+      }
+    }
+    document.getElementById("btn-save").addEventListener("click", () => { saveEdits(); });
+    document.getElementById("btn-save-run").addEventListener("click", async () => {
+      await saveEdits({download: false});  // 서버에 적용만 (다운로드 생략)
+      if (SERVER_MAP_ID) {
+        // Quickrun 페이지로 이동 — 이미 떠 있으면 새로고침으로 옵션 갱신됨
+        window.location.href = "/";
+      } else {
+        showToast("Server 없음 — 먼저 ./run quickrun 으로 띄우세요");
+      }
     });
 
     function exportEdits() {

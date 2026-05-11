@@ -1956,6 +1956,11 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             style="height:30px; padding:0 10px; margin-left:6px; border:1px dashed var(--border-strong);
                    background:transparent; border-radius:var(--radius-sm); color:var(--muted);
                    font-size:12px; cursor:pointer;">📂 외부 맵 업로드</button>
+          <button type="button" id="edit-map-btn" disabled
+            style="height:30px; padding:0 10px; margin-left:4px; border:1px solid var(--border);
+                   background:var(--surface); border-radius:var(--radius-sm); color:var(--ink);
+                   font-size:12px; cursor:pointer;"
+            title="선택된 임포트 맵을 Map Editor 에서 열기">🛠 Editor</button>
           <input type="file" id="upload-map-input" accept=".json"
             style="display:none;" multiple>
         </div>
@@ -2872,8 +2877,22 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       }}
       e.target.value = ''; // input 리셋
     }});
+    // 토폴로지 드롭다운 change → "🛠 Editor" 버튼 활성 토글
+    function updateEditorBtn() {{
+      const sel = document.getElementById('live-topology').value;
+      const btn = document.getElementById('edit-map-btn');
+      btn.disabled = !sel.startsWith('imported:');
+    }}
+    document.getElementById('live-topology').addEventListener('change', updateEditorBtn);
+    document.getElementById('edit-map-btn').addEventListener('click', ()=>{{
+      const sel = document.getElementById('live-topology').value;
+      if (!sel.startsWith('imported:')) return;
+      const id = sel.slice('imported:'.length);
+      window.open(`/edit/${{id}}`, '_blank');
+    }});
+
     // 페이지 로드 시 한 번 채움 (이미 업로드된 맵이 있을 수도)
-    refreshImportedMaps();
+    refreshImportedMaps().then(updateEditorBtn);
 
     // ── 이벤트 핸들러 ─────────────────────────────────────────────
     document.getElementById('run-btn').addEventListener('click', doRun);
