@@ -686,7 +686,6 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
     for e in imported.edges:
         if e.src not in g.nodes or e.dst not in g.nodes:
             continue
-        # 거리 계산
         sx, sy = g.nodes[e.src].x, g.nodes[e.src].y
         dx, dy = g.nodes[e.dst].x, g.nodes[e.dst].y
         dist = math.hypot(dx - sx, dy - sy)
@@ -702,7 +701,18 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
         g.edges[e.edge_id] = edge
         g._out_edges.setdefault(e.src, []).append(e.edge_id)
         if e.inferred_bidirectional:
-            # 양방향: 반대 방향 entry 도 _out_edges 에 등록 (엔진 컨벤션)
-            g._out_edges.setdefault(e.dst, []).append(e.edge_id)
+            # 양방향: reverse 도 별개 entry 로 추가 (engine 컨벤션 — A* 가 each edge_id 의
+            # end_node_id 를 다음 노드로 보기 때문에 같은 entry 의 _out_edges 양쪽 등록은 X)
+            edge_rev = Edge(
+                edge_id=e.edge_id + "_rev",
+                start_node_id=e.dst,
+                end_node_id=e.src,
+                bidirectional=False,  # reverse 자체는 단방향 entry
+                distance=dist,
+                corridor=e.inferred_corridor,
+                access_type=e.inferred_access_type,
+            )
+            g.edges[edge_rev.edge_id] = edge_rev
+            g._out_edges.setdefault(e.dst, []).append(edge_rev.edge_id)
 
     return g
