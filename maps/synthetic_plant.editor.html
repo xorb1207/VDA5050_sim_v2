@@ -146,6 +146,36 @@
     .inspector-row .k { color:var(--muted); }
     .inspector-row .v { font-family:var(--font-mono); }
 
+    /* Build 도구 패널 */
+    .build-tools { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .build-tools button {
+      height: 36px; border: 1px solid var(--border);
+      background: var(--surface); border-radius: var(--radius-sm);
+      font-size: 12px; font-weight: 500; color: var(--ink); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .build-tools button:hover { background: var(--surface-3); border-color: var(--border-strong); }
+    .build-tools button.active {
+      background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+    }
+    /* 선택 박스 */
+    .select-box {
+      fill: rgba(37,99,235,0.10);
+      stroke: var(--accent);
+      stroke-width: 1.5;
+      stroke-dasharray: 4 3;
+      pointer-events: none;
+    }
+    /* 선택된 노드 강조 */
+    .node-selected { stroke: var(--accent); stroke-width: 3; opacity: 0.9; }
+    /* Add Edge 진행 중 첫 노드 */
+    .node-edge-start { stroke: var(--warn); stroke-width: 3; opacity: 0.9; }
+    /* Add Edge preview line (커서 따라가는 가이드) */
+    .edge-preview {
+      stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4;
+      opacity: 0.6; pointer-events: none;
+    }
+
     /* Paint trajectory preview (드래그 중 시각 피드백) */
     .traj-preview {
       fill: none;
@@ -201,10 +231,24 @@
         <div class="mode-toggle" id="mode-toggle">
           <button data-mode="paint" class="active">Paint <span class="hint-key">P</span></button>
           <button data-mode="stamp">Stamp <span class="hint-key">S</span></button>
-          <button data-mode="single">Single <span class="hint-key">N</span></button>
+          <button data-mode="build">Build <span class="hint-key">B</span></button>
         </div>
         <div style="font-size:10.5px; color:var(--muted); margin-top:6px;">
-          숫자키 2~5 누르면 자동으로 Stamp 모드로 전환됩니다
+          숫자키 2~5 = Stamp 자동 전환 · Ctrl/Cmd+Z = Undo · Shift+드래그 = 다중 선택
+        </div>
+
+        <!-- Build 모드 옵션 -->
+        <div id="build-options" style="display:none; margin-top:12px;">
+          <div class="build-tools">
+            <button data-build="node" class="active">➕ Node <span class="hint-key">N</span></button>
+            <button data-build="edge">↔ Edge <span class="hint-key">E</span></button>
+            <button data-build="delete">🗑 Delete <span class="hint-key">D</span></button>
+          </div>
+          <div style="font-size:10.5px; color:var(--muted); margin-top:8px; line-height:1.5;">
+            · <strong>Node</strong>: 빈 공간 클릭 → 새 노드<br>
+            · <strong>Edge</strong>: 노드 A → 노드 B 순차 클릭 (좌=단방향, 우=양방향)<br>
+            · <strong>Delete</strong>: 노드/엣지 클릭 → 삭제 (Shift+박스 = 일괄 삭제)
+          </div>
         </div>
 
         <!-- Paint 모드 옵션 — 마우스 버튼으로 방향 결정 (토글 UI 불필요) -->
@@ -279,9 +323,70 @@
     const nodeById = new Map(nodes.map(n => [n.id, n]));
 
     // ── 편집 상태 ───────────────────────────────────────────────
-    let mode = "paint";              // paint / stamp / single
+    let mode = "paint";              // paint / stamp / build
     let stampTool = "inspect";       // inspect / station / charger / holding / siding / reset
+    let buildTool = "node";          // node / edge / delete
     let paintTrajectoryButton = -1;  // 진행 중 trajectory 의 마우스 버튼 (0=좌, 2=우)
+
+    // Add Edge 진행 중: 첫 번째로 클릭된 노드 (두 번째 클릭 시 엣지 확정)
+    let edgeStartNodeId = "";
+    let edgeStartButton = 0;     // 첫 클릭 시 마우스 버튼 (좌/우)
+    let edgePreviewClient = null;  // 커서 위치 (preview line 그리기용)
+
+    // 다중 선택 상태
+    let selectionBox = null;     // {x1,y1,x2,y2} (SVG 좌표) — Shift+드래그 중일 때만
+    let selectedNodeIds = new Set();   // 박스로 선택된 노드들 (Stamp 일괄 적용용)
+
+    // ID 자동 생성 (새 노드용)
+    let newNodeCounter = 9000;
+    function nextNodeId() {
+      // 기존 ID 와 충돌 안 하게
+      while (nodeById.has(`N${++newNodeCounter}`)) {}
+      return `N${newNodeCounter}`;
+    }
+    let newEdgeCounter = 9000;
+    function nextEdgeId() {
+      const existing = new Set(edges.map(e => e.id));
+      while (existing.has(`L${++newEdgeCounter}`)) {}
+      return `L${newEdgeCounter}`;
+    }
+
+    // ── Undo / Redo history stack ───────────────────────────────
+    const history = { past: [], future: [], capacity: 50 };
+    function snapshot() {
+      return {
+        nodes: nodes.map(n => ({...n})),
+        edges: edges.map(e => ({...e})),
+      };
+    }
+    function applySnapshot(s) {
+      nodes.length = 0;
+      for (const n of s.nodes) nodes.push({...n});
+      edges.length = 0;
+      for (const e of s.edges) edges.push({...e});
+      nodeById.clear();
+      for (const n of nodes) nodeById.set(n.id, n);
+      selectedNodeIds.clear();
+      edgeStartNodeId = "";
+      render();
+    }
+    function pushHistory() {
+      history.past.push(snapshot());
+      if (history.past.length > history.capacity) history.past.shift();
+      history.future.length = 0;
+    }
+    function undo() {
+      if (history.past.length === 0) { showToast("Nothing to undo"); return; }
+      history.future.push(snapshot());
+      applySnapshot(history.past.pop());
+      showToast("Undo");
+    }
+    function redo() {
+      if (history.future.length === 0) { showToast("Nothing to redo"); return; }
+      history.past.push(snapshot());
+      applySnapshot(history.future.pop());
+      showToast("Redo");
+    }
     let zoomScale = 1, panX = 0, panY = 0;
     let isPanning = false, panStart = null;
     let hoveredNodeId = "", hoveredEdgeId = "";
@@ -395,8 +500,14 @@
       document.querySelectorAll("#mode-toggle button").forEach(b =>
         b.classList.toggle("active", b.dataset.mode === newMode));
       document.getElementById("paint-options").style.display = (newMode === "paint") ? "" : "none";
-      // Paint 모드에서 다른 모드로 가면 진행 중인 trajectory cancel
-      if (newMode !== "paint") { paintTrajectory = null; render(); }
+      document.getElementById("build-options").style.display = (newMode === "build") ? "" : "none";
+      // 모드 전환 시 진행 중 인터랙션 모두 cancel
+      paintTrajectory = null;
+      edgeStartNodeId = "";
+      edgePreviewClient = null;
+      selectedNodeIds.clear();
+      selectionBox = null;
+      render();
     }
     document.getElementById("mode-toggle").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-mode]");
@@ -423,24 +534,50 @@
     //   Space        → 누르고 있는 동안 pan 모드 (어느 모드든)
     //   Shift / Alt  → Paint drag 시 임시 override (handler 안에서 e.shiftKey/altKey 체크)
     //   Escape       → Inspect 도구 + Paint 모드 (안전 상태로)
+    function selectBuildTool(tool) {
+      buildTool = tool;
+      document.querySelectorAll(".build-tools button").forEach(b =>
+        b.classList.toggle("active", b.dataset.build === tool));
+      edgeStartNodeId = ""; // 도구 바꾸면 진행 중 Add Edge cancel
+      render();
+    }
+    document.addEventListener("click", (e) => {
+      const buildBtn = e.target.closest(".build-tools button[data-build]");
+      if (buildBtn) selectBuildTool(buildBtn.dataset.build);
+    });
+
     document.addEventListener("keydown", (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      // ── Undo / Redo: Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z / Ctrl+Y ──
+      if ((e.metaKey || e.ctrlKey) && (e.key === "z" || e.key === "Z")) {
+        if (e.shiftKey) redo(); else undo();
+        e.preventDefault();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "y" || e.key === "Y")) {
+        redo(); e.preventDefault(); return;
+      }
+      // ── 숫자키: Stamp 자동 전환 ─────────────────────────────
       const stampMap = {"1":"inspect","2":"station","3":"charger","4":"holding","5":"siding","0":"reset"};
       if (stampMap[e.key]) {
         selectStamp(stampMap[e.key]);
-        // ★ 자동 모드 전환: stamp 도구를 누르면 Stamp 모드로 가야 클릭이 stamp 가 됨
         setMode("stamp");
         e.preventDefault();
         return;
       }
+      // ── 모드 단축키 ──────────────────────────────────────────
       if (e.key === "p" || e.key === "P") { setMode("paint"); e.preventDefault(); return; }
       if (e.key === "s" || e.key === "S") { setMode("stamp"); e.preventDefault(); return; }
-      if (e.key === "n" || e.key === "N") { setMode("single"); e.preventDefault(); return; }
+      if (e.key === "b" || e.key === "B") { setMode("build"); e.preventDefault(); return; }
+      // ── Build 도구 단축키 (Build 모드일 때만) ──────────────
+      if (mode === "build") {
+        if (e.key === "n" || e.key === "N") { selectBuildTool("node"); e.preventDefault(); return; }
+        if (e.key === "e" || e.key === "E") { selectBuildTool("edge"); e.preventDefault(); return; }
+        if (e.key === "d" || e.key === "D") { selectBuildTool("delete"); e.preventDefault(); return; }
+      }
       if (e.key === "Escape") {
         selectStamp("inspect");
         setMode("paint");
-        paintTrajectory = null;
-        render();
         return;
       }
       if (e.code === "Space" && !spaceKeyDown) {
@@ -503,24 +640,46 @@
         const cx = sx(n.x), cy = sy(n.y);
         const color = roleColor(n.role, n.is_charger, n.is_holding);
         const shape = roleShape(n.role, n.is_charger, n.is_holding, color);
-        const hoverRing = (n.id === hoveredNodeId)
-          ? `<circle class="node-hover" r="11" fill="none" />` : "";
-        // Click target r=22 (이전 r=14) — 클릭 미스 줄임. transparent 라 시각 영향 없음.
-        return `<g data-node-id="${n.id}" style="cursor:${stampTool === 'inspect' ? 'default' : 'pointer'}"
+        const rings = [];
+        if (n.id === hoveredNodeId) rings.push(`<circle class="node-hover" r="11" fill="none" />`);
+        if (selectedNodeIds.has(n.id)) rings.push(`<circle class="node-selected" r="13" fill="none" />`);
+        if (n.id === edgeStartNodeId) rings.push(`<circle class="node-edge-start" r="14" fill="none" />`);
+        return `<g data-node-id="${n.id}" style="cursor:${stampTool === 'inspect' && mode !== 'build' ? 'default' : 'pointer'}"
                    transform="translate(${cx} ${cy}) scale(${labelScale})">
-          <circle r="22" fill="transparent" /> <!-- expanded click target -->
-          ${hoverRing}
+          <circle r="22" fill="transparent" />
+          ${rings.join('')}
           ${shape}
         </g>`;
       }).join("");
 
-      // Paint trajectory preview (드래그 중에만)
+      // Paint trajectory preview
       const trajSvg = (paintTrajectory && paintTrajectory.length >= 2)
         ? `<polyline class="traj-preview" points="${paintTrajectory.map(p => `${p.x},${p.y}`).join(' ')}" />`
         : "";
 
+      // Selection box (Shift+드래그)
+      let boxSvg = "";
+      if (selectionBox) {
+        const xLo = Math.min(selectionBox.x1, selectionBox.x2);
+        const yLo = Math.min(selectionBox.y1, selectionBox.y2);
+        const w = Math.abs(selectionBox.x2 - selectionBox.x1);
+        const h = Math.abs(selectionBox.y2 - selectionBox.y1);
+        boxSvg = `<rect class="select-box" x="${xLo}" y="${yLo}" width="${w}" height="${h}" />`;
+      }
+
+      // Add Edge preview line (첫 노드 ~ 커서)
+      let edgePrevSvg = "";
+      if (mode === "build" && buildTool === "edge" && edgeStartNodeId && edgePreviewClient) {
+        const src = nodeById.get(edgeStartNodeId);
+        if (src) {
+          edgePrevSvg = `<line class="edge-preview" x1="${sx(src.x)}" y1="${sy(src.y)}"
+            x2="${edgePreviewClient.x}" y2="${edgePreviewClient.y}"
+            vector-effect="non-scaling-stroke" />`;
+        }
+      }
+
       svg.innerHTML = `<g transform="translate(${panX} ${panY}) scale(${zoomScale})">
-        ${edgesSvg}${nodesSvg}${trajSvg}
+        ${edgesSvg}${nodesSvg}${edgePrevSvg}${trajSvg}${boxSvg}
       </g>`;
       // 사용자 액션 마다 validation 자동 재계산
       recomputeValidation();
@@ -627,53 +786,146 @@
     }
 
     document.getElementById("map").addEventListener("pointerdown", (e) => {
-      // 좌(0) / 우(2) 만 처리. 가운데 버튼은 무시.
       if (e.button !== 0 && e.button !== 2) return;
       const onNode = !!e.target.closest("[data-node-id]");
+      const onEdge = !onNode && !!e.target.closest("[data-edge-id]");
       const svg = e.currentTarget;
       const pt = clientToSvg(svg, e.clientX, e.clientY);
+      const localX = (pt.x - panX) / zoomScale;
+      const localY = (pt.y - panY) / zoomScale;
 
-      // ── 분기 ──────────────────────────────────────────────
-      // 1) Space 누르고 있으면 → 무조건 pan (어느 모드든, 좌클릭만)
-      // 2) Paint 모드 → trajectory 그리기 시작 (좌=단방향, 우=양방향)
-      // 3) Stamp 모드 + 노드 위 → drag 시작 안 함 (click/contextmenu 에서 처리)
-      // 4) Stamp 모드 + 빈 공간 + 좌클릭 → pan
+      // Space + 좌클릭 = pan (모드 무관)
       if (spaceKeyDown && e.button === 0) {
         isPanning = true;
         panStart = {x: e.clientX, y: e.clientY, panX, panY};
         document.querySelector(".map-shell").classList.add("dragging");
         return;
       }
+
+      // Shift + 좌클릭 = 다중 선택 박스 (Stamp / Build 모드에서)
+      if (e.shiftKey && e.button === 0 && (mode === "stamp" || mode === "build")) {
+        selectionBox = {x1: localX, y1: localY, x2: localX, y2: localY};
+        selectedNodeIds.clear();
+        e.preventDefault();
+        return;
+      }
+
       if (mode === "paint") {
-        // 좌/우 모두 trajectory. mouseup 에서 button 보고 단방/양방 결정.
-        paintTrajectory = [{x: (pt.x - panX) / zoomScale, y: (pt.y - panY) / zoomScale}];
+        paintTrajectory = [{x: localX, y: localY}];
         paintTrajectoryButton = e.button;
         e.preventDefault();
         return;
       }
-      // Stamp / Single 모드
-      if (onNode) return; // 노드 클릭은 click / contextmenu 핸들러로 처리
-      if (e.button !== 0) return; // 우클릭은 pan 안 함
+
+      if (mode === "build") {
+        // Build 도구별 분기 (pointerdown 즉시 액션)
+        if (buildTool === "node") {
+          // 빈 공간 좌클릭만 — 노드 추가
+          if (!onNode && !onEdge && e.button === 0) {
+            addNodeAt(localX, localY);
+            render();
+          }
+          // Add Node 도구 + 노드 위 클릭은 무시 (또는 hint?)
+          return;
+        }
+        if (buildTool === "edge") {
+          if (onNode) {
+            const nid = e.target.closest("[data-node-id]").dataset.nodeId;
+            if (!edgeStartNodeId) {
+              // 첫 노드 선택
+              edgeStartNodeId = nid;
+              edgeStartButton = e.button;
+              edgePreviewClient = {x: localX, y: localY};
+              showToast(`Edge: ${nid} → ?`);
+              render();
+            } else {
+              // 두 번째 노드 → 엣지 생성
+              const bidir = (edgeStartButton === 2) || (e.button === 2);
+              addEdgeBetween(edgeStartNodeId, nid, bidir);
+              edgeStartNodeId = "";
+              edgePreviewClient = null;
+              render();
+            }
+          }
+          // 빈 공간 클릭 = 진행 중 cancel
+          else if (edgeStartNodeId) {
+            edgeStartNodeId = "";
+            edgePreviewClient = null;
+            showToast("Edge add cancelled");
+            render();
+          }
+          return;
+        }
+        if (buildTool === "delete") {
+          if (onNode) {
+            deleteNode(e.target.closest("[data-node-id]").dataset.nodeId);
+            render();
+          } else if (onEdge) {
+            deleteEdge(e.target.closest("[data-edge-id]").dataset.edgeId);
+            render();
+          } else if (e.button === 0) {
+            // 빈 공간 좌클릭 = pan
+            isPanning = true;
+            panStart = {x: e.clientX, y: e.clientY, panX, panY};
+            document.querySelector(".map-shell").classList.add("dragging");
+          }
+          return;
+        }
+      }
+
+      // Stamp 모드
+      if (onNode) return;
+      if (e.button !== 0) return;
       isPanning = true;
       panStart = {x: e.clientX, y: e.clientY, panX, panY};
       document.querySelector(".map-shell").classList.add("dragging");
     });
 
     document.getElementById("map").addEventListener("pointermove", (e) => {
+      const svg = e.currentTarget;
       if (isPanning && panStart) {
-        const svg = e.currentTarget;
         const rect = svg.getBoundingClientRect();
         panX = panStart.panX + (e.clientX - panStart.x) * (VW / rect.width);
         panY = panStart.panY + (e.clientY - panStart.y) * (VH / rect.height);
         render();
         return;
       }
-      if (paintTrajectory) {
-        const svg = e.currentTarget;
-        const pt = clientToSvg(svg, e.clientX, e.clientY);
-        // SVG 좌표를 viewport 좌표 (zoom/pan 적용 전) 로 환산
-        paintTrajectory.push({x: (pt.x - panX) / zoomScale, y: (pt.y - panY) / zoomScale});
+      const pt = clientToSvg(svg, e.clientX, e.clientY);
+      const localX = (pt.x - panX) / zoomScale;
+      const localY = (pt.y - panY) / zoomScale;
+
+      // 다중 선택 박스 업데이트
+      if (selectionBox) {
+        selectionBox.x2 = localX;
+        selectionBox.y2 = localY;
+        // 실시간으로 박스 안 노드 마킹 (시각 피드백)
+        selectedNodeIds.clear();
+        const xLo = Math.min(selectionBox.x1, selectionBox.x2);
+        const xHi = Math.max(selectionBox.x1, selectionBox.x2);
+        const yLo = Math.min(selectionBox.y1, selectionBox.y2);
+        const yHi = Math.max(selectionBox.y1, selectionBox.y2);
+        for (const n of nodes) {
+          const cx = sx(n.x), cy = sy(n.y);
+          if (cx >= xLo && cx <= xHi && cy >= yLo && cy <= yHi) {
+            selectedNodeIds.add(n.id);
+          }
+        }
         render();
+        return;
+      }
+
+      // Paint trajectory 점 추가
+      if (paintTrajectory) {
+        paintTrajectory.push({x: localX, y: localY});
+        render();
+        return;
+      }
+
+      // Add Edge 진행 중 — preview line 갱신
+      if (mode === "build" && buildTool === "edge" && edgeStartNodeId) {
+        edgePreviewClient = {x: localX, y: localY};
+        render();
+        return;
       }
     });
 
@@ -683,9 +935,27 @@
         isPanning = false; panStart = null;
         return;
       }
+      // 다중 선택 박스 종료 → 현재 모드/도구에 맞춰 일괄 적용
+      if (selectionBox) {
+        selectionBox = null;
+        if (selectedNodeIds.size > 0) {
+          // Stamp 모드: 현재 stamp 도구로 일괄
+          if (mode === "stamp" && stampTool !== "inspect") {
+            stampSelected(stampTool);
+          }
+          // Build + Delete: 일괄 삭제
+          else if (mode === "build" && buildTool === "delete") {
+            deleteSelected();
+          }
+          // 다른 도구는 선택 유지 (사용자가 다음 액션 결정)
+        }
+        render();
+        return;
+      }
+      // Paint trajectory 종료
       if (paintTrajectory) {
         if (paintTrajectory.length >= 2) {
-          // 마우스 버튼이 곧 방향: 좌(0)=단방향, 우(2)=양방향
+          pushHistory();
           const isBidir = (paintTrajectoryButton === 2);
           applyPaint(paintTrajectory, isBidir, e.altKey);
         }
@@ -697,11 +967,13 @@
     document.getElementById("map").addEventListener("pointerleave", (e) => {
       document.querySelector(".map-shell").classList.remove("dragging");
       if (paintTrajectory && paintTrajectory.length >= 2) {
+        pushHistory();
         const isBidir = (paintTrajectoryButton === 2);
         applyPaint(paintTrajectory, isBidir, false);
       }
       paintTrajectory = null;
       paintTrajectoryButton = -1;
+      selectionBox = null;
       isPanning = false; panStart = null;
       render();
     });
@@ -768,14 +1040,18 @@
       return Math.hypot(px - cx, py - cy);
     }
 
-    // ── 노드 클릭 (Stamp 모드일 때만 stamp 적용) ───────────────
-    // Paint 모드일 땐 click 이벤트 무시 — pointerdown/up 에서 trajectory 처리됨
+    // ── 좌클릭 (mouseup 직후) — Stamp / Build 모드 처리 ───────
+    // Paint 모드는 pointerdown/up 에서 trajectory 처리됨
     document.getElementById("map").addEventListener("click", (e) => {
       if (mode === "paint") return;
+      // Build 모드 click 은 pointerdown 에서 별도 처리 (좌/우 분기) → 여기선 skip
+      if (mode === "build") return;
+      // Stamp 모드
       const nodeHit = e.target.closest("[data-node-id]");
       if (!nodeHit) return;
       if (stampTool === "inspect") return;
       const n = nodeById.get(nodeHit.dataset.nodeId);
+      pushHistory();
       applyStamp(n, stampTool);
       render();
       showToast(`${n.id} → ${stampTool}`);
@@ -794,6 +1070,101 @@
       } else if (tool === "siding") {
         node.role = "siding"; node.is_charger = false; node.is_holding = false;
       }
+    }
+
+    // ── Build mutations (모두 호출 전 pushHistory()) ──────────
+    // SVG 좌표 (panX/panY/zoomScale 적용 전) → 데이터 좌표 (x, y)
+    function svgToData(sxv, syv) {
+      const x = (sxv - PAD) / scaleFit + minX;
+      const y = ((VH - PAD) - syv) / scaleFit + minY;
+      return {x, y};
+    }
+    function addNodeAt(svgX, svgY) {
+      pushHistory();
+      const {x, y} = svgToData(svgX, svgY);
+      const id = nextNodeId();
+      const newNode = {
+        id, x, y, name: id,
+        role: "standard", is_charger: false, is_holding: false,
+        degree_in: 0, degree_out: 0,
+      };
+      nodes.push(newNode);
+      nodeById.set(id, newNode);
+      showToast(`+ Node ${id} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+    }
+    function addEdgeBetween(srcId, dstId, bidir) {
+      if (srcId === dstId) { showToast("동일 노드 — 엣지 생략"); return; }
+      // 같은 방향 중복?
+      if (edges.some(e => e.src === srcId && e.dst === dstId)) {
+        // 이미 있으면 양/단 update
+        const existing = edges.find(e => e.src === srcId && e.dst === dstId);
+        if (existing.bidir !== bidir) {
+          pushHistory();
+          existing.bidir = bidir;
+          showToast(`Edge ${srcId}→${dstId} → ${bidir ? '양방향' : '단방향'}`);
+        } else {
+          showToast(`이미 존재: ${srcId} → ${dstId}`);
+        }
+        return;
+      }
+      pushHistory();
+      const id = nextEdgeId();
+      edges.push({
+        id, src: srcId, dst: dstId,
+        bidir: !!bidir, corridor: "", access: "",
+      });
+      showToast(`+ Edge ${srcId} ${bidir ? '↔' : '→'} ${dstId}`);
+    }
+    function deleteNode(id) {
+      pushHistory();
+      const idx = nodes.findIndex(n => n.id === id);
+      if (idx >= 0) nodes.splice(idx, 1);
+      nodeById.delete(id);
+      // 관련 엣지 모두 삭제
+      const before = edges.length;
+      for (let i = edges.length - 1; i >= 0; i--) {
+        if (edges[i].src === id || edges[i].dst === id) edges.splice(i, 1);
+      }
+      showToast(`- Node ${id} (+ ${before - edges.length} edges)`);
+    }
+    function deleteEdge(id) {
+      pushHistory();
+      const idx = edges.findIndex(e => e.id === id);
+      if (idx >= 0) {
+        const e = edges[idx];
+        edges.splice(idx, 1);
+        showToast(`- Edge ${e.src} → ${e.dst}`);
+      }
+    }
+    function deleteSelected() {
+      if (selectedNodeIds.size === 0) return;
+      pushHistory();
+      const count = selectedNodeIds.size;
+      let edgeRemoved = 0;
+      for (const id of selectedNodeIds) {
+        const idx = nodes.findIndex(n => n.id === id);
+        if (idx >= 0) nodes.splice(idx, 1);
+        nodeById.delete(id);
+      }
+      for (let i = edges.length - 1; i >= 0; i--) {
+        if (selectedNodeIds.has(edges[i].src) || selectedNodeIds.has(edges[i].dst)) {
+          edges.splice(i, 1);
+          edgeRemoved++;
+        }
+      }
+      selectedNodeIds.clear();
+      showToast(`- ${count} nodes (+ ${edgeRemoved} edges)`);
+    }
+    function stampSelected(tool) {
+      if (selectedNodeIds.size === 0) return;
+      pushHistory();
+      const count = selectedNodeIds.size;
+      for (const id of selectedNodeIds) {
+        const n = nodeById.get(id);
+        if (n) applyStamp(n, tool);
+      }
+      selectedNodeIds.clear();
+      showToast(`${count} nodes → ${tool}`);
     }
 
     // ── 우클릭: 브라우저 기본 메뉴 차단 + Stamp 모드 노드 우클릭 = Reset
