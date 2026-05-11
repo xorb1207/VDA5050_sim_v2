@@ -305,9 +305,12 @@ _TEMPLATE = r"""<!doctype html>
       <div class="panel">
         <h2>Edit Mode</h2>
         <div class="mode-toggle" id="mode-toggle">
-          <button data-mode="paint" class="active">Paint</button>
-          <button data-mode="stamp">Stamp</button>
-          <button data-mode="single">Single</button>
+          <button data-mode="paint" class="active">Paint <span class="hint-key">P</span></button>
+          <button data-mode="stamp">Stamp <span class="hint-key">S</span></button>
+          <button data-mode="single">Single <span class="hint-key">N</span></button>
+        </div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:6px;">
+          숫자키 2~5 누르면 자동으로 Stamp 모드로 전환됩니다
         </div>
 
         <!-- Paint 모드 옵션 -->
@@ -441,12 +444,18 @@ _TEMPLATE = r"""<!doctype html>
     }
 
     // ── 모드 토글 ───────────────────────────────────────────────
+    function setMode(newMode) {
+      mode = newMode;
+      document.querySelectorAll("#mode-toggle button").forEach(b =>
+        b.classList.toggle("active", b.dataset.mode === newMode));
+      document.getElementById("paint-options").style.display = (newMode === "paint") ? "" : "none";
+      // Paint 모드에서 다른 모드로 가면 진행 중인 trajectory cancel
+      if (newMode !== "paint") { paintTrajectory = null; render(); }
+    }
     document.getElementById("mode-toggle").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-mode]");
       if (!btn) return;
-      mode = btn.dataset.mode;
-      document.querySelectorAll("#mode-toggle button").forEach(b => b.classList.toggle("active", b === btn));
-      document.getElementById("paint-options").style.display = (mode === "paint") ? "" : "none";
+      setMode(btn.dataset.mode);
     });
 
     // Paint 방향 토글
@@ -470,17 +479,28 @@ _TEMPLATE = r"""<!doctype html>
       selectStamp(btn.dataset.stamp);
     });
 
-    // 키보드 단축키: 숫자키 = stamp, Space = pan 모드 override, Shift/Alt = paint 임시 방향
+    // 키보드 단축키:
+    //   숫자키 1~5 / 0 → Stamp 도구 선택 + Stamp 모드 자동 전환
+    //   P/S/N 키     → Paint / Stamp / Single 모드 직접 전환
+    //   Space        → 누르고 있는 동안 pan 모드 (어느 모드든)
+    //   Shift / Alt  → Paint drag 시 임시 override (handler 안에서 e.shiftKey/altKey 체크)
+    //   Escape       → Inspect 도구 + Paint 모드 (안전 상태로)
     document.addEventListener("keydown", (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       const stampMap = {"1":"inspect","2":"station","3":"charger","4":"holding","5":"siding","0":"reset"};
       if (stampMap[e.key]) {
         selectStamp(stampMap[e.key]);
+        // ★ 자동 모드 전환: stamp 도구를 누르면 Stamp 모드로 가야 클릭이 stamp 가 됨
+        setMode("stamp");
         e.preventDefault();
         return;
       }
+      if (e.key === "p" || e.key === "P") { setMode("paint"); e.preventDefault(); return; }
+      if (e.key === "s" || e.key === "S") { setMode("stamp"); e.preventDefault(); return; }
+      if (e.key === "n" || e.key === "N") { setMode("single"); e.preventDefault(); return; }
       if (e.key === "Escape") {
         selectStamp("inspect");
+        setMode("paint");
         paintTrajectory = null;
         render();
         return;
@@ -655,12 +675,15 @@ _TEMPLATE = r"""<!doctype html>
     //   Paint 모드 + 빈 공간 드래그: trajectory 그리기
     //   Stamp/Single/Inspect 모드 + 빈 공간 드래그: pan
     //   노드 위에서 시작한 드래그: 노드 클릭 (mouseup) 우선, drag 무시
+    // SVG screen pixel → viewBox 좌표 (preserveAspectRatio letterbox 정확히 처리)
     function clientToSvg(svg, clientX, clientY) {
-      const rect = svg.getBoundingClientRect();
-      return {
-        x: (clientX - rect.left) * (VW / rect.width),
-        y: (clientY - rect.top) * (VH / rect.height),
-      };
+      const pt = svg.createSVGPoint();
+      pt.x = clientX; pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return {x: 0, y: 0};
+      const inv = ctm.inverse();
+      const local = pt.matrixTransform(inv);
+      return {x: local.x, y: local.y};
     }
 
     document.getElementById("map").addEventListener("pointerdown", (e) => {
@@ -668,19 +691,28 @@ _TEMPLATE = r"""<!doctype html>
       const svg = e.currentTarget;
       const pt = clientToSvg(svg, e.clientX, e.clientY);
 
-      // Stamp/Single/Inspect 모드 + 노드 클릭 = drag 시작 X (mouseup 에서 stamp 적용)
-      if (onNode && mode !== "paint") return;
-
-      if (spaceKeyDown || mode !== "paint") {
-        // Pan 모드 (Space override 또는 비 Paint 모드의 빈 공간)
+      // ── 분기 ──────────────────────────────────────────────
+      // 1) Space 누르고 있으면 → 무조건 pan (어느 모드든)
+      // 2) Paint 모드 → trajectory 그리기 시작 (노드 위에서도 OK)
+      // 3) Stamp / Single 모드 + 노드 위 → drag 시작 안 함 (mouseup 에서 click 처리)
+      // 4) Stamp / Single 모드 + 빈 공간 → pan
+      if (spaceKeyDown) {
         isPanning = true;
         panStart = {x: e.clientX, y: e.clientY, panX, panY};
         document.querySelector(".map-shell").classList.add("dragging");
-      } else {
-        // Paint 모드 — trajectory 그리기 시작
+        return;
+      }
+      if (mode === "paint") {
+        // Paint 모드 — 위치와 무관하게 trajectory
         paintTrajectory = [{x: (pt.x - panX) / zoomScale, y: (pt.y - panY) / zoomScale}];
         e.preventDefault();
+        return;
       }
+      // Stamp / Single 모드
+      if (onNode) return; // 노드 클릭은 mouseup 에서 stamp 처리
+      isPanning = true;
+      panStart = {x: e.clientX, y: e.clientY, panX, panY};
+      document.querySelector(".map-shell").classList.add("dragging");
     });
 
     document.getElementById("map").addEventListener("pointermove", (e) => {
@@ -790,8 +822,10 @@ _TEMPLATE = r"""<!doctype html>
       return Math.hypot(px - cx, py - cy);
     }
 
-    // ── 노드 클릭 (Stamp 적용 — Phase 3 stub) ──────────────────
+    // ── 노드 클릭 (Stamp 모드일 때만 stamp 적용) ───────────────
+    // Paint 모드일 땐 click 이벤트 무시 — pointerdown/up 에서 trajectory 처리됨
     document.getElementById("map").addEventListener("click", (e) => {
+      if (mode === "paint") return;
       const nodeHit = e.target.closest("[data-node-id]");
       if (!nodeHit) return;
       if (stampTool === "inspect") return;
