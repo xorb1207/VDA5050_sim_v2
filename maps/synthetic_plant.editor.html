@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Map Editor</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f9; --surface: #ffffff; --surface-2: #fafbfd; --surface-3: #f1f4f8;
+      --ink: #0f172a; --muted: #64748b; --muted-2: #94a3b8;
+      --border: #e3e8ef; --border-strong: #cbd3df;
+      --edge: #c6d0db; --edge-bidir: #2459d1; --edge-unidir: #0f9d58;
+      --accent: #2563eb; --accent-soft: #e6efff;
+      --success: #0f9d58; --warn: #c77700; --danger: #c0392b;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Apple SD Gothic Neo", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+      --shadow-sm: 0 1px 2px rgba(15,23,42,0.05);
+      --radius-sm: 6px; --radius: 10px;
+      /* 노드 역할 색 (도장 도구와 일치) */
+      --role-standard: #8b98a8;
+      --role-station: #0f9d58;
+      --role-charger: #1f6feb;
+      --role-holding: #94a3b8;
+      --role-siding: #e0a000;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:var(--font-sans); font-size:13px;
+      background:var(--bg); color:var(--ink); height:100vh; overflow:hidden;
+      -webkit-font-smoothing:antialiased; }
+    h1, h2, h3 { margin:0; letter-spacing:-0.015em; }
+    button { font-family:inherit; cursor:pointer; }
+    button:disabled { cursor:not-allowed; opacity:0.4; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      height: 100vh;
+    }
+    .map-area { display:flex; flex-direction:column; min-width:0; }
+    .map-toolbar {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px;
+      background:var(--surface);
+      border-bottom:1px solid var(--border);
+    }
+    .map-toolbar h1 { font-size:14px; font-weight:700; }
+    .map-toolbar .stat-chip {
+      display:inline-flex; gap:4px; align-items:baseline;
+      padding:3px 9px; border-radius:999px;
+      background:var(--surface-3); font-size:11px; color:var(--muted);
+    }
+    .map-toolbar .stat-chip strong {
+      color:var(--ink); font-family:var(--font-mono); font-weight:600;
+    }
+    .map-toolbar .spacer { flex:1; }
+    .map-toolbar button {
+      height:28px; padding:0 12px; border:1px solid var(--border);
+      background:var(--surface); border-radius:var(--radius-sm);
+      color:var(--ink); font-size:12px; font-weight:500;
+    }
+    .map-toolbar button:hover { background:var(--surface-3); border-color:var(--border-strong); }
+    .map-toolbar button.primary {
+      background:var(--ink); color:#fff; border-color:var(--ink);
+    }
+    .map-toolbar button.primary:hover { background:#1a253b; }
+
+    .map-shell {
+      flex:1; min-height:0;
+      background:linear-gradient(180deg, #fcfdff 0%, #f7f9fc 100%);
+      position:relative; overflow:hidden;
+    }
+    svg#map { width:100%; height:100%; display:block; }
+
+    .side {
+      border-left:1px solid var(--border);
+      background:var(--surface);
+      display:flex; flex-direction:column;
+      overflow:auto;
+    }
+    .panel { padding:14px 16px; border-bottom:1px solid var(--border); }
+    .panel h2 {
+      font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;
+      color:var(--muted); margin-bottom:10px;
+    }
+
+    /* 모드 토글 */
+    .mode-toggle { display:flex; gap:4px; padding:3px; background:var(--surface-3); border-radius:8px; }
+    .mode-toggle button {
+      flex:1; height:30px; border:0; background:transparent; color:var(--muted);
+      font-size:12px; font-weight:600; border-radius:5px;
+    }
+    .mode-toggle button.active { background:var(--surface); color:var(--ink); box-shadow:var(--shadow-sm); }
+
+    /* Paint 방향 토글 */
+    .dir-toggle { display:flex; gap:6px; margin-top:8px; }
+    .dir-toggle button {
+      flex:1; height:36px; border:1px solid var(--border);
+      background:var(--surface); border-radius:var(--radius-sm);
+      font-size:14px; font-weight:600; color:var(--muted);
+    }
+    .dir-toggle button.active {
+      background:var(--accent-soft); color:var(--accent); border-color:var(--accent);
+    }
+    .hint-key {
+      display:inline-block; padding:1px 6px; font-family:var(--font-mono); font-size:10px;
+      background:var(--surface-3); border-radius:3px; color:var(--muted-2);
+      vertical-align:middle; margin-left:6px;
+    }
+
+    /* Stamp 도구 그리드 */
+    .stamp-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; }
+    .stamp-btn {
+      display:flex; flex-direction:column; align-items:center; gap:3px;
+      padding:9px 6px; border:1px solid var(--border);
+      background:var(--surface); border-radius:var(--radius-sm);
+      font-size:11px; color:var(--ink); cursor:pointer;
+    }
+    .stamp-btn:hover { border-color:var(--border-strong); background:var(--surface-3); }
+    .stamp-btn.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft) inset;
+    }
+    .stamp-btn .icon { font-size:16px; line-height:1; }
+    .stamp-btn .key {
+      font-family: var(--font-mono); font-size:9.5px; color:var(--muted-2);
+    }
+
+    /* Info / 검증 패널 */
+    .stat-row {
+      display:flex; justify-content:space-between; padding:4px 0;
+      font-size:12px; border-bottom:1px dashed var(--border);
+    }
+    .stat-row:last-of-type { border-bottom:0; }
+    .stat-row .k { color:var(--muted); }
+    .stat-row .v { font-family:var(--font-mono); font-weight:600; }
+    .warn-item {
+      padding:6px 8px; margin-bottom:4px; border-radius:5px;
+      border-left:3px solid var(--muted); background:var(--surface-2);
+      font-size:11.5px;
+    }
+    .warn-item.error { border-left-color:var(--danger); background:#fde8e7; }
+    .warn-item.warn { border-left-color:var(--warn); background:#fff3df; }
+    .warn-item.info { border-left-color:var(--accent); background:var(--accent-soft); }
+
+    /* Inspector */
+    .inspector-empty {
+      padding:14px 16px; color:var(--muted); font-size:12px; font-style:italic;
+    }
+    .inspector-row {
+      display:flex; justify-content:space-between; gap:8px;
+      padding:5px 0; font-size:12px;
+    }
+    .inspector-row .k { color:var(--muted); }
+    .inspector-row .v { font-family:var(--font-mono); }
+
+    /* 우클릭 컨텍스트 메뉴 (Phase 3 에서 사용) */
+    .ctx-menu {
+      position:fixed; background:var(--surface);
+      border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+      box-shadow:0 4px 14px rgba(15,23,42,0.15);
+      padding:4px; min-width:140px; z-index:1000;
+      display:none;
+    }
+    .ctx-menu.show { display:block; }
+    .ctx-menu button {
+      display:flex; align-items:center; gap:8px;
+      width:100%; padding:6px 10px; border:0; background:transparent;
+      text-align:left; font-size:12px; color:var(--ink);
+      border-radius:4px;
+    }
+    .ctx-menu button:hover { background:var(--surface-3); }
+
+    /* Paint trajectory preview (드래그 중 시각 피드백) */
+    .traj-preview {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 3;
+      stroke-dasharray: 6 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    /* Pan 모드 (Space 키) 시 커서 */
+    .map-shell.pan-mode { cursor: grab; }
+    .map-shell.pan-mode.dragging { cursor: grabbing; }
+    /* 노드 hover 강조 */
+    .node-hover { stroke: var(--accent); stroke-width: 2; opacity: 0.5; }
+
+    /* 토스트 (Phase 4 저장 알림 등) */
+    .toast {
+      position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+      padding:10px 18px; background:var(--ink); color:#fff;
+      border-radius:999px; font-size:12.5px; font-weight:500;
+      opacity:0; transition:opacity 0.2s; z-index:2000;
+    }
+    .toast.show { opacity:1; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- 좌측: 맵 + 툴바 -->
+    <div class="map-area">
+      <div class="map-toolbar">
+        <h1>Map Editor</h1>
+        <span class="stat-chip">nodes <strong id="stat-nodes">—</strong></span>
+        <span class="stat-chip">edges <strong id="stat-edges">—</strong></span>
+        <span class="stat-chip">bidir <strong id="stat-bidir">—</strong></span>
+        <span class="stat-chip" id="chip-components">component <strong id="stat-components">—</strong></span>
+        <span class="spacer"></span>
+        <button id="btn-reset-view" title="줌/팬 초기화">⌂ Reset View</button>
+        <button id="btn-save">💾 Save</button>
+        <button id="btn-save-run" class="primary">▶ Save &amp; Run</button>
+      </div>
+      <div class="map-shell">
+        <svg id="map"></svg>
+      </div>
+    </div>
+
+    <!-- 우측 패널: 도구 / 인스펙터 -->
+    <aside class="side">
+      <!-- 모드 토글 -->
+      <div class="panel">
+        <h2>Edit Mode</h2>
+        <div class="mode-toggle" id="mode-toggle">
+          <button data-mode="paint" class="active">Paint</button>
+          <button data-mode="stamp">Stamp</button>
+          <button data-mode="single">Single</button>
+        </div>
+
+        <!-- Paint 모드 옵션 -->
+        <div id="paint-options" style="margin-top:12px;">
+          <div class="hint" style="font-size:11.5px; color:var(--muted);">
+            드래그로 화살표 쫙 → 가까운 엣지 일괄 방향
+          </div>
+          <div class="dir-toggle">
+            <button data-dir="uni" class="active">→ 단방향<span class="hint-key">drag</span></button>
+            <button data-dir="bi">↔ 양방향<span class="hint-key">Shift</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stamp 도구 -->
+      <div class="panel">
+        <h2>Node Role Stamp</h2>
+        <div class="stamp-grid" id="stamp-grid">
+          <button class="stamp-btn active" data-stamp="inspect">
+            <span class="icon">👁</span><span>Inspect</span><span class="key">1</span>
+          </button>
+          <button class="stamp-btn" data-stamp="station">
+            <span class="icon" style="color:var(--role-station)">●</span><span>Station</span><span class="key">2</span>
+          </button>
+          <button class="stamp-btn" data-stamp="charger">
+            <span class="icon" style="color:var(--role-charger)">■</span><span>Charger</span><span class="key">3</span>
+          </button>
+          <button class="stamp-btn" data-stamp="holding">
+            <span class="icon">○</span><span>Holding</span><span class="key">4</span>
+          </button>
+          <button class="stamp-btn" data-stamp="siding">
+            <span class="icon" style="color:var(--role-siding)">◆</span><span>Siding</span><span class="key">5</span>
+          </button>
+          <button class="stamp-btn" data-stamp="reset">
+            <span class="icon">↺</span><span>Reset</span><span class="key">0</span>
+          </button>
+        </div>
+        <div class="hint" style="font-size:11px; color:var(--muted); margin-top:8px;">
+          숫자키로 빠른 전환 · Shift+드래그로 영역 선택 일괄 적용
+        </div>
+      </div>
+
+      <!-- Inspector / 선택 정보 -->
+      <div class="panel">
+        <h2>Inspector</h2>
+        <div id="inspector" class="inspector-empty">
+          노드 또는 엣지 위에 마우스를 올리면 정보 표시
+        </div>
+      </div>
+
+      <!-- 검증 리포트 -->
+      <div class="panel">
+        <h2>Validation</h2>
+        <div id="validation-list"></div>
+        <div style="margin-top:10px;">
+          <div class="stat-row"><span class="k">Connected components</span><span class="v" id="vstat-cc">—</span></div>
+          <div class="stat-row"><span class="k">Isolated nodes</span><span class="v" id="vstat-iso">—</span></div>
+          <div class="stat-row"><span class="k">Dead-end nodes</span><span class="v" id="vstat-de">—</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 우클릭 컨텍스트 메뉴 (노드 우클릭 시) -->
+  <div class="ctx-menu" id="node-ctx-menu">
+    <button data-stamp="station">🟢 Station 으로</button>
+    <button data-stamp="charger">🔵 Charger 로</button>
+    <button data-stamp="holding">⚪ Holding 으로</button>
+    <button data-stamp="siding">🟡 Siding 으로</button>
+    <button data-stamp="reset">⬜ Standard 로 (Reset)</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── 데이터 로드 ─────────────────────────────────────────────
+    const PAYLOAD = {"title": "Map Editor — synthetic_plant", "nodes": [{"id": "N0001", "x": 0.11, "y": 79.62, "name": "N_north_x0", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0002", "x": 9.82, "y": 79.78, "name": "N_north_x10", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0003", "x": 20.19, "y": 80.14, "name": "N_north_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0004", "x": 30.31, "y": 79.67, "name": "N_north_x30", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0005", "x": 39.94, "y": 79.62, "name": "N_north_x40", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0006", "x": 49.77, "y": 80.0, "name": "N_north_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0007", "x": 59.62, "y": 79.76, "name": "N_north_x60", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0008", "x": 70.12, "y": 80.04, "name": "N_north_x70", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0009", "x": 79.78, "y": 80.07, "name": "N_north_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0010", "x": 90.25, "y": 79.61, "name": "N_north_x90", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0011", "x": 100.24, "y": 80.16, "name": "N_north_x100", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0012", "x": 109.87, "y": 79.72, "name": "N_north_x110", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0013", "x": 120.37, "y": 79.87, "name": "N_north_x120", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0014", "x": -0.33, "y": 49.68, "name": "N_center_x0", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 2}, {"id": "N0015", "x": 10.28, "y": 50.08, "name": "N_center_x10", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0016", "x": 20.25, "y": 50.18, "name": "N_center_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0017", "x": 30.03, "y": 50.38, "name": "N_center_x30", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0018", "x": 39.9, "y": 50.04, "name": "N_center_x40", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0019", "x": 50.26, "y": 50.09, "name": "N_center_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0020", "x": 60.29, "y": 50.06, "name": "N_center_x60", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0021", "x": 70.16, "y": 49.64, "name": "N_center_x70", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0022", "x": 79.78, "y": 49.83, "name": "N_center_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2}, {"id": "N0023", "x": 89.66, "y": 49.79, "name": "N_center_x90", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0024", "x": 99.68, "y": 49.82, "name": "N_center_x100", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0025", "x": 110.11, "y": 49.89, "name": "N_center_x110", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0026", "x": 119.9, "y": 49.77, "name": "N_center_x120", "role": "holding_candidate", "is_charger": false, "is_holding": true, "degree_in": 1, "degree_out": 0}, {"id": "N0027", "x": 9.81, "y": 20.35, "name": "N_south_x10", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 1}, {"id": "N0028", "x": 20.12, "y": 20.09, "name": "N_south_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0029", "x": 29.74, "y": 20.18, "name": "N_south_x30", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0030", "x": 39.73, "y": 19.9, "name": "N_south_x40", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0031", "x": 50.39, "y": 20.11, "name": "N_south_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0032", "x": 60.05, "y": 20.15, "name": "N_south_x60", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0033", "x": 70.27, "y": 20.22, "name": "N_south_x70", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0034", "x": 79.78, "y": 19.63, "name": "N_south_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0035", "x": 89.85, "y": 19.81, "name": "N_south_x90", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0036", "x": 99.77, "y": 20.35, "name": "N_south_x100", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0037", "x": 110.3, "y": 19.85, "name": "N_south_x110", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 2}, {"id": "N0038", "x": 20.12, "y": 64.92, "name": "N_bay_x20_mid", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0039", "x": 17.33, "y": 64.97, "name": "N_station_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0040", "x": 49.81, "y": 64.8, "name": "N_bay_x50_mid", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0041", "x": 47.05, "y": 64.81, "name": "N_station_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0042", "x": 80.07, "y": 65.32, "name": "N_bay_x80_mid", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3}, {"id": "N0043", "x": 76.92, "y": 64.78, "name": "N_station_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0044", "x": -2.6, "y": 50.01, "name": "N_charger_access", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 4, "degree_out": 4}, {"id": "N0045", "x": -10.33, "y": 44.64, "name": "N_charger_y45", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0046", "x": -10.31, "y": 50.1, "name": "N_charger_y50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0047", "x": -9.77, "y": 54.94, "name": "N_charger_y55", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0048", "x": 124.65, "y": 79.91, "name": "N_holding_access", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 4, "degree_out": 4}, {"id": "N0049", "x": 130.4, "y": 80.02, "name": "N_holding_0", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0050", "x": 130.38, "y": 85.29, "name": "N_holding_1", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}, {"id": "N0051", "x": 129.61, "y": 90.18, "name": "N_holding_2", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1}], "edges": [{"id": "L0001", "src": "N0001", "dst": "N0002", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0003", "src": "N0002", "dst": "N0003", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0005", "src": "N0003", "dst": "N0004", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0007", "src": "N0004", "dst": "N0005", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0009", "src": "N0005", "dst": "N0006", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0011", "src": "N0006", "dst": "N0007", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0013", "src": "N0007", "dst": "N0008", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0015", "src": "N0008", "dst": "N0009", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0017", "src": "N0009", "dst": "N0010", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0019", "src": "N0010", "dst": "N0011", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0021", "src": "N0011", "dst": "N0012", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0023", "src": "N0012", "dst": "N0013", "bidir": true, "corridor": "north", "access": ""}, {"id": "L0025", "src": "N0014", "dst": "N0015", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0026", "src": "N0015", "dst": "N0016", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0027", "src": "N0016", "dst": "N0017", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0028", "src": "N0017", "dst": "N0018", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0029", "src": "N0018", "dst": "N0019", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0030", "src": "N0019", "dst": "N0020", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0031", "src": "N0020", "dst": "N0021", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0032", "src": "N0021", "dst": "N0022", "bidir": false, "corridor": "", "access": "access"}, {"id": "L0033", "src": "N0022", "dst": "N0023", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0034", "src": "N0023", "dst": "N0024", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0035", "src": "N0024", "dst": "N0025", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0036", "src": "N0025", "dst": "N0026", "bidir": false, "corridor": "center", "access": ""}, {"id": "L0037", "src": "N0037", "dst": "N0036", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0038", "src": "N0036", "dst": "N0035", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0039", "src": "N0035", "dst": "N0034", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0040", "src": "N0034", "dst": "N0033", "bidir": false, "corridor": "", "access": "access"}, {"id": "L0041", "src": "N0033", "dst": "N0032", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0042", "src": "N0032", "dst": "N0031", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0043", "src": "N0031", "dst": "N0030", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0044", "src": "N0030", "dst": "N0029", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0045", "src": "N0029", "dst": "N0028", "bidir": false, "corridor": "", "access": "access"}, {"id": "L0046", "src": "N0028", "dst": "N0027", "bidir": false, "corridor": "south", "access": ""}, {"id": "L0047", "src": "N0003", "dst": "N0038", "bidir": true, "corridor": "bay", "access": ""}, {"id": "L0049", "src": "N0038", "dst": "N0016", "bidir": true, "corridor": "bay", "access": ""}, {"id": "L0051", "src": "N0038", "dst": "N0039", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0053", "src": "N0006", "dst": "N0040", "bidir": true, "corridor": "bay", "access": ""}, {"id": "L0055", "src": "N0040", "dst": "N0019", "bidir": true, "corridor": "bay", "access": ""}, {"id": "L0057", "src": "N0040", "dst": "N0041", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0059", "src": "N0009", "dst": "N0042", "bidir": true, "corridor": "bay", "access": ""}, {"id": "L0061", "src": "N0042", "dst": "N0022", "bidir": true, "corridor": "bay", "access": ""}, {"id": "L0063", "src": "N0042", "dst": "N0043", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0065", "src": "N0044", "dst": "N0014", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0067", "src": "N0044", "dst": "N0045", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0069", "src": "N0044", "dst": "N0046", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0071", "src": "N0044", "dst": "N0047", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0073", "src": "N0002", "dst": "N0027", "bidir": true, "corridor": "misc", "access": ""}, {"id": "L0075", "src": "N0013", "dst": "N0037", "bidir": true, "corridor": "misc", "access": ""}, {"id": "L0077", "src": "N0013", "dst": "N0048", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0079", "src": "N0048", "dst": "N0049", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0081", "src": "N0048", "dst": "N0050", "bidir": true, "corridor": "", "access": "access"}, {"id": "L0083", "src": "N0048", "dst": "N0051", "bidir": true, "corridor": "misc", "access": ""}], "report": {"node_count": 51, "edge_count_raw": 84, "edge_count_after_merge": 53, "bidirectional_count": 31, "inferred_chargers": 0, "inferred_stations": 0, "inferred_holding": 1, "connected_components": 1, "isolated_nodes": [], "dead_end_nodes": ["N0026"], "corridor_stats": {"north": 11, "(none)": 14, "center": 11, "south": 8, "bay": 6, "misc": 3}, "warnings": [{"severity": "warn", "code": "dead_end_nodes", "message": "1 개 노드가 dead-end (들어오기만 가능)"}, {"severity": "error", "code": "no_chargers", "message": "charger 로 추론된 노드가 없음. 검토 UI 에서 charger 지정 필요"}, {"severity": "info", "code": "unlabeled_corridor", "message": "17 개 엣지 corridor 추론 실패 (access/짧은 엣지일 수 있음)"}]}};
+    const nodes = PAYLOAD.nodes;            // 편집 대상 (mutable)
+    const edges = PAYLOAD.edges;            // 편집 대상 (mutable)
+    const report = PAYLOAD.report;
+    const nodeById = new Map(nodes.map(n => [n.id, n]));
+
+    // ── 편집 상태 ───────────────────────────────────────────────
+    let mode = "paint";              // paint / stamp / single
+    let paintDir = "uni";            // uni / bi (Paint 모드 방향 토글)
+    let stampTool = "inspect";       // inspect / station / charger / holding / siding / reset
+    let zoomScale = 1, panX = 0, panY = 0;
+    let isPanning = false, panStart = null;
+    let hoveredNodeId = "", hoveredEdgeId = "";
+
+    // Paint 모드 상태
+    let paintTrajectory = null;   // [{x,y}, ...] in SVG coords (drag 중)
+    let spaceKeyDown = false;     // Space 누르고 있는 동안 pan 모드 override
+
+    // ── 좌표 fit ────────────────────────────────────────────────
+    // 노드 좌표 분포를 SVG viewport (1000 × 700) 에 맞춤
+    const PAD = 40;
+    const VW = 1000, VH = 700;
+    const xs = nodes.map(n => n.x);
+    const ys = nodes.map(n => n.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const rangeX = Math.max(maxX - minX, 1), rangeY = Math.max(maxY - minY, 1);
+    const scaleFit = Math.min((VW - 2*PAD) / rangeX, (VH - 2*PAD) / rangeY);
+    // 좌측 상단 원점 SVG vs y-up 데이터 좌표 변환
+    function sx(x) { return PAD + (x - minX) * scaleFit; }
+    function sy(y) { return VH - PAD - (y - minY) * scaleFit; }
+
+    // ── 통계 칩 채우기 ──────────────────────────────────────────
+    document.getElementById("stat-nodes").textContent = report.node_count;
+    document.getElementById("stat-edges").textContent =
+      `${report.edge_count_raw} → ${report.edge_count_after_merge}`;
+    document.getElementById("stat-bidir").textContent = report.bidirectional_count;
+    document.getElementById("stat-components").textContent = report.connected_components;
+    if (report.connected_components > 1) {
+      document.getElementById("chip-components").style.background = "#fde8e7";
+      document.getElementById("chip-components").style.color = "var(--danger)";
+    }
+
+    // ── 검증 패널 ───────────────────────────────────────────────
+    document.getElementById("vstat-cc").textContent = report.connected_components;
+    document.getElementById("vstat-iso").textContent = report.isolated_nodes.length;
+    document.getElementById("vstat-de").textContent = report.dead_end_nodes.length;
+    const vlist = document.getElementById("validation-list");
+    if (report.warnings.length === 0) {
+      vlist.innerHTML = `<div class="warn-item info">✓ 검증 통과</div>`;
+    } else {
+      vlist.innerHTML = report.warnings.map(w =>
+        `<div class="warn-item ${w.severity}"><strong>[${w.severity}]</strong> ${w.message}</div>`
+      ).join("");
+    }
+
+    // ── 모드 토글 ───────────────────────────────────────────────
+    document.getElementById("mode-toggle").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-mode]");
+      if (!btn) return;
+      mode = btn.dataset.mode;
+      document.querySelectorAll("#mode-toggle button").forEach(b => b.classList.toggle("active", b === btn));
+      document.getElementById("paint-options").style.display = (mode === "paint") ? "" : "none";
+    });
+
+    // Paint 방향 토글
+    document.querySelectorAll(".dir-toggle button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        paintDir = btn.dataset.dir;
+        document.querySelectorAll(".dir-toggle button").forEach(b => b.classList.toggle("active", b === btn));
+      });
+    });
+
+    // ── Stamp 도구 선택 ─────────────────────────────────────────
+    function selectStamp(tool) {
+      stampTool = tool;
+      document.querySelectorAll(".stamp-btn").forEach(b =>
+        b.classList.toggle("active", b.dataset.stamp === tool)
+      );
+    }
+    document.getElementById("stamp-grid").addEventListener("click", (e) => {
+      const btn = e.target.closest(".stamp-btn");
+      if (!btn) return;
+      selectStamp(btn.dataset.stamp);
+    });
+
+    // 키보드 단축키: 숫자키 = stamp, Space = pan 모드 override, Shift/Alt = paint 임시 방향
+    document.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      const stampMap = {"1":"inspect","2":"station","3":"charger","4":"holding","5":"siding","0":"reset"};
+      if (stampMap[e.key]) {
+        selectStamp(stampMap[e.key]);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Escape") {
+        selectStamp("inspect");
+        paintTrajectory = null;
+        render();
+        return;
+      }
+      if (e.code === "Space" && !spaceKeyDown) {
+        spaceKeyDown = true;
+        document.querySelector(".map-shell").classList.add("pan-mode");
+        e.preventDefault();
+      }
+    });
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "Space") {
+        spaceKeyDown = false;
+        document.querySelector(".map-shell").classList.remove("pan-mode");
+      }
+    });
+
+    // ── 맵 렌더링 ───────────────────────────────────────────────
+    // Phase 1: 정적 렌더링 (편집 결과를 즉시 반영하지만 인터랙션은 stub)
+    function render() {
+      const svg = document.getElementById("map");
+      svg.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+      const labelScale = 1 / Math.max(zoomScale, 0.001);
+
+      const edgesSvg = edges.map(e => {
+        const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+        if (!a || !b) return "";
+        const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
+        const stroke = e.bidir ? "var(--edge-bidir)" : "var(--edge-unidir)";
+        const width = 2;
+        const dx = x2-x1, dy = y2-y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        // 화살촉:
+        //  · 단방향 → 가운데 한 개 (forward)
+        //  · 양방향 → 양 끝 가까이 두 개 (각각 안쪽을 보는 chevron, 색깔이 같아도 양방향임이 한눈에)
+        let arrow = "";
+        if (e.bidir) {
+          // 양 끝 30% / 70% 지점에 화살촉. node 와 겹치지 않게.
+          const p1x = x1 + dx*0.3, p1y = y1 + dy*0.3;
+          const p2x = x1 + dx*0.7, p2y = y1 + dy*0.7;
+          // p1 의 화살촉은 src(x1,y1) 방향 (=뒤쪽), p2 는 dst(x2,y2) 방향 (=앞쪽)
+          arrow =
+            `<g transform="translate(${p1x} ${p1y}) scale(${labelScale}) rotate(${angle + 180})">
+              <polygon points="5,0 -3,-3 -3,3" fill="${stroke}" opacity="0.95" /></g>` +
+            `<g transform="translate(${p2x} ${p2y}) scale(${labelScale}) rotate(${angle})">
+              <polygon points="5,0 -3,-3 -3,3" fill="${stroke}" opacity="0.95" /></g>`;
+        } else {
+          const mx = (x1+x2)/2, my = (y1+y2)/2;
+          arrow = `<g transform="translate(${mx} ${my}) scale(${labelScale}) rotate(${angle})">
+            <polygon points="6,0 -3,-4 -3,4" fill="${stroke}" opacity="0.95" /></g>`;
+        }
+        return `<g data-edge-id="${e.id}">
+          <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                stroke="${stroke}" stroke-width="${width/zoomScale}"
+                stroke-linecap="round" vector-effect="non-scaling-stroke" />
+          ${arrow}
+        </g>`;
+      }).join("");
+
+      const nodesSvg = nodes.map(n => {
+        const cx = sx(n.x), cy = sy(n.y);
+        const color = roleColor(n.role, n.is_charger, n.is_holding);
+        const shape = roleShape(n.role, n.is_charger, n.is_holding, color);
+        const hoverRing = (n.id === hoveredNodeId)
+          ? `<circle class="node-hover" r="11" fill="none" />` : "";
+        // Click target r=22 (이전 r=14) — 클릭 미스 줄임. transparent 라 시각 영향 없음.
+        return `<g data-node-id="${n.id}" style="cursor:${stampTool === 'inspect' ? 'default' : 'pointer'}"
+                   transform="translate(${cx} ${cy}) scale(${labelScale})">
+          <circle r="22" fill="transparent" /> <!-- expanded click target -->
+          ${hoverRing}
+          ${shape}
+        </g>`;
+      }).join("");
+
+      // Paint trajectory preview (드래그 중에만)
+      const trajSvg = (paintTrajectory && paintTrajectory.length >= 2)
+        ? `<polyline class="traj-preview" points="${paintTrajectory.map(p => `${p.x},${p.y}`).join(' ')}" />`
+        : "";
+
+      svg.innerHTML = `<g transform="translate(${panX} ${panY}) scale(${zoomScale})">
+        ${edgesSvg}${nodesSvg}${trajSvg}
+      </g>`;
+    }
+
+    function roleColor(role, isCharger, isHolding) {
+      if (isCharger || role === "charger") return "var(--role-charger)";
+      if (role === "station" || role === "work") return "var(--role-station)";
+      if (isHolding || role === "holding" || role === "holding_candidate") return "var(--role-holding)";
+      if (role === "siding") return "var(--role-siding)";
+      return "var(--role-standard)";
+    }
+    function roleShape(role, isCharger, isHolding, color) {
+      if (isCharger || role === "charger")
+        return `<rect x="-5" y="-5" width="10" height="10" rx="1" fill="${color}" />`;
+      if (role === "station" || role === "work")
+        return `<circle r="5" fill="${color}" />`;
+      if (isHolding || role === "holding" || role === "holding_candidate")
+        return `<circle r="4" fill="#fff" stroke="${color}" stroke-width="2" />`;
+      if (role === "siding")
+        return `<polygon points="0,-5 5,0 0,5 -5,0" fill="${color}" />`;
+      return `<circle r="3" fill="${color}" opacity="0.7" />`;
+    }
+
+    // ── Hover (인스펙터 + 노드 하이라이트) ──────────────────────
+    document.getElementById("map").addEventListener("mousemove", (e) => {
+      const nodeHit = e.target.closest("[data-node-id]");
+      const edgeHit = e.target.closest("[data-edge-id]");
+      const prevHoverNode = hoveredNodeId;
+      if (nodeHit) {
+        hoveredNodeId = nodeHit.dataset.nodeId;
+        const n = nodeById.get(hoveredNodeId);
+        showInspectorNode(n);
+      } else if (edgeHit) {
+        hoveredNodeId = "";
+        const ed = edges.find(x => x.id === edgeHit.dataset.edgeId);
+        showInspectorEdge(ed);
+      } else {
+        hoveredNodeId = "";
+        document.getElementById("inspector").innerHTML =
+          '<div class="inspector-empty">노드 또는 엣지 위에 마우스를 올리면 정보 표시</div>';
+      }
+      // 노드 hover ring 만 재렌더 (drag 중 아닐 때만)
+      if (prevHoverNode !== hoveredNodeId && !paintTrajectory && !isPanning) {
+        render();
+      }
+    });
+
+    function showInspectorNode(n) {
+      const role = n.role || "standard";
+      const extras = [];
+      if (n.is_charger) extras.push("charger");
+      if (n.is_holding) extras.push("holding");
+      document.getElementById("inspector").innerHTML = `
+        <div class="inspector-row"><span class="k">type</span><span class="v">📍 NODE</span></div>
+        <div class="inspector-row"><span class="k">id</span><span class="v">${n.id}</span></div>
+        <div class="inspector-row"><span class="k">name</span><span class="v">${n.name}</span></div>
+        <div class="inspector-row"><span class="k">position</span><span class="v">(${n.x.toFixed(1)}, ${n.y.toFixed(1)})</span></div>
+        <div class="inspector-row"><span class="k">role</span><span class="v">${role}${extras.length ? ' · ' + extras.join(', ') : ''}</span></div>
+        <div class="inspector-row"><span class="k">degree</span><span class="v">in ${n.degree_in} / out ${n.degree_out}</span></div>
+      `;
+    }
+    function showInspectorEdge(ed) {
+      const a = nodeById.get(ed.src), b = nodeById.get(ed.dst);
+      document.getElementById("inspector").innerHTML = `
+        <div class="inspector-row"><span class="k">type</span><span class="v">↔ EDGE</span></div>
+        <div class="inspector-row"><span class="k">id</span><span class="v">${ed.id}</span></div>
+        <div class="inspector-row"><span class="k">from → to</span><span class="v">${ed.src} → ${ed.dst}</span></div>
+        <div class="inspector-row"><span class="k">direction</span><span class="v">${ed.bidir ? '↔ bidirectional' : '→ unidirectional'}</span></div>
+        <div class="inspector-row"><span class="k">corridor</span><span class="v">${ed.corridor || '(unlabeled)'}</span></div>
+        <div class="inspector-row"><span class="k">access</span><span class="v">${ed.access || '—'}</span></div>
+      `;
+    }
+
+    // ── Pan / Zoom ─────────────────────────────────────────────
+    document.getElementById("map").addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) * (VW / rect.width);
+      const cy = (e.clientY - rect.top) * (VH / rect.height);
+      const nextScale = Math.min(8, Math.max(0.4, zoomScale * (e.deltaY < 0 ? 1.12 : 0.9)));
+      const ratio = nextScale / zoomScale;
+      panX = cx - (cx - panX) * ratio;
+      panY = cy - (cy - panY) * ratio;
+      zoomScale = nextScale;
+      render();
+    }, {passive: false});
+
+    // ── 마우스 인터랙션 — 모드별 분기 ─────────────────────────
+    //   pan 우선: Space 누른 상태면 모드와 무관하게 pan
+    //   Paint 모드 + 빈 공간 드래그: trajectory 그리기
+    //   Stamp/Single/Inspect 모드 + 빈 공간 드래그: pan
+    //   노드 위에서 시작한 드래그: 노드 클릭 (mouseup) 우선, drag 무시
+    function clientToSvg(svg, clientX, clientY) {
+      const rect = svg.getBoundingClientRect();
+      return {
+        x: (clientX - rect.left) * (VW / rect.width),
+        y: (clientY - rect.top) * (VH / rect.height),
+      };
+    }
+
+    document.getElementById("map").addEventListener("pointerdown", (e) => {
+      const onNode = !!e.target.closest("[data-node-id]");
+      const svg = e.currentTarget;
+      const pt = clientToSvg(svg, e.clientX, e.clientY);
+
+      // Stamp/Single/Inspect 모드 + 노드 클릭 = drag 시작 X (mouseup 에서 stamp 적용)
+      if (onNode && mode !== "paint") return;
+
+      if (spaceKeyDown || mode !== "paint") {
+        // Pan 모드 (Space override 또는 비 Paint 모드의 빈 공간)
+        isPanning = true;
+        panStart = {x: e.clientX, y: e.clientY, panX, panY};
+        document.querySelector(".map-shell").classList.add("dragging");
+      } else {
+        // Paint 모드 — trajectory 그리기 시작
+        paintTrajectory = [{x: (pt.x - panX) / zoomScale, y: (pt.y - panY) / zoomScale}];
+        e.preventDefault();
+      }
+    });
+
+    document.getElementById("map").addEventListener("pointermove", (e) => {
+      if (isPanning && panStart) {
+        const svg = e.currentTarget;
+        const rect = svg.getBoundingClientRect();
+        panX = panStart.panX + (e.clientX - panStart.x) * (VW / rect.width);
+        panY = panStart.panY + (e.clientY - panStart.y) * (VH / rect.height);
+        render();
+        return;
+      }
+      if (paintTrajectory) {
+        const svg = e.currentTarget;
+        const pt = clientToSvg(svg, e.clientX, e.clientY);
+        // SVG 좌표를 viewport 좌표 (zoom/pan 적용 전) 로 환산
+        paintTrajectory.push({x: (pt.x - panX) / zoomScale, y: (pt.y - panY) / zoomScale});
+        render();
+      }
+    });
+
+    document.getElementById("map").addEventListener("pointerup", (e) => {
+      document.querySelector(".map-shell").classList.remove("dragging");
+      if (isPanning) {
+        isPanning = false; panStart = null;
+        return;
+      }
+      if (paintTrajectory) {
+        if (paintTrajectory.length >= 2) {
+          applyPaint(paintTrajectory, e.shiftKey, e.altKey);
+        }
+        paintTrajectory = null;
+        render();
+      }
+    });
+    document.getElementById("map").addEventListener("pointerleave", (e) => {
+      // 맵 밖으로 나가면 진행 중인 인터랙션 cancel
+      document.querySelector(".map-shell").classList.remove("dragging");
+      if (paintTrajectory && paintTrajectory.length >= 2) {
+        applyPaint(paintTrajectory, false, false);
+      }
+      paintTrajectory = null;
+      isPanning = false; panStart = null;
+      render();
+    });
+
+    // ── Paint trajectory → 가까운 엣지 일괄 방향 변경 ─────────
+    function applyPaint(trajectory, shiftKey, altKey) {
+      // 키 조합 임시 override:
+      //   기본 → paintDir (uni/bi)
+      //   Shift → bi (양방향 강제)
+      //   Alt   → uni (역방향 강제, trajectory 와 반대로)
+      const effectiveDir = shiftKey ? "bi" : paintDir;
+      const reverseUni = altKey;
+
+      // trajectory 의 평균 방향 벡터 (시작점 → 끝점)
+      const t0 = trajectory[0], tN = trajectory[trajectory.length - 1];
+      const tdx = tN.x - t0.x, tdy = tN.y - t0.y;
+
+      // 화면상 거리 임계값 (SVG 좌표 단위). zoom 무관하게 ~30px 화면 거리로.
+      const HIT_RADIUS = 30 / zoomScale;
+
+      let changedCount = 0;
+      for (const e of edges) {
+        const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+        if (!a || !b) continue;
+        const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
+        // 엣지 중점이 trajectory 어느 segment 와 가까운가
+        const mx = (x1+x2)/2, my = (y1+y2)/2;
+        if (!nearTrajectory(mx, my, trajectory, HIT_RADIUS)) continue;
+
+        // 엣지 방향 (src→dst) vs trajectory 방향 내적
+        const edx = x2 - x1, edy = y2 - y1;
+        const dot = tdx * edx + tdy * edy;
+
+        if (effectiveDir === "bi") {
+          e.bidir = true;
+        } else {
+          e.bidir = false;
+          // 단방향: trajectory 와 같은 방향이면 src/dst 유지, 반대면 스왑
+          const wantReversed = (dot < 0) ^ reverseUni;
+          if (wantReversed) {
+            const tmp = e.src; e.src = e.dst; e.dst = tmp;
+          }
+        }
+        changedCount++;
+      }
+      if (changedCount > 0) {
+        showToast(`${changedCount} 개 엣지 → ${effectiveDir === "bi" ? "양방향" : (reverseUni ? "역방향 단방향" : "단방향")}`);
+      }
+    }
+
+    // 점 (px, py) 와 polyline segments 의 최소 거리 ≤ R 인가
+    function nearTrajectory(px, py, trajectory, R) {
+      for (let i = 0; i < trajectory.length - 1; i++) {
+        const a = trajectory[i], b = trajectory[i + 1];
+        if (pointSegmentDistance(px, py, a.x, a.y, b.x, b.y) <= R) return true;
+      }
+      return false;
+    }
+    function pointSegmentDistance(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const len2 = dx*dx + dy*dy;
+      if (len2 < 1e-9) return Math.hypot(px - x1, py - y1);
+      let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const cx = x1 + t * dx, cy = y1 + t * dy;
+      return Math.hypot(px - cx, py - cy);
+    }
+
+    // ── 노드 클릭 (Stamp 적용 — Phase 3 stub) ──────────────────
+    document.getElementById("map").addEventListener("click", (e) => {
+      const nodeHit = e.target.closest("[data-node-id]");
+      if (!nodeHit) return;
+      if (stampTool === "inspect") return;
+      const n = nodeById.get(nodeHit.dataset.nodeId);
+      applyStamp(n, stampTool);
+      render();
+      showToast(`${n.id} → ${stampTool}`);
+    });
+
+    function applyStamp(node, tool) {
+      // 노드 role/플래그를 즉시 변경
+      if (tool === "reset") {
+        node.role = "standard"; node.is_charger = false; node.is_holding = false;
+      } else if (tool === "station") {
+        node.role = "station"; node.is_charger = false; node.is_holding = false;
+      } else if (tool === "charger") {
+        node.role = "charger"; node.is_charger = true; node.is_holding = false;
+      } else if (tool === "holding") {
+        node.role = "holding"; node.is_charger = false; node.is_holding = true;
+      } else if (tool === "siding") {
+        node.role = "siding"; node.is_charger = false; node.is_holding = false;
+      }
+    }
+
+    // ── 노드 우클릭 컨텍스트 메뉴 ───────────────────────────────
+    let ctxTargetNodeId = "";
+    document.getElementById("map").addEventListener("contextmenu", (e) => {
+      const nodeHit = e.target.closest("[data-node-id]");
+      if (!nodeHit) return;
+      e.preventDefault();
+      ctxTargetNodeId = nodeHit.dataset.nodeId;
+      const menu = document.getElementById("node-ctx-menu");
+      menu.style.left = `${e.clientX}px`;
+      menu.style.top = `${e.clientY}px`;
+      menu.classList.add("show");
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#node-ctx-menu")) {
+        document.getElementById("node-ctx-menu").classList.remove("show");
+      }
+    });
+    document.getElementById("node-ctx-menu").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-stamp]");
+      if (!btn || !ctxTargetNodeId) return;
+      const n = nodeById.get(ctxTargetNodeId);
+      applyStamp(n, btn.dataset.stamp);
+      render();
+      showToast(`${n.id} → ${btn.dataset.stamp}`);
+      document.getElementById("node-ctx-menu").classList.remove("show");
+    });
+
+    // ── Reset View ──────────────────────────────────────────────
+    document.getElementById("btn-reset-view").addEventListener("click", () => {
+      zoomScale = 1; panX = 0; panY = 0; render();
+    });
+
+    // ── Save / Save & Run (Phase 4 에서 풀 구현, 지금은 stub) ───
+    document.getElementById("btn-save").addEventListener("click", () => {
+      const edits = exportEdits();
+      downloadEdits(edits);
+      showToast("Saved");
+    });
+    document.getElementById("btn-save-run").addEventListener("click", () => {
+      showToast("Save & Run — Phase 4/5 에서 Quickrun 연결 예정");
+    });
+
+    function exportEdits() {
+      // override-only 메타: 원본에서 바뀐 것만 기록
+      const node_overrides = {};
+      for (const n of nodes) {
+        if (n.role !== "standard" || n.is_charger || n.is_holding) {
+          node_overrides[n.id] = {role: n.role, is_charger: n.is_charger, is_holding: n.is_holding};
+        }
+      }
+      const edge_overrides = {};
+      for (const e of edges) {
+        // Phase 2 에서 inferred vs current 비교해 기록 (지금은 모든 엣지 기록)
+        edge_overrides[e.id] = {bidirectional: e.bidir, corridor: e.corridor};
+      }
+      return {node_overrides, edge_overrides, timestamp: new Date().toISOString()};
+    }
+
+    function downloadEdits(edits) {
+      const blob = new Blob([JSON.stringify(edits, null, 2)], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "map_edits.edit.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ── Toast 알림 ──────────────────────────────────────────────
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+    }
+
+    // ── 초기 렌더 ───────────────────────────────────────────────
+    render();
+    document.title = PAYLOAD.title;
+  </script>
+</body>
+</html>

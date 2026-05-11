@@ -25,6 +25,7 @@ from pathlib import Path
 
 from src.analytics.playback_trace import PlaybackTraceRecorder, build_playback_html
 from src.domain.map.external_importer import build_map_graph, import_map_json
+from src.interfaces.map_editor import build_editor_html
 
 
 def main():
@@ -32,6 +33,8 @@ def main():
     parser.add_argument("json_path", help="external map JSON path")
     parser.add_argument("--out", default=None, help="output HTML path (default: <json>.preview.html)")
     parser.add_argument("--open", action="store_true", help="auto-open in browser")
+    parser.add_argument("--edit", action="store_true",
+                        help="open in Map Editor (편집 UI) instead of read-only preview")
     args = parser.parse_args()
 
     json_path = Path(args.json_path)
@@ -58,29 +61,35 @@ def main():
             print(f"  [{w.severity:>5}] {w.code}: {w.message}{sample}")
         print()
 
-    # 2단계: ImportedMap → MapGraph → playback trace
-    graph = build_map_graph(imp)
-    recorder = PlaybackTraceRecorder(graph, sample_interval_s=0.5)
-    # snapshot 없는 정적 맵 뷰 — meta 만 채우고 빈 trace
-    trace = {
-        "meta": {
-            "duration_s": 0.0,
-            "sample_interval_s": 0.5,
-            "topology_type": "imported",
-            "topology_variant": json_path.stem,
-            "description": {
-                "headline": f"외부 맵 임포트: {json_path.name} ({r.node_count} nodes / {r.edge_count_after_merge} edges)",
+    # 2단계: 시각화 (편집 모드 vs 정적 미리보기)
+    if args.edit:
+        # Map Editor — 인터랙티브 편집 페이지
+        html = build_editor_html(imp, title=f"Map Editor — {json_path.stem}")
+        out_path = Path(args.out) if args.out else json_path.with_suffix(".editor.html")
+        out_path.write_text(html, encoding="utf-8")
+        print(f"✓ Map Editor written: {out_path}")
+    else:
+        # 정적 미리보기 (playback HTML)
+        graph = build_map_graph(imp)
+        recorder = PlaybackTraceRecorder(graph, sample_interval_s=0.5)
+        trace = {
+            "meta": {
+                "duration_s": 0.0,
+                "sample_interval_s": 0.5,
+                "topology_type": "imported",
+                "topology_variant": json_path.stem,
+                "description": {
+                    "headline": f"외부 맵 임포트: {json_path.name} ({r.node_count} nodes / {r.edge_count_after_merge} edges)",
+                },
             },
-        },
-        "map": recorder._serialize_map(),
-        "snapshots": [],
-        "events": [],
-    }
-
-    out_path = Path(args.out) if args.out else json_path.with_suffix(".preview.html")
-    html = build_playback_html(trace)
-    out_path.write_text(html, encoding="utf-8")
-    print(f"✓ Visualization written: {out_path}")
+            "map": recorder._serialize_map(),
+            "snapshots": [],
+            "events": [],
+        }
+        out_path = Path(args.out) if args.out else json_path.with_suffix(".preview.html")
+        html = build_playback_html(trace)
+        out_path.write_text(html, encoding="utf-8")
+        print(f"✓ Preview written: {out_path}")
 
     if args.open:
         try:
