@@ -1,0 +1,1337 @@
+{
+  "_meta": {
+    "source": "synthetic_plant generator (NOT based on topology_generator)",
+    "intent": "외부 폐쇄망 FAB 형태 흉내 — importer 의 generalization 검증",
+    "seed": 42,
+    "expected_features": {
+      "north_corridor_bidirectional": true,
+      "center_corridor_unidirectional_left_to_right": true,
+      "south_corridor_unidirectional_right_to_left": true,
+      "bays_only_between_north_and_center": true,
+      "chargers_on_west_edge": true,
+      "holding_zone_on_east_top_corner": true,
+      "coordinate_noise_amplitude_m": 0.4
+    }
+  },
+  "nodes": [
+    {
+      "id": "N0001",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x0",
+      "position": {
+        "x": 0.11,
+        "y": 79.62,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0002",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x10",
+      "position": {
+        "x": 9.82,
+        "y": 79.78,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0003",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x20",
+      "position": {
+        "x": 20.19,
+        "y": 80.14,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0004",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x30",
+      "position": {
+        "x": 30.31,
+        "y": 79.67,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0005",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x40",
+      "position": {
+        "x": 39.94,
+        "y": 79.62,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0006",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x50",
+      "position": {
+        "x": 49.77,
+        "y": 80.0,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0007",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x60",
+      "position": {
+        "x": 59.62,
+        "y": 79.76,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0008",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x70",
+      "position": {
+        "x": 70.12,
+        "y": 80.04,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0009",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x80",
+      "position": {
+        "x": 79.78,
+        "y": 80.07,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0010",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x90",
+      "position": {
+        "x": 90.25,
+        "y": 79.61,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0011",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x100",
+      "position": {
+        "x": 100.24,
+        "y": 80.16,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0012",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x110",
+      "position": {
+        "x": 109.87,
+        "y": 79.72,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0013",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_north_x120",
+      "position": {
+        "x": 120.37,
+        "y": 79.87,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0014",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x0",
+      "position": {
+        "x": -0.33,
+        "y": 49.68,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0015",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x10",
+      "position": {
+        "x": 10.28,
+        "y": 50.08,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0016",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x20",
+      "position": {
+        "x": 20.25,
+        "y": 50.18,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0017",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x30",
+      "position": {
+        "x": 30.03,
+        "y": 50.38,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0018",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x40",
+      "position": {
+        "x": 39.9,
+        "y": 50.04,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0019",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x50",
+      "position": {
+        "x": 50.26,
+        "y": 50.09,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0020",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x60",
+      "position": {
+        "x": 60.29,
+        "y": 50.06,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0021",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x70",
+      "position": {
+        "x": 70.16,
+        "y": 49.64,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0022",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x80",
+      "position": {
+        "x": 79.78,
+        "y": 49.83,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0023",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x90",
+      "position": {
+        "x": 89.66,
+        "y": 49.79,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0024",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x100",
+      "position": {
+        "x": 99.68,
+        "y": 49.82,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0025",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x110",
+      "position": {
+        "x": 110.11,
+        "y": 49.89,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0026",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_center_x120",
+      "position": {
+        "x": 119.9,
+        "y": 49.77,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0027",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x10",
+      "position": {
+        "x": 9.81,
+        "y": 20.35,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0028",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x20",
+      "position": {
+        "x": 20.12,
+        "y": 20.09,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0029",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x30",
+      "position": {
+        "x": 29.74,
+        "y": 20.18,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0030",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x40",
+      "position": {
+        "x": 39.73,
+        "y": 19.9,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0031",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x50",
+      "position": {
+        "x": 50.39,
+        "y": 20.11,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0032",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x60",
+      "position": {
+        "x": 60.05,
+        "y": 20.15,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0033",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x70",
+      "position": {
+        "x": 70.27,
+        "y": 20.22,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0034",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x80",
+      "position": {
+        "x": 79.78,
+        "y": 19.63,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0035",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x90",
+      "position": {
+        "x": 89.85,
+        "y": 19.81,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0036",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x100",
+      "position": {
+        "x": 99.77,
+        "y": 20.35,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0037",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_south_x110",
+      "position": {
+        "x": 110.3,
+        "y": 19.85,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0038",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_bay_x20_mid",
+      "position": {
+        "x": 20.12,
+        "y": 64.92,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0039",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_station_x20",
+      "position": {
+        "x": 17.33,
+        "y": 64.97,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0040",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_bay_x50_mid",
+      "position": {
+        "x": 49.81,
+        "y": 64.8,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0041",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_station_x50",
+      "position": {
+        "x": 47.05,
+        "y": 64.81,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0042",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_bay_x80_mid",
+      "position": {
+        "x": 80.07,
+        "y": 65.32,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0043",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_station_x80",
+      "position": {
+        "x": 76.92,
+        "y": 64.78,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0044",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_charger_access",
+      "position": {
+        "x": -2.6,
+        "y": 50.01,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0045",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_charger_y45",
+      "position": {
+        "x": -10.33,
+        "y": 44.64,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0046",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_charger_y50",
+      "position": {
+        "x": -10.31,
+        "y": 50.1,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0047",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_charger_y55",
+      "position": {
+        "x": -9.77,
+        "y": 54.94,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0048",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_holding_access",
+      "position": {
+        "x": 124.65,
+        "y": 79.91,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0049",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_holding_0",
+      "position": {
+        "x": 130.4,
+        "y": 80.02,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0050",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_holding_1",
+      "position": {
+        "x": 130.38,
+        "y": 85.29,
+        "z": 0
+      }
+    },
+    {
+      "id": "N0051",
+      "node_type_cd": "",
+      "align_type_cd": "",
+      "name": "N_holding_2",
+      "position": {
+        "x": 129.61,
+        "y": 90.18,
+        "z": 0
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "L0001",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0001",
+        "to": "N0002"
+      }
+    },
+    {
+      "id": "L0002",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0002",
+        "to": "N0001"
+      }
+    },
+    {
+      "id": "L0003",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0002",
+        "to": "N0003"
+      }
+    },
+    {
+      "id": "L0004",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0003",
+        "to": "N0002"
+      }
+    },
+    {
+      "id": "L0005",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0003",
+        "to": "N0004"
+      }
+    },
+    {
+      "id": "L0006",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0004",
+        "to": "N0003"
+      }
+    },
+    {
+      "id": "L0007",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0004",
+        "to": "N0005"
+      }
+    },
+    {
+      "id": "L0008",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0005",
+        "to": "N0004"
+      }
+    },
+    {
+      "id": "L0009",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0005",
+        "to": "N0006"
+      }
+    },
+    {
+      "id": "L0010",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0006",
+        "to": "N0005"
+      }
+    },
+    {
+      "id": "L0011",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0006",
+        "to": "N0007"
+      }
+    },
+    {
+      "id": "L0012",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0007",
+        "to": "N0006"
+      }
+    },
+    {
+      "id": "L0013",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0007",
+        "to": "N0008"
+      }
+    },
+    {
+      "id": "L0014",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0008",
+        "to": "N0007"
+      }
+    },
+    {
+      "id": "L0015",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0008",
+        "to": "N0009"
+      }
+    },
+    {
+      "id": "L0016",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0009",
+        "to": "N0008"
+      }
+    },
+    {
+      "id": "L0017",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0009",
+        "to": "N0010"
+      }
+    },
+    {
+      "id": "L0018",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0010",
+        "to": "N0009"
+      }
+    },
+    {
+      "id": "L0019",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0010",
+        "to": "N0011"
+      }
+    },
+    {
+      "id": "L0020",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0011",
+        "to": "N0010"
+      }
+    },
+    {
+      "id": "L0021",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0011",
+        "to": "N0012"
+      }
+    },
+    {
+      "id": "L0022",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0012",
+        "to": "N0011"
+      }
+    },
+    {
+      "id": "L0023",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0012",
+        "to": "N0013"
+      }
+    },
+    {
+      "id": "L0024",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0013",
+        "to": "N0012"
+      }
+    },
+    {
+      "id": "L0025",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0014",
+        "to": "N0015"
+      }
+    },
+    {
+      "id": "L0026",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0015",
+        "to": "N0016"
+      }
+    },
+    {
+      "id": "L0027",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0016",
+        "to": "N0017"
+      }
+    },
+    {
+      "id": "L0028",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0017",
+        "to": "N0018"
+      }
+    },
+    {
+      "id": "L0029",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0018",
+        "to": "N0019"
+      }
+    },
+    {
+      "id": "L0030",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0019",
+        "to": "N0020"
+      }
+    },
+    {
+      "id": "L0031",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0020",
+        "to": "N0021"
+      }
+    },
+    {
+      "id": "L0032",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0021",
+        "to": "N0022"
+      }
+    },
+    {
+      "id": "L0033",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0022",
+        "to": "N0023"
+      }
+    },
+    {
+      "id": "L0034",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0023",
+        "to": "N0024"
+      }
+    },
+    {
+      "id": "L0035",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0024",
+        "to": "N0025"
+      }
+    },
+    {
+      "id": "L0036",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0025",
+        "to": "N0026"
+      }
+    },
+    {
+      "id": "L0037",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0037",
+        "to": "N0036"
+      }
+    },
+    {
+      "id": "L0038",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0036",
+        "to": "N0035"
+      }
+    },
+    {
+      "id": "L0039",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0035",
+        "to": "N0034"
+      }
+    },
+    {
+      "id": "L0040",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0034",
+        "to": "N0033"
+      }
+    },
+    {
+      "id": "L0041",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0033",
+        "to": "N0032"
+      }
+    },
+    {
+      "id": "L0042",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0032",
+        "to": "N0031"
+      }
+    },
+    {
+      "id": "L0043",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0031",
+        "to": "N0030"
+      }
+    },
+    {
+      "id": "L0044",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0030",
+        "to": "N0029"
+      }
+    },
+    {
+      "id": "L0045",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0029",
+        "to": "N0028"
+      }
+    },
+    {
+      "id": "L0046",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0028",
+        "to": "N0027"
+      }
+    },
+    {
+      "id": "L0047",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0003",
+        "to": "N0038"
+      }
+    },
+    {
+      "id": "L0048",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0038",
+        "to": "N0003"
+      }
+    },
+    {
+      "id": "L0049",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0038",
+        "to": "N0016"
+      }
+    },
+    {
+      "id": "L0050",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0016",
+        "to": "N0038"
+      }
+    },
+    {
+      "id": "L0051",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0038",
+        "to": "N0039"
+      }
+    },
+    {
+      "id": "L0052",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0039",
+        "to": "N0038"
+      }
+    },
+    {
+      "id": "L0053",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0006",
+        "to": "N0040"
+      }
+    },
+    {
+      "id": "L0054",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0040",
+        "to": "N0006"
+      }
+    },
+    {
+      "id": "L0055",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0040",
+        "to": "N0019"
+      }
+    },
+    {
+      "id": "L0056",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0019",
+        "to": "N0040"
+      }
+    },
+    {
+      "id": "L0057",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0040",
+        "to": "N0041"
+      }
+    },
+    {
+      "id": "L0058",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0041",
+        "to": "N0040"
+      }
+    },
+    {
+      "id": "L0059",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0009",
+        "to": "N0042"
+      }
+    },
+    {
+      "id": "L0060",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0042",
+        "to": "N0009"
+      }
+    },
+    {
+      "id": "L0061",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0042",
+        "to": "N0022"
+      }
+    },
+    {
+      "id": "L0062",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0022",
+        "to": "N0042"
+      }
+    },
+    {
+      "id": "L0063",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0042",
+        "to": "N0043"
+      }
+    },
+    {
+      "id": "L0064",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0043",
+        "to": "N0042"
+      }
+    },
+    {
+      "id": "L0065",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0044",
+        "to": "N0014"
+      }
+    },
+    {
+      "id": "L0066",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0014",
+        "to": "N0044"
+      }
+    },
+    {
+      "id": "L0067",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0044",
+        "to": "N0045"
+      }
+    },
+    {
+      "id": "L0068",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0045",
+        "to": "N0044"
+      }
+    },
+    {
+      "id": "L0069",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0044",
+        "to": "N0046"
+      }
+    },
+    {
+      "id": "L0070",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0046",
+        "to": "N0044"
+      }
+    },
+    {
+      "id": "L0071",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0044",
+        "to": "N0047"
+      }
+    },
+    {
+      "id": "L0072",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0047",
+        "to": "N0044"
+      }
+    },
+    {
+      "id": "L0073",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0002",
+        "to": "N0027"
+      }
+    },
+    {
+      "id": "L0074",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0027",
+        "to": "N0002"
+      }
+    },
+    {
+      "id": "L0075",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0013",
+        "to": "N0037"
+      }
+    },
+    {
+      "id": "L0076",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0037",
+        "to": "N0013"
+      }
+    },
+    {
+      "id": "L0077",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0013",
+        "to": "N0048"
+      }
+    },
+    {
+      "id": "L0078",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0048",
+        "to": "N0013"
+      }
+    },
+    {
+      "id": "L0079",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0048",
+        "to": "N0049"
+      }
+    },
+    {
+      "id": "L0080",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0049",
+        "to": "N0048"
+      }
+    },
+    {
+      "id": "L0081",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0048",
+        "to": "N0050"
+      }
+    },
+    {
+      "id": "L0082",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0050",
+        "to": "N0048"
+      }
+    },
+    {
+      "id": "L0083",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0048",
+        "to": "N0051"
+      }
+    },
+    {
+      "id": "L0084",
+      "link_type_cd": "",
+      "name": "Link",
+      "connected": {
+        "from": "N0051",
+        "to": "N0048"
+      }
+    }
+  ]
+}

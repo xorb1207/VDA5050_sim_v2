@@ -45,7 +45,10 @@ class InferenceConfig:
     corridor_y_tolerance: float = 5.0   # m (사용자 데이터 단위에 맞춰서)
     corridor_x_tolerance: float = 5.0
     # 코리도 클러스터에 최소 몇 개 노드/링크 가 있어야 인정할지 (노이즈 컷)
-    min_corridor_size: int = 3
+    min_corridor_size: int = 2
+    # 짧은 엣지 (전체 길이 distribution 의 N percentile 이하) 는 corridor 클러스터링
+    # 에서 제외하고 access 후보로 분류
+    short_edge_percentile: float = 25.0
     # role 추론: degree 가 이하면 terminal 후보 (charger/holding 가능성)
     terminal_degree_threshold: int = 1
     # 위치 라벨링: 좌표 기준 area name (UI 표시용)
@@ -267,10 +270,19 @@ def _infer_corridors(
     """
     pos_by_id = {n.node_id: (n.x, n.y) for n in nodes}
 
+    # 1차: 전체 엣지 길이 분포로 short_threshold 결정 (access 후보 컷오프)
+    all_lengths = []
+    for e in edges:
+        if e.src in pos_by_id and e.dst in pos_by_id:
+            x1, y1 = pos_by_id[e.src]
+            x2, y2 = pos_by_id[e.dst]
+            all_lengths.append(math.hypot(x2 - x1, y2 - y1))
+    short_threshold = _percentile(all_lengths, cfg.short_edge_percentile) if all_lengths else 0.0
+
     horizontal_edges: list[tuple[ImportedEdge, float]] = []  # (edge, y_mid)
     vertical_edges: list[tuple[ImportedEdge, float]] = []    # (edge, x_mid)
     diagonal_edges: list[ImportedEdge] = []
-    short_edges: list[ImportedEdge] = []                     # access 후보
+    short_edges: list[ImportedEdge] = []                     # access 후보 (corridor 분류 제외)
 
     for e in edges:
         if e.src not in pos_by_id or e.dst not in pos_by_id:
@@ -280,10 +292,13 @@ def _infer_corridors(
         dx, dy = abs(x2 - x1), abs(y2 - y1)
         length = math.hypot(x2 - x1, y2 - y1)
 
-        # 매우 짧은 엣지 (예: 10m 미만) 는 access 후보로 따로 빼둠
-        # 단위 추정: 전체 노드 분포를 보고 결정 (아래에서 length_short_threshold 자동 계산)
         if length < 0.1:  # 거의 같은 위치 — 비정상
             diagonal_edges.append(e)
+            continue
+        # 짧은 엣지: 메인 코리도 클러스터링에서 제외하고 access 후보로
+        # (예: station/charger 진입로처럼 메인 흐름의 곁가지)
+        if length <= short_threshold:
+            short_edges.append(e)
             continue
         if dy <= cfg.corridor_y_tolerance and dx > dy * 2:
             horizontal_edges.append((e, (y1 + y2) / 2))
@@ -291,15 +306,6 @@ def _infer_corridors(
             vertical_edges.append((e, (x1 + x2) / 2))
         else:
             diagonal_edges.append(e)
-
-    # 길이 분포로 short 엣지 자동 컷오프 (전체 길이의 25 percentile)
-    all_lengths = []
-    for e in edges:
-        if e.src in pos_by_id and e.dst in pos_by_id:
-            x1, y1 = pos_by_id[e.src]
-            x2, y2 = pos_by_id[e.dst]
-            all_lengths.append(math.hypot(x2 - x1, y2 - y1))
-    short_threshold = _percentile(all_lengths, 25) if all_lengths else 0.0
 
     # 수평 클러스터링 → y band 별로 north/center/south 등 자동 라벨
     h_clusters = _cluster_1d(horizontal_edges, cfg.corridor_y_tolerance)
@@ -327,18 +333,14 @@ def _infer_corridors(
         for e in cluster["edges"]:
             e.inferred_corridor = label
 
-    # 대각선 / 매우 짧은 엣지: access 후보
+    # 대각선 (수평도 수직도 아닌) 엣지: 일단 misc — 사용자가 검토 UI 에서 분류
     for e in diagonal_edges:
-        # 길이로 access type 판정
-        if e.src in pos_by_id and e.dst in pos_by_id:
-            x1, y1 = pos_by_id[e.src]
-            x2, y2 = pos_by_id[e.dst]
-            length = math.hypot(x2 - x1, y2 - y1)
-            if length <= short_threshold:
-                e.inferred_corridor = ""
-                # access_type 은 role 추론 단계에서 charger/station 인 노드와 연결 시 확정
-            else:
-                e.inferred_corridor = "misc"
+        e.inferred_corridor = "misc"
+
+    # 짧은 엣지: access 후보 (corridor='' + access_type 은 role 추론 단계에서 확정)
+    for e in short_edges:
+        e.inferred_corridor = ""
+        e.inferred_access_type = "access"  # role 추론 후 station_access/charger_access 로 세분화
 
 
 def _cluster_1d(items: list[tuple], tolerance: float) -> list[dict]:
