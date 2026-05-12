@@ -61,9 +61,10 @@ python tests/integration/test_simulation.py
 # → "결과: 57 passed / 0 failed"
 ```
 
-> **Windows 사용자 참고**: `scripts/` 의 CLI 들은 자체적으로 프로젝트 루트를 `sys.path` 에 추가하므로 `PYTHONPATH` 환경변수 설정 불필요. 그냥 `python scripts\import_map_demo.py ...` 로 실행하면 됨. (경로 구분자는 `\` 또는 `/` 모두 OK)
->
-> 만약 `./run quickrun` 같은 셸 스크립트가 안 되면 `python -m src.interfaces.quickrun.server` 직접 실행.
+> **Windows 사용자 참고**:
+> - `scripts/` 의 CLI 들은 자체적으로 `sys.path` 추가하므로 `PYTHONPATH` 설정 불필요. `python scripts\import_map_demo.py ...` 그대로 실행.
+> - `./run quickrun` (bash 스크립트) 대신 **`run quickrun`** 또는 **`run.bat quickrun`** 사용 (Windows batch 동등 인터페이스 제공).
+> - 직접 모듈 실행도 OK: `python -m src.interfaces.quickrun.server`
 
 ---
 
