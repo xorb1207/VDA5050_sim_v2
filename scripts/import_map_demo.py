@@ -23,6 +23,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 프로젝트 루트를 sys.path 에 추가 — PYTHONPATH 환경변수 설정 없이 동작 (Windows 친화)
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from src.analytics.playback_trace import PlaybackTraceRecorder, build_playback_html
 from src.domain.map.external_importer import apply_edits, build_map_graph, import_map_json
 from src.interfaces.map_editor import build_editor_html

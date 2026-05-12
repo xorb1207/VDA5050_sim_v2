@@ -61,6 +61,10 @@ python tests/integration/test_simulation.py
 # → "결과: 57 passed / 0 failed"
 ```
 
+> **Windows 사용자 참고**: `scripts/` 의 CLI 들은 자체적으로 프로젝트 루트를 `sys.path` 에 추가하므로 `PYTHONPATH` 환경변수 설정 불필요. 그냥 `python scripts\import_map_demo.py ...` 로 실행하면 됨. (경로 구분자는 `\` 또는 `/` 모두 OK)
+>
+> 만약 `./run quickrun` 같은 셸 스크립트가 안 되면 `python -m src.interfaces.quickrun.server` 직접 실행.
+
 ---
 
 ## 빠른 시작 — 3가지 시나리오
@@ -70,7 +74,7 @@ python tests/integration/test_simulation.py
 폐쇄망 시스템 export 형식 (`{nodes:[{id,name,position:{x,y,z}}], links:[{id,connected:{from,to}}]}`):
 
 ```bash
-PYTHONPATH=. python scripts/import_map_demo.py path/to/your_plant.json --open
+python scripts/import_map_demo.py path/to/your_plant.json --open
 ```
 
 브라우저에 정적 맵 페이지가 열림. 자동 추론 결과:
@@ -90,7 +94,7 @@ PYTHONPATH=. python scripts/import_map_demo.py path/to/your_plant.json --open
 ### 시나리오 2. Editor 에서 정책 편집
 
 ```bash
-PYTHONPATH=. python scripts/import_map_demo.py path/to/your_plant.json --edit --open
+python scripts/import_map_demo.py path/to/your_plant.json --edit --open
 ```
 
 브라우저 Editor 페이지에서:
@@ -137,7 +141,7 @@ variants:
 실행:
 
 ```bash
-PYTHONPATH=. python scripts/run_imported_cases.py experiments/plant_what_if.yaml --open
+python scripts/run_imported_cases.py experiments/plant_what_if.yaml --open
 ```
 
 결과 `outputs/imported_cases/<timestamp>/`:
@@ -284,23 +288,23 @@ vda5050_sim_v2/
 
 ```bash
 # 1. 외부 JSON 임포트 + 정적 미리보기
-PYTHONPATH=. python scripts/import_map_demo.py <map.json> --open
+python scripts/import_map_demo.py <map.json> --open
 
 # 2. 외부 JSON 임포트 + Editor 페이지
-PYTHONPATH=. python scripts/import_map_demo.py <map.json> --edit --open
+python scripts/import_map_demo.py <map.json> --edit --open
 
 # 3. 편집 결과 적용해서 보기 (Save 한 edit.json 사용)
-PYTHONPATH=. python scripts/import_map_demo.py <map.json> --edits <edit.json> --edit --open
+python scripts/import_map_demo.py <map.json> --edits <edit.json> --edit --open
 
 # 4. 라이브 시뮬 서버
 ./run quickrun
 # 또는: python -m src.interfaces.quickrun.server
 
 # 5. case 비교 배치
-PYTHONPATH=. python scripts/run_imported_cases.py <yaml> --open
+python scripts/run_imported_cases.py <yaml> --open
 
 # 6. 합성 데이터 생성 (검증/연습용)
-PYTHONPATH=. python scripts/generate_synthetic_plant.py --out maps/test.json
+python scripts/generate_synthetic_plant.py --out maps/test.json
 
 # 7. 통합 테스트
 python tests/integration/test_simulation.py

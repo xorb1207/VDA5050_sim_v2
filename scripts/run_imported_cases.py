@@ -32,6 +32,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# 프로젝트 루트를 sys.path 에 추가 — PYTHONPATH 설정 없이 동작 (Windows 친화)
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 import yaml
 
 from src.adapters.bus.adapters import LocalMemoryBus

@@ -14,7 +14,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+# 프로젝트 루트를 sys.path 에 추가 — PYTHONPATH 설정 없이 동작 (Windows 친화)
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from src.domain.map.topology_generator import MapTopologyGenerator
 
