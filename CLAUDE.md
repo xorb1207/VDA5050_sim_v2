@@ -82,6 +82,9 @@ python scripts/merge_showcase_into_saturation.py <SAT_DIR> <SHOWCASE_DIR>
 - [ ] **(a) 혼합 토폴로지 실험** ← 1순위 (b 종료), 엔진 확장 선행 (corridor별 type 분리)
 - [ ] **(c) 24h 호라이즌 시나리오** ← 2순위, a 끝난 뒤. battery/charging이 의미를 갖는 구간
 
+### 다음 사이클 예정
+- **F1a (Multi-graph / OpenRMF)**: lane `graph_idx` 필드 + `fleets:` 섹션 + 에디터 Graph 탭 + JSON/YAML export. 이기종 로봇 (최대 3 fleet) 지원. 현 F1a/b/c 사이클 (A/B/C 트랙) 완료 후 착수.
+
 ### 보류 (현 단계 ROI 낮음)
 charging contention / priority reservation / 회전 감속 / wait_time 통합 / reachable siding 정밀화 / 세부 공간 설계 / failure injection — 새 질문이 생기기 전까지 보류.
 
