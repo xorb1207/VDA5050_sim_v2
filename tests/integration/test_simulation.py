@@ -2208,6 +2208,185 @@ def test_headon_regression():
 
 
 # ─────────────────────────────────────────────
+# TEST T61: F1b-core — Per-edge v_max
+# ─────────────────────────────────────────────
+
+def test_edge_v_max_loaded_from_yaml():
+    """[T61-1] YAML lane params 의 v_max 키가 Edge.v_max 로 로드된다."""
+    import os, tempfile, textwrap
+    print("\n[T61-1] Edge v_max YAML 로드")
+    yaml_text = textwrap.dedent("""
+    levels:
+      L1:
+        vertices:
+          - [0.0, 0.0, {name: A, rmf_role: standard}]
+          - [10.0, 0.0, {name: B, rmf_role: standard}]
+          - [20.0, 0.0, {name: C, rmf_role: standard}]
+        lanes:
+          - [0, 1, {speed_limit: 1.5, bidirectional: false, v_max: 0.5}]
+          - [1, 2, {speed_limit: 1.5, bidirectional: false}]
+    """)
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+        f.write(yaml_text); path = f.name
+    try:
+        g = MapGraph.from_rmf_yaml(path)
+        # A→B lane: v_max 0.5 설정
+        edge_ab = next(e for e in g.edges.values() if e.start_node_id == "A" and e.end_node_id == "B")
+        edge_bc = next(e for e in g.edges.values() if e.start_node_id == "B" and e.end_node_id == "C")
+        assert_eq("A→B edge v_max", edge_ab.v_max, 0.5)
+        assert_true("B→C edge v_max is None (미설정)", edge_bc.v_max is None)
+    finally:
+        os.unlink(path)
+
+
+def _make_two_edge_graph(v_max_ab=None) -> MapGraph:
+    """A→B→C 양방향 sample 그래프. AB edge 에만 선택적으로 v_max 적용."""
+    from src.domain.map.graph import Edge, Node
+    g = MapGraph()
+    g._add_node(Node(node_id="A", x=0.0, y=0.0))
+    g._add_node(Node(node_id="B", x=10.0, y=0.0))
+    g._add_node(Node(node_id="C", x=20.0, y=0.0))
+    g._add_edge(Edge(edge_id="e_AB", start_node_id="A", end_node_id="B",
+                     bidirectional=False, max_speed=1.5, v_max=v_max_ab))
+    g._add_edge(Edge(edge_id="e_BC", start_node_id="B", end_node_id="C",
+                     bidirectional=False, max_speed=1.5, v_max=None))
+    return g
+
+
+def test_agv_respects_edge_v_max():
+    """[T61-2] edge.v_max < agv.max → AGV 가 edge 값을 사용 (effective speed = v_max)."""
+    print("\n[T61-2] AGV 가 edge v_max 를 반영")
+    g = _make_two_edge_graph(v_max_ab=0.5)
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    agv = AGV("AGV_T61", bus, g, sched, max_speed_mps=1.5)
+    agv.current_node_id = "A"
+    agv.target_node_id = "B"
+    eff = agv._get_effective_speed(sim_time=0.0)
+    assert_eq("A→B 주행 시 effective_speed", eff, 0.5)
+    # itinerary 빌드에서도 v_max 가 반영되는지 확인
+    agv._path = ["A", "B"]
+    segs = agv._build_itinerary_segments(start_time=0.0)
+    edge_segs = [s for s in segs if s.segment_type == "edge"]
+    assert_true("itinerary edge segment 존재", len(edge_segs) == 1)
+    # distance 10, v_max 0.5 → travel_time = 20s
+    travel = edge_segs[0].end_time - edge_segs[0].start_time
+    assert_true(f"itinerary travel_time ≈ 20s (got {travel:.2f})", abs(travel - 20.0) < 0.1)
+
+
+def test_edge_without_v_max_uses_agv_max():
+    """[T61-3] v_max 미설정 edge → AGV 의 intrinsic max_speed 사용."""
+    print("\n[T61-3] v_max 미설정 → AGV 인트린식 속도")
+    g = _make_two_edge_graph(v_max_ab=None)
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    agv = AGV("AGV_T61", bus, g, sched, max_speed_mps=1.2)
+    agv.current_node_id = "A"
+    agv.target_node_id = "B"
+    eff = agv._get_effective_speed(sim_time=0.0)
+    assert_eq("v_max=None 일 때 effective_speed = agv.max", eff, 1.2)
+
+
+def test_importer_v_max_passthrough_via_apply_edits():
+    """[T61-5] F1b-ux 데이터 경로 — editor edge_overrides 의 v_max 가
+    apply_edits → build_map_graph 을 거쳐 Edge.v_max 에 도달한다."""
+    from src.domain.map.external_importer import (
+        ImportedNode, ImportedEdge, ImportReport, ImportedMap, InferenceConfig,
+        apply_edits, build_map_graph,
+    )
+    print("\n[T61-5] Importer v_max passthrough (edit → graph)")
+    nodes = [
+        ImportedNode(node_id="A", x=0.0, y=0.0),
+        ImportedNode(node_id="B", x=10.0, y=0.0),
+        ImportedNode(node_id="C", x=20.0, y=0.0),
+    ]
+    edges = [
+        ImportedEdge(edge_id="e_AB", src="A", dst="B"),
+        ImportedEdge(edge_id="e_BC", src="B", dst="C", inferred_bidirectional=True),
+    ]
+    imported = ImportedMap(nodes=nodes, edges=edges,
+                           report=ImportReport(), config=InferenceConfig())
+    edits = {
+        "format_version": 1,
+        "deleted_node_ids": [], "deleted_edge_ids": [],
+        "added_nodes": [], "added_edges": [],
+        "node_overrides": {},
+        "edge_overrides": {
+            "e_AB": {"v_max": 0.5},
+            # e_BC 는 unset 유지
+        },
+    }
+    edited = apply_edits(imported, edits)
+    ab = next(e for e in edited.edges if e.edge_id == "e_AB")
+    bc = next(e for e in edited.edges if e.edge_id == "e_BC")
+    assert_eq("apply_edits: e_AB v_max", ab.v_max, 0.5)
+    assert_true("apply_edits: e_BC v_max None", bc.v_max is None)
+    g = build_map_graph(edited)
+    assert_eq("MapGraph e_AB v_max", g.edges["e_AB"].v_max, 0.5)
+    assert_true("MapGraph e_AB_rev 미존재 (단방향)", "e_AB_rev" not in g.edges)
+    # 양방향 e_BC: forward + reverse 둘 다 v_max=None
+    assert_true("MapGraph e_BC v_max None", g.edges["e_BC"].v_max is None)
+    assert_true("MapGraph e_BC_rev v_max None", g.edges["e_BC_rev"].v_max is None)
+
+
+def test_importer_v_max_added_edge_and_unset():
+    """[T61-6] added_edge 의 v_max + override 로 unset(null) 도 정상 처리."""
+    from src.domain.map.external_importer import (
+        ImportedNode, ImportedEdge, ImportReport, ImportedMap, InferenceConfig,
+        apply_edits,
+    )
+    print("\n[T61-6] Importer v_max added_edge + unset")
+    nodes = [
+        ImportedNode(node_id="A", x=0.0, y=0.0),
+        ImportedNode(node_id="B", x=10.0, y=0.0),
+    ]
+    edges = [ImportedEdge(edge_id="e_AB", src="A", dst="B", v_max=0.5)]
+    imported = ImportedMap(nodes=nodes, edges=edges,
+                           report=ImportReport(), config=InferenceConfig())
+    edits = {
+        "format_version": 1,
+        "deleted_node_ids": [], "deleted_edge_ids": [],
+        "added_nodes": [],
+        "added_edges": [{"id": "e_BA", "src": "B", "dst": "A", "bidir": False, "v_max": 0.3}],
+        "node_overrides": {},
+        "edge_overrides": {"e_AB": {"v_max": None}},   # 명시적 unset
+    }
+    edited = apply_edits(imported, edits)
+    ab = next(e for e in edited.edges if e.edge_id == "e_AB")
+    ba = next(e for e in edited.edges if e.edge_id == "e_BA")
+    assert_true("override v_max=None 으로 unset", ab.v_max is None)
+    assert_eq("added edge v_max", ba.v_max, 0.3)
+
+
+def test_speed_change_at_edge_transition_is_instant():
+    """[T61-4] Edge 진입 즉시 effective_speed 가 새 v_max 로 전환된다 (가감속 모델 없음, 즉시)."""
+    print("\n[T61-4] Edge 전환 시 v_max 즉시 적용")
+    from src.domain.map.graph import Edge, Node
+    g = MapGraph()
+    g._add_node(Node(node_id="A", x=0.0, y=0.0))
+    g._add_node(Node(node_id="B", x=10.0, y=0.0))
+    g._add_node(Node(node_id="C", x=20.0, y=0.0))
+    # A→B: v_max=0.6, B→C: v_max=1.3
+    g._add_edge(Edge(edge_id="e_AB", start_node_id="A", end_node_id="B",
+                     bidirectional=False, max_speed=1.5, v_max=0.6))
+    g._add_edge(Edge(edge_id="e_BC", start_node_id="B", end_node_id="C",
+                     bidirectional=False, max_speed=1.5, v_max=1.3))
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    agv = AGV("AGV_T61", bus, g, sched, max_speed_mps=1.5)
+
+    # A→B 주행 중: edge.v_max = 0.6
+    agv.current_node_id = "A"
+    agv.target_node_id = "B"
+    assert_eq("A→B 주행: effective_speed", agv._get_effective_speed(0.0), 0.6)
+
+    # 도착 후 즉시 B→C 로 전환: edge.v_max = 1.3
+    agv.current_node_id = "B"
+    agv.target_node_id = "C"
+    assert_eq("B→C 전환 즉시: effective_speed", agv._get_effective_speed(0.0), 1.3)
+
+
+# ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
 
@@ -2277,6 +2456,13 @@ if __name__ == "__main__":
         test_playback_trace_generation,
         # KPI 분포 + bottleneck stations (T60)
         test_kpi_distribution_fields,
+        # F1b-core: per-edge v_max (T61)
+        test_edge_v_max_loaded_from_yaml,
+        test_agv_respects_edge_v_max,
+        test_edge_without_v_max_uses_agv_max,
+        test_importer_v_max_passthrough_via_apply_edits,
+        test_importer_v_max_added_edge_and_unset,
+        test_speed_change_at_edge_transition_is_instant,
     ]
     passed = failed = 0
     for t in tests:

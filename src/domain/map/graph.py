@@ -61,6 +61,8 @@ class Edge:
     # Open-RMF 확장
     corridor: str = ""
     access_type: str = ""     # station_access / charger_access
+    # F1b-core: 개별 edge 속도 제한 (블라인드 스팟 등). None이면 AGV intrinsic max_speed 사용.
+    v_max: Optional[float] = None
 
 
 class MapGraph:
@@ -133,6 +135,8 @@ class MapGraph:
             bidir = bool(params.get("bidirectional", False))
             speed = float(params.get("speed_limit", 1.0))
 
+            v_max_raw = params.get("v_max", None)
+            v_max_val = float(v_max_raw) if v_max_raw is not None else None
             edge = Edge(
                 edge_id=f"lane_{li:04d}",
                 start_node_id=src_id,
@@ -143,6 +147,7 @@ class MapGraph:
                 safety_model=params.get("safety_model", ""),
                 corridor=params.get("corridor", ""),
                 access_type=params.get("access_type", ""),
+                v_max=v_max_val,
             )
             graph._add_edge(edge)
 
@@ -166,6 +171,8 @@ class MapGraph:
                 allowed_deviation_xy=float(n.get("allowed_deviation_xy", 0.0)),
             ))
         for e in data.get("edges", []):
+            v_max_raw = e.get("vMax", e.get("v_max", None))
+            v_max_val = float(v_max_raw) if v_max_raw is not None else None
             graph._add_edge(Edge(
                 edge_id=e["edgeId"],
                 start_node_id=e["startNodeId"],
@@ -176,6 +183,7 @@ class MapGraph:
                 distance=float(e.get("distance", 0.0)),
                 width_m=float(e.get("width_m", e.get("laneWidth", 1.5))),
                 safety_model=e.get("safety_model", ""),
+                v_max=v_max_val,
             ))
         return graph
 
@@ -205,6 +213,7 @@ class MapGraph:
                 safety_model=edge.safety_model,
                 corridor=edge.corridor,
                 access_type=edge.access_type,
+                v_max=edge.v_max,
             )
             self.edges[rev_id] = rev
             self._out_edges.setdefault(edge.end_node_id, []).append(rev_id)

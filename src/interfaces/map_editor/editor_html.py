@@ -52,6 +52,7 @@ def build_editor_html(
         "bidir": e.inferred_bidirectional,
         "corridor": e.inferred_corridor,
         "access": e.inferred_access_type,
+        "v_max": e.v_max,   # F1b-ux: per-edge 속도 제한 (None=미설정)
     } for e in imported.edges]
 
     report = imported.report
@@ -321,6 +322,7 @@ _TEMPLATE = r"""<!doctype html>
           <button data-mode="paint" class="active">Paint <span class="hint-key">P</span></button>
           <button data-mode="stamp">Stamp <span class="hint-key">S</span></button>
           <button data-mode="build">Build <span class="hint-key">B</span></button>
+          <button data-mode="speed">Speed <span class="hint-key">V</span></button>
         </div>
         <div style="font-size:10.5px; color:var(--muted); margin-top:6px;">
           숫자키 2~5 = Stamp 자동 전환 · Ctrl/Cmd+Z = Undo · Shift+드래그 = 다중 선택
@@ -333,9 +335,23 @@ _TEMPLATE = r"""<!doctype html>
             <button data-build="edge">↔ Edge <span class="hint-key">E</span></button>
             <button data-build="delete">🗑 Delete <span class="hint-key">D</span></button>
           </div>
+          <!-- F1e: Stamp 배치 정렬 옵션 -->
+          <div style="margin-top:10px; padding:8px; background:var(--surface-3); border-radius:6px;">
+            <label style="display:flex; gap:6px; align-items:center; font-size:11.5px;">
+              <input type="checkbox" id="grid-snap-toggle" />
+              <span>Grid snap</span>
+              <input type="number" id="grid-size-input" value="10" min="0.5" step="0.5"
+                     style="width:54px; margin-left:auto; padding:2px 4px;" />
+              <span style="color:var(--muted); font-size:10.5px;">units</span>
+            </label>
+            <div style="font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.5;">
+              · <strong>Shift + 클릭</strong>: 직전 노드의 X 또는 Y 축에 고정 (가까운 축)
+            </div>
+          </div>
           <div style="font-size:10.5px; color:var(--muted); margin-top:8px; line-height:1.5;">
             · <strong>Node</strong>: 빈 공간 클릭 → 새 노드<br>
             · <strong>Edge</strong>: 노드 A → 노드 B 순차 클릭 (좌=단방향, 우=양방향)<br>
+            · <strong>Edge</strong>: edge 위 좌클릭 → 단↔양 토글<br>
             · <strong>Delete</strong>: 노드/엣지 클릭 → 삭제 (Shift+박스 = 일괄 삭제)
           </div>
         </div>
@@ -348,6 +364,18 @@ _TEMPLATE = r"""<!doctype html>
             <li><strong style="color:var(--edge-bidir)">우클릭 드래그</strong> → 양방향 (↔)</li>
             <li><strong>Alt + 드래그</strong> → 단방향 역방향 강제 (←)</li>
             <li><strong>Space + 드래그</strong> → 일시 pan</li>
+          </ul>
+        </div>
+
+        <!-- Speed 모드 옵션 -->
+        <div id="speed-options" style="display:none; margin-top:12px; font-size:11.5px; color:var(--muted); line-height:1.6;">
+          <strong style="color:var(--warn)">v_max 편집 모드</strong>
+          <ul style="margin:6px 0 0 0; padding-left:18px;">
+            <li>Edge 위 <strong>휠 스크롤</strong> → v_max ±0.1 m/s (즉시 적용)</li>
+            <li>Edge 좌클릭 → 인스펙터 <strong>고정</strong> (마우스 떠도 +/-/입력 유지)</li>
+            <li>빈 공간 스크롤 → 평소 zoom</li>
+            <li>모든 edge 에 현재 v_max 값 표시</li>
+            <li>Esc → Paint 모드로 복귀</li>
           </ul>
         </div>
       </div>
@@ -417,7 +445,8 @@ _TEMPLATE = r"""<!doctype html>
     const ORIGINAL_EDGES = new Map(PAYLOAD.edges.map(e => [e.id, JSON.parse(JSON.stringify(e))]));
 
     // ── 편집 상태 ───────────────────────────────────────────────
-    let mode = "paint";              // paint / stamp / build
+    let mode = "paint";              // paint / stamp / build / speed
+    let pinnedEdgeId = "";           // Speed 모드: 클릭으로 고정된 edge (인스펙터 유지)
     let stampTool = "inspect";       // inspect / station / charger / holding / siding / reset
     let buildTool = "node";          // node / edge / delete
     let paintTrajectoryButton = -1;  // 진행 중 trajectory 의 마우스 버튼 (0=좌, 2=우)
@@ -425,6 +454,10 @@ _TEMPLATE = r"""<!doctype html>
     // Add Edge 진행 중: 첫 번째로 클릭된 노드 (두 번째 클릭 시 엣지 확정)
     let edgeStartNodeId = "";
     let edgeStartButton = 0;     // 첫 클릭 시 마우스 버튼 (좌/우)
+    // F1e: Stamp 배치 정렬 상태
+    let gridSnapEnabled = false;
+    let gridSize = 10;           // data 좌표 단위
+    let lastPlacedDataXY = null; // 마지막 추가된 노드 위치 (data 좌표)
     let edgePreviewClient = null;  // 커서 위치 (preview line 그리기용)
 
     // 다중 선택 상태
@@ -595,6 +628,10 @@ _TEMPLATE = r"""<!doctype html>
         b.classList.toggle("active", b.dataset.mode === newMode));
       document.getElementById("paint-options").style.display = (newMode === "paint") ? "" : "none";
       document.getElementById("build-options").style.display = (newMode === "build") ? "" : "none";
+      const speedOpts = document.getElementById("speed-options");
+      if (speedOpts) speedOpts.style.display = (newMode === "speed") ? "" : "none";
+      // Speed 모드 떠나면 pin 해제
+      if (newMode !== "speed") pinnedEdgeId = "";
       // 모드 전환 시 진행 중 인터랙션 모두 cancel
       paintTrajectory = null;
       edgeStartNodeId = "";
@@ -620,6 +657,17 @@ _TEMPLATE = r"""<!doctype html>
       const btn = e.target.closest(".stamp-btn");
       if (!btn) return;
       selectStamp(btn.dataset.stamp);
+    });
+
+    // F1e: Grid snap UI 바인딩
+    document.getElementById("grid-snap-toggle").addEventListener("change", (e) => {
+      gridSnapEnabled = !!e.target.checked;
+      showToast(`Grid snap ${gridSnapEnabled ? 'ON' : 'OFF'}`);
+    });
+    document.getElementById("grid-size-input").addEventListener("change", (e) => {
+      const v = parseFloat(e.target.value);
+      if (Number.isFinite(v) && v > 0) gridSize = v;
+      else e.target.value = gridSize;
     });
 
     // 키보드 단축키:
@@ -663,6 +711,7 @@ _TEMPLATE = r"""<!doctype html>
       if (e.key === "p" || e.key === "P") { setMode("paint"); e.preventDefault(); return; }
       if (e.key === "s" || e.key === "S") { setMode("stamp"); e.preventDefault(); return; }
       if (e.key === "b" || e.key === "B") { setMode("build"); e.preventDefault(); return; }
+      if (e.key === "v" || e.key === "V") { setMode("speed"); e.preventDefault(); return; }
       // ── Build 도구 단축키 (Build 모드일 때만) ──────────────
       if (mode === "build") {
         if (e.key === "n" || e.key === "N") { selectBuildTool("node"); e.preventDefault(); return; }
@@ -698,8 +747,16 @@ _TEMPLATE = r"""<!doctype html>
         const a = nodeById.get(e.src), b = nodeById.get(e.dst);
         if (!a || !b) return "";
         const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
-        const stroke = e.bidir ? "var(--edge-bidir)" : "var(--edge-unidir)";
-        const width = 2;
+        // F1b-ux: v_max 설정된 edge 는 amber, 일반 edge 는 기존 색
+        const hasVMax = (e.v_max !== null && e.v_max !== undefined);
+        const isActive = (e.id === hoveredEdgeId);
+        const isPinned = (e.id === pinnedEdgeId);
+        let stroke;
+        if (hasVMax) stroke = "var(--warn)";              // 속도 제한 표시색 (amber)
+        else if (e.bidir) stroke = "var(--edge-bidir)";
+        else stroke = "var(--edge-unidir)";
+        // 활성/hover/pinned 시 두께 증가
+        const width = (isPinned ? 5 : (isActive ? 4 : 2));
         const dx = x2-x1, dy = y2-y1;
         const len = Math.hypot(dx, dy) || 1;
         const angle = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -722,13 +779,49 @@ _TEMPLATE = r"""<!doctype html>
           arrow = `<g transform="translate(${mx} ${my}) scale(${labelScale}) rotate(${angle})">
             <polygon points="6,0 -3,-4 -3,4" fill="${stroke}" opacity="0.95" /></g>`;
         }
+        // F1c+ : invisible 두꺼운 hit line (화면 ~9px) — 줌인 상태에서도 edge hover 쉬움.
+        // 실 visual line(2px) 위에 더 두꺼운 transparent stroke 을 깔고 pointer-events="stroke" 로
+        // 클릭/호버 잡음. 시각 두께는 그대로 유지.
+        const hitW = 9 / zoomScale;
         return `<g data-edge-id="${e.id}">
           <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                stroke="transparent" stroke-width="${hitW}"
+                pointer-events="stroke" stroke-linecap="round" />
+          <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
                 stroke="${stroke}" stroke-width="${width/zoomScale}"
-                stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                stroke-linecap="round" vector-effect="non-scaling-stroke"
+                pointer-events="none" />
           ${arrow}
         </g>`;
       }).join("");
+
+      // Speed 모드: 모든 edge 에 현재 v_max 값 라벨 표시 (전체 상태 한눈에)
+      let vmaxLabelsSvg = "";
+      if (mode === "speed") {
+        vmaxLabelsSvg = edges.map(e => {
+          const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+          if (!a || !b) return "";
+          const mx = (sx(a.x) + sx(b.x)) / 2;
+          const my = (sy(a.y) + sy(b.y)) / 2;
+          const hasV = (e.v_max !== null && e.v_max !== undefined);
+          const txt = hasV ? Number(e.v_max).toFixed(2) : "—";
+          const fill = hasV ? "var(--warn)" : "var(--muted-2)";
+          return `<g transform="translate(${mx} ${my}) scale(${labelScale})" style="pointer-events:none">
+            <rect x="-14" y="-7" width="28" height="14" rx="3" fill="rgba(255,255,255,0.92)" stroke="${fill}" stroke-width="0.8" />
+            <text x="0" y="3" text-anchor="middle" fill="${fill}" font-family="var(--font-mono)" font-size="9">${txt}</text>
+          </g>`;
+        }).join("");
+      }
+
+      // F1c: hit-test 반경을 world 좌표 기반으로 변환 + 화면 픽셀 범위 클램프.
+      //   기본 22 world units(노드 간 fit scale 평균에 대응), 화면 픽셀로 6~28 사이 clamp.
+      //   저줌 → 화면에서 hit area 작아짐 (정밀 선택), 고줌 → 화면 cap 28px (이웃 노드 충돌 방지).
+      const HIT_RADIUS_WORLD = 22;
+      const HIT_RADIUS_PX_MIN = 6;
+      const HIT_RADIUS_PX_MAX = 28;
+      const _wantPx = HIT_RADIUS_WORLD * zoomScale;
+      const _pxClamped = Math.max(HIT_RADIUS_PX_MIN, Math.min(HIT_RADIUS_PX_MAX, _wantPx));
+      const hitR = _pxClamped / zoomScale;  // viewBox 단위
 
       const nodesSvg = nodes.map(n => {
         const cx = sx(n.x), cy = sy(n.y);
@@ -738,11 +831,14 @@ _TEMPLATE = r"""<!doctype html>
         if (n.id === hoveredNodeId) rings.push(`<circle class="node-hover" r="11" fill="none" />`);
         if (selectedNodeIds.has(n.id)) rings.push(`<circle class="node-selected" r="13" fill="none" />`);
         if (n.id === edgeStartNodeId) rings.push(`<circle class="node-edge-start" r="14" fill="none" />`);
+        // outer g: translate only (hit circle = world unit). inner g: labelScale (visual = pixel constant).
         return `<g data-node-id="${n.id}" style="cursor:${stampTool === 'inspect' && mode !== 'build' ? 'default' : 'pointer'}"
-                   transform="translate(${cx} ${cy}) scale(${labelScale})">
-          <circle r="22" fill="transparent" />
-          ${rings.join('')}
-          ${shape}
+                   transform="translate(${cx} ${cy})">
+          <circle r="${hitR}" fill="transparent" />
+          <g transform="scale(${labelScale})">
+            ${rings.join('')}
+            ${shape}
+          </g>
         </g>`;
       }).join("");
 
@@ -761,19 +857,70 @@ _TEMPLATE = r"""<!doctype html>
         boxSvg = `<rect class="select-box" x="${xLo}" y="${yLo}" width="${w}" height="${h}" />`;
       }
 
-      // Add Edge preview line (첫 노드 ~ 커서)
+      // Add Edge preview line (첫 노드 ~ 커서) + F1d: 방향 화살촉 미리보기
+      // edgeStartButton 으로 단방향(좌=0) / 양방향(우=2) 시각 분기. 사용자가 손가락 떼기
+      // 전에 어느 방향/유형으로 생성될지 즉시 보임.
       let edgePrevSvg = "";
       if (mode === "build" && buildTool === "edge" && edgeStartNodeId && edgePreviewClient) {
         const src = nodeById.get(edgeStartNodeId);
         if (src) {
-          edgePrevSvg = `<line class="edge-preview" x1="${sx(src.x)}" y1="${sy(src.y)}"
-            x2="${edgePreviewClient.x}" y2="${edgePreviewClient.y}"
-            vector-effect="non-scaling-stroke" />`;
+          const x1 = sx(src.x), y1 = sy(src.y);
+          const x2 = edgePreviewClient.x, y2 = edgePreviewClient.y;
+          const pdx = x2 - x1, pdy = y2 - y1;
+          const plen = Math.hypot(pdx, pdy) || 1;
+          const pang = Math.atan2(pdy, pdx) * 180 / Math.PI;
+          const isBidirPreview = (edgeStartButton === 2);
+          let prevArrow = "";
+          if (plen > 12) {  // 너무 짧으면 화살촉 생략 (잡음 방지)
+            if (isBidirPreview) {
+              const p1x = x1 + pdx*0.3, p1y = y1 + pdy*0.3;
+              const p2x = x1 + pdx*0.7, p2y = y1 + pdy*0.7;
+              prevArrow =
+                `<g transform="translate(${p1x} ${p1y}) scale(${labelScale}) rotate(${pang + 180})">
+                  <polygon points="5,0 -3,-3 -3,3" fill="var(--accent)" opacity="0.85" /></g>` +
+                `<g transform="translate(${p2x} ${p2y}) scale(${labelScale}) rotate(${pang})">
+                  <polygon points="5,0 -3,-3 -3,3" fill="var(--accent)" opacity="0.85" /></g>`;
+            } else {
+              // 단방향: 끝점 가까이 (src→cursor)
+              const tx = x1 + pdx*0.85, ty = y1 + pdy*0.85;
+              prevArrow =
+                `<g transform="translate(${tx} ${ty}) scale(${labelScale}) rotate(${pang})">
+                  <polygon points="6,0 -3,-4 -3,4" fill="var(--accent)" opacity="0.9" /></g>`;
+            }
+          }
+          edgePrevSvg = `<line class="edge-preview" x1="${x1}" y1="${y1}"
+            x2="${x2}" y2="${y2}"
+            vector-effect="non-scaling-stroke" />${prevArrow}`;
+        }
+      }
+
+      // F1b-ux: hover 시 v_max 툴팁 (hover edge 의 중간점에 텍스트)
+      let vmaxTipSvg = "";
+      if (hoveredEdgeId) {
+        const he = edges.find(x => x.id === hoveredEdgeId);
+        if (he) {
+          const a = nodeById.get(he.src), b = nodeById.get(he.dst);
+          if (a && b) {
+            const mx = (sx(a.x) + sx(b.x)) / 2;
+            const my = (sy(a.y) + sy(b.y)) / 2;
+            const label = (he.v_max !== null && he.v_max !== undefined)
+              ? `v_max ${Number(he.v_max).toFixed(2)} m/s`
+              : "v_max — (Shift+scroll)";
+            // labelScale = 1/zoomScale → 폰트는 항상 12px 보여짐
+            vmaxTipSvg = `
+              <g transform="translate(${mx} ${my - 14}) scale(${labelScale})">
+                <rect x="-58" y="-10" width="116" height="18" rx="4"
+                      fill="rgba(15,23,42,0.92)" />
+                <text x="0" y="3" text-anchor="middle" fill="#fff"
+                      font-family="var(--font-mono)" font-size="11"
+                      style="pointer-events:none">${label}</text>
+              </g>`;
+          }
         }
       }
 
       svg.innerHTML = `<g transform="translate(${panX} ${panY}) scale(${zoomScale})">
-        ${edgesSvg}${nodesSvg}${edgePrevSvg}${trajSvg}${boxSvg}
+        ${edgesSvg}${vmaxLabelsSvg}${nodesSvg}${edgePrevSvg}${trajSvg}${boxSvg}${vmaxTipSvg}
       </g>`;
       // 사용자 액션 마다 validation 자동 재계산
       recomputeValidation();
@@ -798,27 +945,78 @@ _TEMPLATE = r"""<!doctype html>
       return `<circle r="3" fill="${color}" opacity="0.7" />`;
     }
 
-    // ── Hover (인스펙터 + 노드 하이라이트) ──────────────────────
+    // ── Hover (인스펙터 + 노드/엣지 하이라이트) ──────────────────
+    // 인스펙터 grace: edge/노드에서 벗어나도 즉시 비우지 않고 400ms 유예. 그 사이
+    // 사용자가 인스펙터 영역(우측 패널)으로 마우스를 옮기면 mouseenter 에서 pin → 유지.
+    let _inspectorMouseOver = false;
+    let _inspectorClearTimer = null;
+    function _emptyInspectorNow() {
+      document.getElementById("inspector").innerHTML =
+        '<div class="inspector-empty">노드 또는 엣지 위에 마우스를 올리면 정보 표시</div>';
+    }
+    function scheduleInspectorClear() {
+      if (_inspectorClearTimer) clearTimeout(_inspectorClearTimer);
+      _inspectorClearTimer = setTimeout(() => {
+        _inspectorClearTimer = null;
+        if (!hoveredEdgeId && !hoveredNodeId && !_inspectorMouseOver) _emptyInspectorNow();
+      }, 400);
+    }
+    function cancelInspectorClear() {
+      if (_inspectorClearTimer) { clearTimeout(_inspectorClearTimer); _inspectorClearTimer = null; }
+    }
+    document.getElementById("inspector").addEventListener("mouseenter", () => {
+      _inspectorMouseOver = true;
+      cancelInspectorClear();
+    });
+    document.getElementById("inspector").addEventListener("mouseleave", () => {
+      _inspectorMouseOver = false;
+      // 인스펙터 밖으로 나가면 edge hover 가 아직 살아있으면 유지, 아니면 grace 후 비움
+      if (!hoveredEdgeId && !hoveredNodeId) scheduleInspectorClear();
+    });
+
     document.getElementById("map").addEventListener("mousemove", (e) => {
       const nodeHit = e.target.closest("[data-node-id]");
       const edgeHit = e.target.closest("[data-edge-id]");
       const prevHoverNode = hoveredNodeId;
+      const prevHoverEdge = hoveredEdgeId;
       if (nodeHit) {
-        hoveredNodeId = nodeHit.dataset.nodeId;
-        const n = nodeById.get(hoveredNodeId);
-        showInspectorNode(n);
+        const nid = nodeHit.dataset.nodeId;
+        if (nid !== hoveredNodeId) {
+          hoveredNodeId = nid;
+          hoveredEdgeId = "";
+          showInspectorNode(nodeById.get(nid));
+        }
+        cancelInspectorClear();
       } else if (edgeHit) {
-        hoveredNodeId = "";
-        const ed = edges.find(x => x.id === edgeHit.dataset.edgeId);
-        showInspectorEdge(ed);
+        const eid = edgeHit.dataset.edgeId;
+        if (eid !== hoveredEdgeId) {
+          // edge 가 바뀐 경우에만 인스펙터 재생성 (input focus / 부분 입력값 보존)
+          hoveredNodeId = "";
+          hoveredEdgeId = eid;
+          // pinned 상태에서는 hover 가 바뀌어도 인스펙터 유지 (pinned edge 정보 계속 표시)
+          if (!pinnedEdgeId) showInspectorEdge(edges.find(x => x.id === eid));
+        }
+        cancelInspectorClear();
       } else {
         hoveredNodeId = "";
-        document.getElementById("inspector").innerHTML =
-          '<div class="inspector-empty">노드 또는 엣지 위에 마우스를 올리면 정보 표시</div>';
+        hoveredEdgeId = "";
+        // pinned 또는 인스펙터에 마우스 있는 동안은 비우지 않음. 빈 공간이면 grace 후 비움.
+        if (!_inspectorMouseOver && !pinnedEdgeId) scheduleInspectorClear();
       }
-      // 노드 hover ring 만 재렌더 (drag 중 아닐 때만)
-      if (prevHoverNode !== hoveredNodeId && !paintTrajectory && !isPanning) {
+      // hover 변화 시 재렌더 (drag 중 아닐 때만)
+      const changed = (prevHoverNode !== hoveredNodeId) || (prevHoverEdge !== hoveredEdgeId);
+      if (changed && !paintTrajectory && !isPanning) {
         render();
+      }
+    });
+    // SVG 밖으로 나가면 visual hover 만 해제, 인스펙터는 grace (pinned 면 유지)
+    document.getElementById("map").addEventListener("mouseleave", () => {
+      const had = hoveredEdgeId || hoveredNodeId;
+      hoveredEdgeId = "";
+      hoveredNodeId = "";
+      if (had && !paintTrajectory && !isPanning) {
+        render();
+        if (!_inspectorMouseOver && !pinnedEdgeId) scheduleInspectorClear();
       }
     });
 
@@ -838,6 +1036,30 @@ _TEMPLATE = r"""<!doctype html>
     }
     function showInspectorEdge(ed) {
       const a = nodeById.get(ed.src), b = nodeById.get(ed.dst);
+      const curVal = (ed.v_max !== null && ed.v_max !== undefined)
+        ? Number(ed.v_max).toFixed(2) : "";
+      // F1b-ux (rev2): 정확 조작용 +/- 버튼 + number input + 해제 버튼.
+      // scroll 은 보조 (부호 노이즈 디바이스에선 불안정).
+      const vmaxEditor = `
+        <div style="display:flex; align-items:center; gap:4px;">
+          <button data-vmax-act="dec" title="−0.1"
+                  style="width:24px; height:22px; padding:0; border:1px solid var(--border-strong);
+                         background:var(--surface-2); border-radius:4px; cursor:pointer;">−</button>
+          <input type="number" data-vmax-input id="vmax-input"
+                 value="${curVal}" placeholder="—" min="0.1" max="1.5" step="0.1"
+                 style="width:64px; padding:2px 4px; font-family:var(--font-mono); font-size:11px;
+                        text-align:center; border:1px solid var(--border-strong); border-radius:4px;" />
+          <button data-vmax-act="inc" title="+0.1"
+                  style="width:24px; height:22px; padding:0; border:1px solid var(--border-strong);
+                         background:var(--surface-2); border-radius:4px; cursor:pointer;">+</button>
+          <span style="color:var(--muted); font-size:10.5px; margin-left:2px;">m/s</span>
+          <button data-vmax-act="clear" title="해제(미설정으로)"
+                  style="margin-left:auto; padding:2px 6px; font-size:10.5px; border:1px solid var(--border);
+                         background:transparent; color:var(--muted); border-radius:4px; cursor:pointer;">×</button>
+        </div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:4px;">
+          범위 0.1 ~ 1.5 m/s · Shift+scroll 도 가능
+        </div>`;
       document.getElementById("inspector").innerHTML = `
         <div class="inspector-row"><span class="k">type</span><span class="v">↔ EDGE</span></div>
         <div class="inspector-row"><span class="k">id</span><span class="v">${ed.id}</span></div>
@@ -845,11 +1067,112 @@ _TEMPLATE = r"""<!doctype html>
         <div class="inspector-row"><span class="k">direction</span><span class="v">${ed.bidir ? '↔ bidirectional' : '→ unidirectional'}</span></div>
         <div class="inspector-row"><span class="k">corridor</span><span class="v">${ed.corridor || '(unlabeled)'}</span></div>
         <div class="inspector-row"><span class="k">access</span><span class="v">${ed.access || '—'}</span></div>
+        <div class="inspector-row" style="flex-direction:column; align-items:stretch; gap:6px;">
+          <span class="k">v_max</span>
+          ${vmaxEditor}
+        </div>
       `;
+      // 버튼/input 핸들러 바인딩 (hover edge 가 살아있는 동안만 유효)
+      const inspector = document.getElementById("inspector");
+      const targetId = ed.id;
+      function findEdge() { return edges.find(x => x.id === targetId); }
+      inspector.querySelectorAll("[data-vmax-act]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const edge = findEdge(); if (!edge) return;
+          const act = btn.dataset.vmaxAct;
+          if (act === "clear") {
+            if (edge.v_max == null) return;
+            pushHistoryAndApply(edge, null);
+          } else {
+            const dir = (act === "inc") ? +1 : -1;
+            const cur = (edge.v_max == null) ? 1.0 : Number(edge.v_max);
+            const next = clampToStep(cur + dir * VMAX_STEP, VMAX_MIN, VMAX_MAX);
+            if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
+              pushHistoryAndApply(edge, next);
+            }
+          }
+          showInspectorEdge(findEdge());
+        });
+      });
+      const inputEl = inspector.querySelector("[data-vmax-input]");
+      if (inputEl) {
+        inputEl.addEventListener("change", () => {
+          const edge = findEdge(); if (!edge) return;
+          const v = inputEl.value.trim();
+          if (v === "") {
+            if (edge.v_max != null) pushHistoryAndApply(edge, null);
+          } else {
+            const num = parseFloat(v);
+            if (!Number.isFinite(num)) { inputEl.value = (edge.v_max == null ? "" : Number(edge.v_max).toFixed(2)); return; }
+            const clamped = Math.max(VMAX_MIN, Math.min(VMAX_MAX, num));
+            const stepped = Math.round(clamped / VMAX_STEP) * VMAX_STEP;
+            const next = Number(stepped.toFixed(2));
+            if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
+              pushHistoryAndApply(edge, next);
+            }
+          }
+          showInspectorEdge(findEdge());
+        });
+      }
     }
 
     // ── Pan / Zoom ─────────────────────────────────────────────
+    // F1b-ux (rev): scroll 기본 = zoom. v_max 편집은 Shift+scroll on hovered edge 로만.
+    //   - 기본 scroll → zoom (어느 줌 레벨이든 항상)
+    //   - Shift + scroll on hovered edge → v_max 0.1 ~ 1.5 자유 조절 (0.1 step)
+    //     · 0.6 ↔ 0.7 경계 없음 — 전 범위 자유 이동
+    //     · 미설정(null)이면 1.0 부터 시작
+    const VMAX_STEP = 0.1;
+    const VMAX_MIN = 0.1, VMAX_MAX = 1.5;
+    function pushHistoryAndApply(edge, newVMax) {
+      history.past.push(snapshot());
+      history.future = [];
+      edge.v_max = newVMax;
+      render();
+    }
+    function clampToStep(v, lo, hi) {
+      const stepped = Math.round(v / VMAX_STEP) * VMAX_STEP;
+      return Math.min(hi, Math.max(lo, Number(stepped.toFixed(2))));
+    }
+    // Wheel 누적기 — 마우스(deltaMode=0 pixel ~100/click, mode=1 line ~3/click) 와
+    // trackpad(mode=0 작은 값 ~±1~10 다발) 양쪽 모두 자연스럽게 1 tick씩 처리.
+    //   1. deltaMode 정규화 (line/page → pixel)
+    //   2. 누적값이 ±WHEEL_ACCUM_THRESHOLD 마다 1 tick
+    //   3. 200ms 무동작 시 누적 리셋 (다른 swipe 동작과 섞이지 않게)
+    let _wheelAccum = 0;
+    let _wheelResetTimer = null;
+    const WHEEL_ACCUM_THRESHOLD = 80;  // 마우스 한 click(~100px)에 1 tick, trackpad 짧은 swipe는 누적 후
     document.getElementById("map").addEventListener("wheel", (e) => {
+      // Speed 모드 + edge hover → v_max 편집. modifier 의존 없음.
+      // (Shift+scroll 방식은 키 release timing 문제로 폐기됨)
+      if (mode === "speed" && hoveredEdgeId) {
+        const edge = edges.find(x => x.id === hoveredEdgeId);
+        if (edge) {
+          e.preventDefault();
+          // deltaMode 정규화
+          let scaled = e.deltaY;
+          if (e.deltaMode === 1) scaled *= 33;     // line → pixel
+          else if (e.deltaMode === 2) scaled *= 400; // page → pixel
+          _wheelAccum += scaled;
+          if (_wheelResetTimer) clearTimeout(_wheelResetTimer);
+          _wheelResetTimer = setTimeout(() => { _wheelAccum = 0; }, 200);
+          let ticks = 0;
+          while (Math.abs(_wheelAccum) >= WHEEL_ACCUM_THRESHOLD) {
+            const s = Math.sign(_wheelAccum);
+            ticks -= s;  // deltaY > 0 (아래로 굴림) → 감소
+            _wheelAccum -= s * WHEEL_ACCUM_THRESHOLD;
+          }
+          if (ticks === 0) return;
+          const cur = (edge.v_max == null) ? 1.0 : Number(edge.v_max);
+          const next = clampToStep(cur + ticks * VMAX_STEP, VMAX_MIN, VMAX_MAX);
+          if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
+            pushHistoryAndApply(edge, next);
+            showInspectorEdge(edge);
+          }
+          return;
+        }
+      }
+      // default: zoom (모든 위치/줌 레벨)
       e.preventDefault();
       const svg = e.currentTarget;
       const rect = svg.getBoundingClientRect();
@@ -922,12 +1245,33 @@ _TEMPLATE = r"""<!doctype html>
         return;
       }
 
+      // Speed 모드: edge 좌클릭 → 인스펙터 pin (마우스 떠도 +/- 사용 유지)
+      if (mode === "speed") {
+        if (onEdge && e.button === 0) {
+          const eid = e.target.closest("[data-edge-id]").dataset.edgeId;
+          pinnedEdgeId = (pinnedEdgeId === eid) ? "" : eid;  // 같은 edge 재클릭 → unpin
+          const ed = edges.find(x => x.id === eid);
+          if (ed) showInspectorEdge(ed);
+          render();
+          return;
+        }
+        // 빈 공간 좌클릭 → pin 해제 + 평소 pan
+        if (!onEdge && !onNode && e.button === 0) {
+          if (pinnedEdgeId) { pinnedEdgeId = ""; render(); }
+          isPanning = true;
+          panStart = {x: e.clientX, y: e.clientY, panX, panY};
+          document.querySelector(".map-shell").classList.add("dragging");
+          return;
+        }
+        return;
+      }
+
       if (mode === "build") {
         // Build 도구별 분기 (pointerdown 즉시 액션)
         if (buildTool === "node") {
-          // 빈 공간 좌클릭만 — 노드 추가
+          // 빈 공간 좌클릭만 — 노드 추가 (Shift = 직전 노드 축 고정)
           if (!onNode && !onEdge && e.button === 0) {
-            addNodeAt(localX, localY);
+            addNodeAt(localX, localY, {shiftAxis: e.shiftKey});
             render();
           }
           // Add Node 도구 + 노드 위 클릭은 무시 (또는 hint?)
@@ -951,6 +1295,12 @@ _TEMPLATE = r"""<!doctype html>
               edgePreviewClient = null;
               render();
             }
+          }
+          // F1d: edge 위 좌클릭 (그리는 중 아닐 때) = 단↔양방향 토글
+          else if (onEdge && !edgeStartNodeId && e.button === 0) {
+            const edgeId = e.target.closest("[data-edge-id]").dataset.edgeId;
+            toggleEdgeBidir(edgeId);
+            render();
           }
           // 빈 공간 클릭 = 진행 중 cancel
           else if (edgeStartNodeId) {
@@ -1184,9 +1534,22 @@ _TEMPLATE = r"""<!doctype html>
       const y = ((VH - PAD) - syv) / scaleFit + minY;
       return {x, y};
     }
-    function addNodeAt(svgX, svgY) {
+    function addNodeAt(svgX, svgY, opts) {
       pushHistory();
-      const {x, y} = svgToData(svgX, svgY);
+      let {x, y} = svgToData(svgX, svgY);
+      const shiftAxis = !!(opts && opts.shiftAxis);
+      // F1e: grid snap (data 좌표 기준)
+      if (gridSnapEnabled && gridSize > 0) {
+        x = Math.round(x / gridSize) * gridSize;
+        y = Math.round(y / gridSize) * gridSize;
+      }
+      // F1e: Shift = 직전 노드의 X 또는 Y 축 고정 (커서가 가까운 축으로)
+      if (shiftAxis && lastPlacedDataXY) {
+        const dx = Math.abs(x - lastPlacedDataXY.x);
+        const dy = Math.abs(y - lastPlacedDataXY.y);
+        if (dx < dy) x = lastPlacedDataXY.x;   // 수직 정렬 (X 고정)
+        else         y = lastPlacedDataXY.y;   // 수평 정렬 (Y 고정)
+      }
       const id = nextNodeId();
       const newNode = {
         id, x, y, name: id,
@@ -1195,7 +1558,9 @@ _TEMPLATE = r"""<!doctype html>
       };
       nodes.push(newNode);
       nodeById.set(id, newNode);
-      showToast(`+ Node ${id} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+      lastPlacedDataXY = {x, y};
+      const hint = (shiftAxis ? " [axis]" : "") + (gridSnapEnabled ? ` [grid ${gridSize}]` : "");
+      showToast(`+ Node ${id} at (${x.toFixed(1)}, ${y.toFixed(1)})${hint}`);
     }
     function addEdgeBetween(srcId, dstId, bidir) {
       if (srcId === dstId) { showToast("동일 노드 — 엣지 생략"); return; }
@@ -1219,6 +1584,14 @@ _TEMPLATE = r"""<!doctype html>
         bidir: !!bidir, corridor: "", access: "",
       });
       showToast(`+ Edge ${srcId} ${bidir ? '↔' : '→'} ${dstId}`);
+    }
+    // F1d: 단↔양방향 토글
+    function toggleEdgeBidir(edgeId) {
+      const edge = edges.find(e => e.id === edgeId);
+      if (!edge) return;
+      pushHistory();
+      edge.bidir = !edge.bidir;
+      showToast(`Edge ${edge.src} ${edge.bidir ? '↔' : '→'} ${edge.dst}`);
     }
     function deleteNode(id) {
       pushHistory();
@@ -1356,7 +1729,9 @@ _TEMPLATE = r"""<!doctype html>
       const added_edges = [];
       for (const e of edges) {
         if (!ORIGINAL_EDGES.has(e.id)) {
-          added_edges.push({id: e.id, src: e.src, dst: e.dst, bidir: !!e.bidir});
+          const payload = {id: e.id, src: e.src, dst: e.dst, bidir: !!e.bidir};
+          if (e.v_max !== null && e.v_max !== undefined) payload.v_max = e.v_max;
+          added_edges.push(payload);
         }
       }
 
@@ -1381,6 +1756,10 @@ _TEMPLATE = r"""<!doctype html>
         if (e.src !== orig.src || e.dst !== orig.dst) {
           diff.src = e.src; diff.dst = e.dst;
         }
+        // F1b-ux: v_max diff — null/undefined 도 unset 의도로 명시 기록
+        const curV = (e.v_max === null || e.v_max === undefined) ? null : Number(e.v_max);
+        const origV = (orig.v_max === null || orig.v_max === undefined) ? null : Number(orig.v_max);
+        if (curV !== origV) diff.v_max = curV;
         if (Object.keys(diff).length > 0) edge_overrides[e.id] = diff;
       }
 

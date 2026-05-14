@@ -93,6 +93,8 @@ class ImportedEdge:
     raw_link_type_cd: str = ""
     # 만약 양방향으로 병합되었다면, 어떤 원본 링크 ID 들에서 왔는지
     merged_from: list[str] = field(default_factory=list)
+    # F1b-ux: 사용자가 map editor에서 설정한 per-edge 속도 제한 (m/s). None이면 미설정.
+    v_max: Optional[float] = None
 
 
 @dataclass
@@ -588,6 +590,7 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
             inferred_access_type=e.inferred_access_type,
             raw_link_type_cd=e.raw_link_type_cd,
             merged_from=list(e.merged_from),
+            v_max=e.v_max,
         )
         edges.append(ee)
 
@@ -625,6 +628,9 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
             e.src = ov["src"]
         if "dst" in ov:
             e.dst = ov["dst"]
+        if "v_max" in ov:
+            # null 도 명시적 unset 의미로 허용
+            e.v_max = (None if ov["v_max"] is None else float(ov["v_max"]))
 
     # 4. added_nodes
     for an in edits.get("added_nodes", []):
@@ -638,9 +644,11 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
 
     # 5. added_edges
     for ae in edits.get("added_edges", []):
+        v_max_raw = ae.get("v_max", None)
         edges.append(ImportedEdge(
             edge_id=ae["id"], src=ae["src"], dst=ae["dst"],
             inferred_bidirectional=bool(ae.get("bidir", False)),
+            v_max=(None if v_max_raw is None else float(v_max_raw)),
         ))
 
     # 차수 + 리포트 재계산
@@ -697,6 +705,7 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
             distance=dist,
             corridor=e.inferred_corridor,
             access_type=e.inferred_access_type,
+            v_max=e.v_max,
         )
         g.edges[e.edge_id] = edge
         g._out_edges.setdefault(e.src, []).append(e.edge_id)
@@ -711,6 +720,7 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
                 distance=dist,
                 corridor=e.inferred_corridor,
                 access_type=e.inferred_access_type,
+                v_max=e.v_max,
             )
             g.edges[edge_rev.edge_id] = edge_rev
             g._out_edges.setdefault(e.dst, []).append(edge_rev.edge_id)

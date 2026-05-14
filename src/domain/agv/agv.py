@@ -79,6 +79,9 @@ class AGV:
 
         self._fsm    = AGVStateMachine()
         self._motion = MotionModel(max_speed_mps)
+        # F1b-core: AGV의 intrinsic max_speed. _motion.max_speed는 tick마다 effective_speed로
+        # 덮어쓰기되므로 fallback 기준값을 별도로 보존.
+        self._max_speed_mps: float = max_speed_mps
 
         self.current_node_id: Optional[str] = None
         self.target_node_id:  Optional[str] = None
@@ -1024,7 +1027,12 @@ class AGV:
             edge = self._find_edge(current, dst)
             if edge is None:
                 return []
-            edge_speed = max(min(speed, edge.max_speed), 0.01)
+            # F1b-core: edge.v_max 가 설정되면 그 값을 그대로 사용 (edge 우선).
+            # 없으면 기존 동작 (agv max ∩ edge.max_speed).
+            if edge.v_max is not None:
+                edge_speed = max(edge.v_max, 0.01)
+            else:
+                edge_speed = max(min(speed, edge.max_speed), 0.01)
             travel_time = edge.distance / edge_speed
             edge_start = cursor
             edge_end = edge_start + travel_time
@@ -1224,8 +1232,10 @@ class AGV:
 
     def _get_effective_speed(self, sim_time: float) -> float:
         """
-        Type E: head-on 감지 시 크리프 속도.
-        policy 없어도 graph._lane_mode로 판단.
+        속도 결정 우선순위:
+          1. Type E creep — head-on 감지 시 SPEED_CREEP_MS
+          2. F1b-core edge.v_max — 현재 주행 edge에 설정돼 있으면 edge 우선
+          3. AGV intrinsic max_speed (self._max_speed_mps)
         """
         lane_mode = getattr(self._graph, "_lane_mode", "")
         if lane_mode == "bidirectional_creep":
@@ -1237,7 +1247,12 @@ class AGV:
                 if self.current_node_id and self.target_node_id:
                     if self._sched.is_head_on(self.current_node_id, self.target_node_id, sim_time):
                         return SPEED_CREEP_MS
-        return self._motion.max_speed
+        # F1b-core: edge v_max override (instant transition at edge entry)
+        if self.current_node_id and self.target_node_id:
+            edge = self._find_edge(self.current_node_id, self.target_node_id)
+            if edge is not None and edge.v_max is not None:
+                return edge.v_max
+        return self._max_speed_mps
 
     async def _publish_state(self) -> None:
         from src.vda5050.parser import VDA5050Parser

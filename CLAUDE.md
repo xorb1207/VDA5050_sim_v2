@@ -78,6 +78,7 @@ python scripts/merge_showcase_into_saturation.py <SAT_DIR> <SHOWCASE_DIR>
 다음 세 갈래로 진행:
 
 - [x] **(b) 시각화 2차** — 3-pane / 사고 클릭→맵 강조 / reserved path depth (opacity ramp) / blocking chain (체인 AGV 펄스 링) / 방향 마커 (chevron) 모두 playback에 들어감. 추가로 타임라인 사고 마커 + 핫스팟 히트맵 토글까지 완료.
+- [x] **(F1) Map Editor v_max + UX** (2026-05-15) — `Edge.v_max` 옵션 도메인 추가, editor Speed 모드 신설, hit-test 정밀도 / 방향 그리기 / stamp 배치 UX. 자세한 내용은 [`HISTORY.md`](HISTORY.md) §6.5, [`agent_a_map_editor_spec.md`](agent_a_map_editor_spec.md) 상단 표.
 - [ ] **(a) 혼합 토폴로지 실험** ← 1순위 (b 종료), 엔진 확장 선행 (corridor별 type 분리)
 - [ ] **(c) 24h 호라이즌 시나리오** ← 2순위, a 끝난 뒤. battery/charging이 의미를 갖는 구간
 
