@@ -73,7 +73,13 @@ class TaskGenerator:
         bus: IMessageBus,
         task_interval_s: float = 30.0,
         demand_set: DemandSet | None = None,
+        mode: str = "auto",
     ) -> None:
+        # mode:
+        #   "auto"   — demand_set이 있으면 demand_set, 없으면 랜덤 (기존 동작).
+        #   "manual" — 자동 발행 비활성. JobDispatcher.dispatch()로만 작업 주입.
+        if mode not in ("auto", "manual"):
+            raise ValueError(f"unknown TaskGenerator mode: {mode}")
         self._graph = graph
         self._bus = bus
         self._interval = task_interval_s
@@ -85,6 +91,7 @@ class TaskGenerator:
         self._backlogged_demand: TaskDemand | None = None
         self._started: bool = False
         self._completed_demand_ids: set[str] = set()
+        self._mode = mode
 
         # 작업 가능 노드 추출:
         #   - sample_fab.json 기준: NodeRole.WORK
@@ -105,6 +112,7 @@ class TaskGenerator:
     def diagnostics(self) -> dict:
         data = self._diagnostics.to_dict()
         data["routeable_pair_count"] = len(self._routeable_pairs)
+        data["dispatch_mode"] = self._mode
         if self._demand_set:
             data["demand_mode"] = self._demand_set.mode
             data["demand_count"] = len(self._demand_set.demands)
@@ -146,6 +154,10 @@ class TaskGenerator:
         agvs: dict[str, AGV],
     ) -> None:
         """엔진 틱마다 호출. interval 경과 시 IDLE AGV에 Order 발행."""
+        # manual 모드: 외부 dispatch만. demand_set이 있을 때도 자동 발행 금지.
+        if self._mode == "manual":
+            return
+
         if self._demand_set is not None:
             await self._step_demand_set(sim_time, agvs)
             return
