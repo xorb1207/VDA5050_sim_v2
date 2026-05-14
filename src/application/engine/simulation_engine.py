@@ -119,4 +119,5 @@ class SimulationEngine:
         kpis["sim_time_s"]               = round(self.sim_time, 2)
         kpis["avg_wait_per_agv_s"]       = kpis.get("avg_wait_time_s", 0.0)
         kpis["deadlock_or_stall_count"]  = self._deadlock_count
+        kpis["deadlock_count"]           = self._deadlock_count
         return kpis

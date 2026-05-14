@@ -133,6 +133,9 @@ class KPICalculator:
 
         total_wait   = sum(a._wait_time_s for a in agvs.values())
         avg_wait     = round(total_wait / n_agv, 2)
+        max_wait     = round(
+            max((a._wait_time_s for a in agvs.values()), default=0.0), 2
+        )
 
         # 분포 KPI: edge 단위 wait/travel 기록을 모두 모아 p95 계산.
         # 표본이 20건 미만이면 p95는 불안정하므로 0.0 반환.
@@ -197,6 +200,18 @@ class KPICalculator:
             if total_attempts > 0 else 0.0
         )
         reroute_count = sum(a._reroute_count for a in agvs.values())
+
+        # 노드 차원 contention: 노드 점유 시도 중 시간 충돌로 실패한 비율.
+        # reservation_failure_rate가 노드+엣지+section 합산이라면, 이쪽은 노드만.
+        node_success = sum(
+            len(rs) for rs in scheduler._reservations.values()
+        )
+        node_failure = sum(scheduler._congestion_counts.values())
+        node_total_attempts = node_success + node_failure
+        node_contention_rate = (
+            round(node_failure / node_total_attempts, 4)
+            if node_total_attempts > 0 else 0.0
+        )
 
         # ── 4. Resource Utilization ────────────────────────────────
         # 노드 점유율: 예약 점유 시간 합 / (전체 노드 수 × sim_time)
@@ -288,6 +303,7 @@ class KPICalculator:
             # 2. Time Efficiency
             "avg_task_completion_time_s":  avg_task_completion,
             "avg_wait_time_s":             avg_wait,
+            "max_wait_time_s":             max_wait,
             "total_wait_time_s":           round(total_wait, 2),
             "wait_time_p95_s":             wait_p95,
             "travel_time_avg_s":           travel_avg,
@@ -302,6 +318,7 @@ class KPICalculator:
 
             # 3. Traffic Efficiency
             "reservation_failure_rate":    reservation_failure_rate,
+            "node_contention_rate":        node_contention_rate,
             "reroute_count":               reroute_count,
             "headon_total":                headon_summary["headon_total"],
             "followon_total":              headon_summary["followon_total"],
@@ -328,4 +345,5 @@ class KPICalculator:
             # 6. Stability
             "max_queue_length":            max_queue,
             "deadlock_or_stall_count":     0,  # engine에서 주입
+            "deadlock_count":              0,  # engine에서 주입 (alias)
         }
