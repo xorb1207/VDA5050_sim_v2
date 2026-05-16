@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from collections import defaultdict
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.domain.fleet import Fleet
 
 
 @dataclass
@@ -38,6 +41,9 @@ class ItinerarySegment:
     section_capacity: int = 1
 
 
+SIMULTANEOUS_RESERVATION_THRESHOLD_S = 0.001  # F1a: 1ms 동시 예약 판정 threshold
+
+
 class TimeWindowScheduler:
     """
     노드 + 엣지 Time-window 예약 엔진.
@@ -46,6 +52,8 @@ class TimeWindowScheduler:
       - reserve_edge("A__B") 시 역방향 "B__A" 예약 존재 확인
       - 같은 방향 진입 시각 간격이 headway보다 짧으면 추종 안전거리 위반
       - 충돌 시 False 반환 → AGV WAITING_RESERVATION 대기
+
+    F1a: 동시 예약 충돌 시 fleet priority 기반 tiebreaker
     """
 
     def __init__(self) -> None:
@@ -455,6 +463,41 @@ class TimeWindowScheduler:
         호출자가 해당 AGV를 강제 후진/재계획시킴.
         """
         return sorted(cycle)[-1]
+
+    def resolve_simultaneous_reservation(
+        self,
+        agv_id_a: str,
+        agv_id_b: str,
+        time_a: float,
+        time_b: float,
+        fleet_a=None,
+        fleet_b=None,
+    ) -> str:
+        """F1a: 동시 예약 충돌 해결 — fleet priority 기반 tiebreaker.
+
+        Args:
+            agv_id_a, agv_id_b: 충돌 중인 AGV ID
+            time_a, time_b: 각 예약 시도 시간
+            fleet_a, fleet_b: 각 AGV의 Fleet 인스턴스 (None 이면 priority=1로 취급)
+
+        Returns:
+            우선순위 높은(=먼저 진행) AGV ID. priority 낮을수록 우선.
+        """
+        time_diff = abs(time_a - time_b)
+
+        # ≥1ms 차이: FIFO (먼저 도착한 쪽)
+        if time_diff >= SIMULTANEOUS_RESERVATION_THRESHOLD_S:
+            return agv_id_a if time_a < time_b else agv_id_b
+
+        # <1ms 차이: priority 낮은 fleet 우선
+        priority_a = fleet_a.priority if fleet_a is not None else 1
+        priority_b = fleet_b.priority if fleet_b is not None else 1
+
+        if priority_a != priority_b:
+            return agv_id_a if priority_a < priority_b else agv_id_b
+
+        # priority 같으면 agv_id 작은 쪽 (deterministic)
+        return agv_id_a if agv_id_a < agv_id_b else agv_id_b
 
     # ── 공통 통계 ──────────────────────────────────────────────
 
