@@ -1,9 +1,30 @@
-# CLAUDE.md — vda5050_sim_v2 FAB AMR Simulator
+# CLAUDE.md — vda5050_sim_v2
 
-반도체 FAB AMR 플릿 시뮬레이터. 토폴로지별 KPI 비교가 주 목적.
-스택: Python 3.12, asyncio, VDA5050, Open-RMF 개념 참조.
+## 🎯 정체성
 
-> **Companions**: 디렉토리/맵/토폴로지/KPI 표는 [`ARCHITECTURE.md`](ARCHITECTURE.md). 날짜별 실험 결과·완료 작업 이력은 [`HISTORY.md`](HISTORY.md).
+**실 평면도 기반 FAB AMR what-if 시뮬레이터 + RMF 호환 sandbox.**
+
+- **Primary 사용자**: 운영/배치 의사결정자 — "이 실제 맵을 이렇게 운영하면 어떻게 될까" 답하는 것이 주 목적
+- **Secondary 사용자**: 알고리즘 연구자 — 토폴로지 비교 등 정형 실험은 Advanced 영역으로 유지
+- **포지셔닝**: Open-RMF 가 되려 하지 않음. RMF 데이터 포맷 호환 + 가벼운 what-if 도구로 차별화.
+
+### 핵심 가치 (우선순위 순)
+
+1. **실 평면도 즉시 import** → 5분 안에 시각/시뮬 (외부 JSON/YAML)
+2. **GUI 정책 부여** (방향, 노드 역할, fleet 분리) — Map Editor
+3. **정책 변형 case 비교** — `run_imported_cases.py`
+4. **RMF 호환 데이터** 로 장기 통합 경로 보존
+5. **토폴로지 비교 (Advanced)** — 알고리즘 검증·연구용. 더이상 주력 X.
+
+### 진입점
+
+- **운영 도구 (주력)**: `./run quickrun` → 외부 맵 업로드 → Editor → 시뮬
+- **Case 비교**: `python scripts/run_imported_cases.py <yaml>`
+- **연구/토폴로지 비교 (Advanced)**: `python -m src.application.usecases.experiment_runner --experiment ...`
+
+스택: Python 3.12, asyncio, FastAPI, VDA5050 / Open-RMF 개념 참조.
+
+> **Companions**: 디렉토리/맵/토폴로지/KPI 표는 [`ARCHITECTURE.md`](ARCHITECTURE.md). 날짜별 실험 결과·완료 작업 이력은 [`HISTORY.md`](HISTORY.md). 사용자 가이드는 [`README.md`](README.md).
 
 ---
 
@@ -53,40 +74,73 @@ retry 1~3회: 0.1s 고정 / 4~10회: backoff (≤0.3s) / 11+회: force_reroute()
 
 ## 실행
 
-```bash
-# 통합 테스트 (T1~T59)
-python tests/integration/test_simulation.py
+### 운영 도구 (Primary)
 
-# 실험 (예: 5타입 포화 곡선)
+```bash
+# 1. 라이브 시뮬 서버 (Quickrun)
+./run quickrun                                     # Linux/Mac
+run.bat quickrun                                   # Windows
+# → http://127.0.0.1:8765/ — 외부 맵 업로드 + Editor + 시뮬
+
+# 2. 외부 맵 임포트 + Editor (CLI)
+python scripts/import_map_demo.py <map.json> --edit --open
+
+# 3. Case 비교 (여러 정책 변형 × seed 배치)
+python scripts/run_imported_cases.py experiments/<yaml> --open
+```
+
+### 연구·검증 (Advanced)
+
+```bash
+# 토폴로지 비교 (A~E 정형 토폴로지)
 python -m src.application.usecases.experiment_runner \
   --experiment experiments/topology_saturation_common_demand.yaml
 
-# 시뮬레이션 페이지(playback) 함께 보고 싶으면 showcase + merge:
+# playback 함께 보고 싶으면 showcase + merge
 python -m src.application.usecases.experiment_runner \
   --experiment experiments/topology_showcase.yaml
 python scripts/merge_showcase_into_saturation.py <SAT_DIR> <SHOWCASE_DIR>
 ```
 
-산출물: `outputs/experiments/{run_id}/{summary,ranking,report}.{csv,json,html}` + `{variant}/playback.{html,trace.json}`.
+### 회귀 안전망
+
+```bash
+python tests/integration/test_simulation.py        # T1~T59 + 추가 invariant
+```
+
+산출물:
+- 운영: `outputs/imported_cases/<ts>/{ranking.csv,summary.json,report.html}`
+- 연구: `outputs/experiments/<run_id>/{summary,ranking,report}.{csv,json,html}` + `{variant}/playback.{html,trace.json}`
 
 ---
 
-## 현재 우선순위 (2026-04-27 합의)
+## 현재 우선순위 (2026-05-16 재정의)
 
-엔진은 현 호라이즌(600s~1800s) + 토폴로지 비교 목적으론 **사실상 완료**. 미체크 항목은 ranking을 흔들 만한 효과가 거의 없거나 운영 시나리오 부재로 보류.
+### 완료 (이번 사이클)
+- [x] **외부 맵 임포터** — JSON/YAML import + 자동 추론 (양방향 100%, 코리도 클러스터링, 도달성)
+- [x] **Map Editor** — Paint(방향) / Stamp(역할) / Build(노드·엣지 add·del) / 다중선택 / Undo
+- [x] **Quickrun 라이브 시뮬** — 실시간 SVG + KPI + 히트맵 + 충돌 마커
+- [x] **Quickrun ↔ Editor 통합** — Save & Run, /upload-map, /edit/{id}
+- [x] **Case 비교 CLI** — `run_imported_cases.py`
+- [x] **(F1) Per-edge v_max** (Agent A) — `Edge.v_max` + editor Speed 모드
+- [x] **(b) 시각화 2차** — 3-pane / 사고 클릭→맵 강조 / blocking chain / 히트맵
+- [x] **Windows 호환** — `run.bat` + sys.path 자동 추가
+- [x] **Agent B Dispatcher/KPI** — JobDispatcher, JobApi, manual mode
 
-다음 세 갈래로 진행:
+### 다음 사이클 — 주력 (운영 도구)
 
-- [x] **(b) 시각화 2차** — 3-pane / 사고 클릭→맵 강조 / reserved path depth (opacity ramp) / blocking chain (체인 AGV 펄스 링) / 방향 마커 (chevron) 모두 playback에 들어감. 추가로 타임라인 사고 마커 + 핫스팟 히트맵 토글까지 완료.
-- [x] **(F1) Map Editor v_max + UX** (2026-05-15) — `Edge.v_max` 옵션 도메인 추가, editor Speed 모드 신설, hit-test 정밀도 / 방향 그리기 / stamp 배치 UX. 자세한 내용은 [`HISTORY.md`](HISTORY.md) §6.5, [`agent_a_map_editor_spec.md`](agent_a_map_editor_spec.md) 상단 표.
-- [ ] **(a) 혼합 토폴로지 실험** ← 1순위 (b 종료), 엔진 확장 선행 (corridor별 type 분리)
-- [ ] **(c) 24h 호라이즌 시나리오** ← 2순위, a 끝난 뒤. battery/charging이 의미를 갖는 구간
+- [ ] **F1a (Multi-graph / 이기종 fleet)** ← **1순위**. lane `graph_idx` + `Fleet` 클래스 + Editor graph 탭. 최대 3 fleet 지원. 설계 완료 (`agent_a_map_editor_spec.md` 또는 별도 spec). 견적 ~4.5일.
+- [ ] **RMF building_map YAML import/export** ← 2순위. 폐쇄망 데이터 호환. 견적 ~1일.
+- [ ] **Background image overlay** ← 3순위. 실 도면 PNG 위에 그리기. 견적 ~1일.
+- [ ] **Editor 속성 풀 편집** — vertex lock_radius, edge capacity/width 등.
 
-### 다음 사이클 예정
-- **F1a (Multi-graph / OpenRMF)**: lane `graph_idx` 필드 + `fleets:` 섹션 + 에디터 Graph 탭 + JSON/YAML export. 이기종 로봇 (최대 3 fleet) 지원. 현 F1a/b/c 사이클 (A/B/C 트랙) 완료 후 착수.
+### Advanced (연구·검증 영역, 후순위)
+
+- [ ] **(a) 혼합 토폴로지 실험** — corridor 별 type 분리. 운영 도구로는 우선순위 X. 알고리즘 연구 시 가치 있음.
+- [ ] **(c) 24h 호라이즌 시나리오** — battery/charging 의미 구간. 폐쇄망 dry run 후 결정.
 
 ### 보류 (현 단계 ROI 낮음)
-charging contention / priority reservation / 회전 감속 / wait_time 통합 / reachable siding 정밀화 / 세부 공간 설계 / failure injection — 새 질문이 생기기 전까지 보류.
+charging contention / priority reservation / 회전 감속 / wait_time 통합 / reachable siding 정밀화 / failure injection — 새 질문 생기기 전까지 보류.
 
 자세한 완료/추진 이력은 [`HISTORY.md`](HISTORY.md).
 

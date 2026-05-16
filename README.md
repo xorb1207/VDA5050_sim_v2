@@ -1,21 +1,29 @@
 # vda5050_sim_v2
 
-반도체 FAB AMR 플릿 시뮬레이터 + 외부 맵 임포터/에디터. 폐쇄망에서 실 평면도 JSON 을 올려 정책 변형 별 KPI 를 비교하는 것이 주 목적.
+> **실 평면도 기반 FAB AMR what-if 시뮬레이터 + RMF 호환 sandbox**
+
+폐쇄망 안의 실 평면도 (JSON/YAML) 를 그대로 가져와서 GUI 에서 정책 (방향/노드 역할/fleet) 을 부여하고, 라이브 시뮬레이션 또는 정책 변형 case 비교로 KPI 차이를 확인하는 도구.
+
+**대상 사용자**:
+- **Primary**: 운영/배치 의사결정자 — "이 맵을 이렇게 운영하면 어떻게 될까" 답하기
+- **Secondary**: 알고리즘 연구자 — 정형 토폴로지 비교 (Advanced 영역)
+
+**포지셔닝**: Open-RMF 가 되려 하지 않음. **RMF 데이터 포맷 호환 + 가벼운 what-if** 도구로 차별화.
 
 스택: Python 3.12, asyncio, FastAPI, VDA5050 / Open-RMF 개념 참조.
 
 ---
 
-## 무엇을 할 수 있나
+## 핵심 흐름 (Primary)
 
 ```
-폐쇄망 외부 JSON  (node + link 구조)
-   ↓ import (자동 추론: 양방향 병합 / 코리도 클러스터링 / 도달성)
-[A] CLI 미리보기      —  scripts/import_map_demo.py
-[B] Editor 페이지     —  Paint(방향) + Stamp(역할) + Build(노드/엣지 add/del) + Undo
-   ↓ Save → *.edit.json
-[C] Quickrun 라이브   —  실시간 SVG + KPI + 히트맵 + ⚠ 충돌 마커
-[D] Case 비교 배치    —  여러 정책 변형 × seed → ranking.html
+폐쇄망 외부 JSON/YAML
+       ↓ import (자동 추론: 양방향 병합 / 코리도 클러스터링 / 도달성)
+[1] CLI 미리보기        scripts/import_map_demo.py
+[2] Map Editor          Paint(방향) + Stamp(역할) + Build(노드·엣지 add·del) + Undo
+       ↓ Save → *.edit.json (override only)
+[3] Quickrun 라이브 시뮬   실시간 SVG + KPI + 히트맵 + ⚠ 충돌 마커
+[4] Case 비교 배치        여러 정책 변형 × seed → ranking.html
 ```
 
 ---
@@ -212,8 +220,8 @@ python scripts/run_imported_cases.py experiments/plant_what_if.yaml --open
 
 ### 토폴로지 옵션
 
-- **Type A~E**: 기본 generator (논문/실험용 정형 토폴로지)
-- **📂 Imported**: 업로드된 외부 맵
+- **📂 Imported (주력)**: 업로드한 외부 맵
+- **Type A~E** (Advanced): 정형 토폴로지 generator — 알고리즘 검증·논문용
 
 ### 시각화 토글
 
@@ -251,7 +259,7 @@ vda5050_sim_v2/
 │   │   ├── engine/                 ← SimulationEngine
 │   │   ├── scenario/               ← TaskGenerator, DemandSet
 │   │   └── usecases/
-│   │       └── experiment_runner.py   ← Type A~E 비교용 (기존)
+│   │       └── experiment_runner.py   ← Type A~E 비교용 (Advanced)
 │   ├── analytics/
 │   │   ├── kpi.py                  ← KPI 계산
 │   │   └── playback_trace.py       ← ★ playback HTML + Quickrun live HTML
@@ -310,6 +318,26 @@ python scripts/generate_synthetic_plant.py --out maps/test.json
 # 7. 통합 테스트
 python tests/integration/test_simulation.py
 ```
+
+### Advanced — 토폴로지 비교 (연구·검증)
+
+> 주력 워크플로우 아님. 정형 토폴로지 (Type A~E) 의 KPI 비교 — 알고리즘 검증 및 연구 시 사용.
+
+```bash
+# Type A~E 비교 (포화 곡선)
+python -m src.application.usecases.experiment_runner \
+  --experiment experiments/topology_saturation_common_demand.yaml
+
+# playback 함께 보고 싶으면 showcase + merge
+python -m src.application.usecases.experiment_runner \
+  --experiment experiments/topology_showcase.yaml
+python scripts/merge_showcase_into_saturation.py <SAT_DIR> <SHOWCASE_DIR>
+
+# 결과 인덱스 페이지
+./run open
+```
+
+산출물: `outputs/experiments/<run_id>/ranking.html` + `<variant>/playback.html`.
 
 ### REST / WebSocket API (Quickrun 서버, `http://127.0.0.1:8765`)
 
