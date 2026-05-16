@@ -80,6 +80,11 @@ def build_editor_html(
         "edges": edges_payload,
         "report": report_payload,
     }
+
+    # 배경 이미지 포함
+    if imported.background_image:
+        payload["background_image"] = imported.background_image
+
     payload_json = json.dumps(payload, ensure_ascii=False)
 
     return _TEMPLATE.replace("__PAYLOAD_JSON__", payload_json)
@@ -416,6 +421,56 @@ _TEMPLATE = r"""<!doctype html>
         </div>
       </div>
 
+      <!-- 배경 이미지 -->
+      <div class="panel">
+        <h2>Background Image</h2>
+        <div style="display:flex; flex-direction:column; gap:10px; font-size:11.5px;">
+          <div>
+            <input type="file" id="bg-image-upload" accept="image/png,image/jpeg,image/jpg"
+                   style="display:block; width:100%; padding:6px 4px; border:1px solid var(--border); border-radius:4px;" />
+            <div style="font-size:10px; color:var(--muted); margin-top:4px;">PNG/JPG 업로드</div>
+          </div>
+
+          <div id="bg-controls" style="display:none; gap:10px; flex-direction:column;">
+            <div>
+              <label style="display:block; margin-bottom:4px;">
+                Opacity <span id="bg-opacity-value">100</span>%
+              </label>
+              <input type="range" id="bg-opacity-slider" min="0" max="100" value="100"
+                     style="width:100%; cursor:pointer;" />
+            </div>
+
+            <div>
+              <label style="display:block; margin-bottom:4px;">
+                X Offset
+              </label>
+              <input type="number" id="bg-x-offset" value="0" step="1"
+                     style="width:100%; padding:4px; border:1px solid var(--border); border-radius:3px;" />
+            </div>
+
+            <div>
+              <label style="display:block; margin-bottom:4px;">
+                Y Offset
+              </label>
+              <input type="number" id="bg-y-offset" value="0" step="1"
+                     style="width:100%; padding:4px; border:1px solid var(--border); border-radius:3px;" />
+            </div>
+
+            <div>
+              <label style="display:block; margin-bottom:4px;">
+                Scale <span id="bg-scale-value">100</span>%
+              </label>
+              <input type="range" id="bg-scale-slider" min="10" max="200" value="100"
+                     style="width:100%; cursor:pointer;" />
+            </div>
+
+            <button id="bg-clear" style="padding:6px; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:4px; cursor:pointer; font-size:11px;">
+              Clear Background
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 검증 리포트 -->
       <div class="panel">
         <h2>Validation</h2>
@@ -463,6 +518,15 @@ _TEMPLATE = r"""<!doctype html>
     // 다중 선택 상태
     let selectionBox = null;     // {x1,y1,x2,y2} (SVG 좌표) — Shift+드래그 중일 때만
     let selectedNodeIds = new Set();   // 박스로 선택된 노드들 (Stamp 일괄 적용용)
+
+    // 배경 이미지 상태
+    let backgroundImage = {
+      url: PAYLOAD.background_image?.url || null,
+      opacity: PAYLOAD.background_image?.opacity !== undefined ? PAYLOAD.background_image.opacity : 100,
+      x_offset: PAYLOAD.background_image?.x_offset || 0,
+      y_offset: PAYLOAD.background_image?.y_offset || 0,
+      scale: PAYLOAD.background_image?.scale !== undefined ? PAYLOAD.background_image.scale : 100,
+    };
 
     // ID 자동 생성 (새 노드용)
     let newNodeCounter = 9000;
@@ -919,7 +983,21 @@ _TEMPLATE = r"""<!doctype html>
         }
       }
 
-      svg.innerHTML = `<g transform="translate(${panX} ${panY}) scale(${zoomScale})">
+      // 배경 이미지 레이어 (가장 먼저 렌더링 = 가장 낮은 z-index)
+      let bgSvg = "";
+      if (backgroundImage.url) {
+        const bgOpacity = backgroundImage.opacity / 100;
+        const bgScale = backgroundImage.scale / 100;
+        const bgW = 1000 * bgScale;
+        const bgH = 700 * bgScale;
+        bgSvg = `<image x="${backgroundImage.x_offset}" y="${backgroundImage.y_offset}"
+                         width="${bgW}" height="${bgH}"
+                         href="${backgroundImage.url}"
+                         opacity="${bgOpacity}"
+                         style="pointer-events:none;" />`;
+      }
+
+      svg.innerHTML = bgSvg + `<g transform="translate(${panX} ${panY}) scale(${zoomScale})">
         ${edgesSvg}${vmaxLabelsSvg}${nodesSvg}${edgePrevSvg}${trajSvg}${boxSvg}${vmaxTipSvg}
       </g>`;
       // 사용자 액션 마다 validation 자동 재계산
@@ -1763,7 +1841,7 @@ _TEMPLATE = r"""<!doctype html>
         if (Object.keys(diff).length > 0) edge_overrides[e.id] = diff;
       }
 
-      return {
+      const result = {
         format_version: 1,
         source: SOURCE_NAME,
         timestamp: new Date().toISOString(),
@@ -1782,6 +1860,19 @@ _TEMPLATE = r"""<!doctype html>
         node_overrides,
         edge_overrides,
       };
+
+      // 배경 이미지 포함
+      if (backgroundImage.url) {
+        result.background_image = {
+          url: backgroundImage.url,
+          opacity: backgroundImage.opacity,
+          x_offset: backgroundImage.x_offset,
+          y_offset: backgroundImage.y_offset,
+          scale: backgroundImage.scale,
+        };
+      }
+
+      return result;
     }
 
     function downloadEdits(edits) {
@@ -1803,6 +1894,76 @@ _TEMPLATE = r"""<!doctype html>
       if (toastTimer) clearTimeout(toastTimer);
       toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
     }
+
+    // ── 배경 이미지 컨트롤 ──────────────────────────────────────────
+    function updateBackgroundImageUI() {
+      const controlsDiv = document.getElementById("bg-controls");
+      if (backgroundImage.url) {
+        controlsDiv.style.display = "flex";
+      } else {
+        controlsDiv.style.display = "none";
+      }
+      document.getElementById("bg-opacity-slider").value = backgroundImage.opacity;
+      document.getElementById("bg-opacity-value").textContent = backgroundImage.opacity;
+      document.getElementById("bg-scale-slider").value = backgroundImage.scale;
+      document.getElementById("bg-scale-value").textContent = backgroundImage.scale;
+      document.getElementById("bg-x-offset").value = backgroundImage.x_offset;
+      document.getElementById("bg-y-offset").value = backgroundImage.y_offset;
+    }
+
+    document.getElementById("bg-image-upload").addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        backgroundImage.url = evt.target.result;
+        backgroundImage.opacity = 100;
+        backgroundImage.x_offset = 0;
+        backgroundImage.y_offset = 0;
+        backgroundImage.scale = 100;
+        updateBackgroundImageUI();
+        render();
+        showToast("Background image uploaded");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById("bg-opacity-slider").addEventListener("input", (e) => {
+      backgroundImage.opacity = Number(e.target.value);
+      document.getElementById("bg-opacity-value").textContent = backgroundImage.opacity;
+      render();
+    });
+
+    document.getElementById("bg-scale-slider").addEventListener("input", (e) => {
+      backgroundImage.scale = Number(e.target.value);
+      document.getElementById("bg-scale-value").textContent = backgroundImage.scale;
+      render();
+    });
+
+    document.getElementById("bg-x-offset").addEventListener("input", (e) => {
+      backgroundImage.x_offset = Number(e.target.value) || 0;
+      render();
+    });
+
+    document.getElementById("bg-y-offset").addEventListener("input", (e) => {
+      backgroundImage.y_offset = Number(e.target.value) || 0;
+      render();
+    });
+
+    document.getElementById("bg-clear").addEventListener("click", () => {
+      backgroundImage.url = null;
+      backgroundImage.opacity = 100;
+      backgroundImage.x_offset = 0;
+      backgroundImage.y_offset = 0;
+      backgroundImage.scale = 100;
+      document.getElementById("bg-image-upload").value = "";
+      updateBackgroundImageUI();
+      render();
+      showToast("Background image cleared");
+    });
+
+    // 초기 UI 상태 설정
+    updateBackgroundImageUI();
 
     // ── 초기 렌더 ───────────────────────────────────────────────
     render();
