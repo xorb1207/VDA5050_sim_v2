@@ -61,9 +61,10 @@ def graph_to_map_json(graph: MapGraph) -> dict:
         dst = graph.nodes.get(e.end_node_id)
         if src is None or dst is None:
             continue
+        edge_key = f"{e.start_node_id}__{e.end_node_id}"
         edges.append({
             "edge_id": e.edge_id,
-            "edge_key": f"{e.start_node_id}__{e.end_node_id}",
+            "edge_key": edge_key,
             "start_node_id": e.start_node_id,
             "end_node_id": e.end_node_id,
             "x1": float(src.x),
@@ -336,6 +337,14 @@ class RealRunner:
         new_events = rec_events[self._last_sent_event_idx:]
         self._last_sent_event_idx = len(rec_events)
 
+        # 엣지 밀도 계산: 모든 edge_enter 이벤트 누적
+        edge_density = {}
+        for ev in rec_events:
+            if ev.get("kind") == "edge_enter":
+                edge_key = ev.get("edge_key", "")
+                if edge_key:
+                    edge_density[edge_key] = edge_density.get(edge_key, 0) + 1
+
         # Rolling KPI
         agv_states = [a._fsm.state for a in self._agvs]
         ho_summary = self._scheduler.get_headon_summary()
@@ -354,6 +363,7 @@ class RealRunner:
             "snapshot": snapshot,
             "new_events": new_events,
             "kpi": kpi,
+            "edge_density": edge_density,
         })
 
     async def _publish_end(self) -> None:
