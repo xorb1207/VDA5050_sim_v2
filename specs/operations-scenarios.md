@@ -95,6 +95,58 @@
 
 ---
 
+### #9. 이기종 AGV — fleet_type 별 graph isolation + capability 매칭
+> ICS 추가 요구 (2026-05-16). OHT 같은 다른 카테고리 없음. **AGV 종류만 여러 개** (`AGV_TYPE_1`, `AGV_TYPE_2`, ...). 종류마다 이동 가능한 edge 가 다르고, 처리 가능한 task 가 다름.
+
+**핵심 제약**:
+- 모든 AGV 가 **동일한 물리 map** (vertex 풀 공유) 위에서 동작
+- 단, AGV 종류마다 이동 가능한 **edge 가 다름** — graph isolation
+- **Single-stage task** — pickup → dropoff, 한 AGV 가 처음부터 끝까지 혼자 처리
+- **Handover 없음, multi-stage 없음**
+
+**Dispatch 로직** (단순):
+```python
+# Demand 에 required_capability 있음
+# AGV 는 자신의 capability + 자신의 graph 내 경로만 사용
+eligible = [agv for agv in fleet if required_capability in agv.capabilities]
+best = nearest_idle(eligible, demand.pickup)
+assign(best, demand)
+```
+
+**Graph 구조**:
+```
+공통 vertex (노드) 는 모든 fleet_type 이 공유 가능
+edge 는 fleet_type 별로 분리
+  - AGV_TYPE_1 의 AGV 는 TYPE_1 lane (graph_idx 0) 만 사용
+  - AGV_TYPE_2 의 AGV 는 TYPE_2 lane (graph_idx 1) 만 사용
+  - ...
+같은 vertex 에 여러 fleet_type 의 lane 이 동시에 연결 가능
+  → 공용 충전소 / 공용 환승 자연스럽게 표현
+```
+
+**Demand 분배 예시**:
+```yaml
+fleets:
+  - {id: TYPE_1, capabilities: [overhead, pickup_small], graph_idx: 0, count: 6}
+  - {id: TYPE_2, capabilities: [floor, pickup_large],     graph_idx: 1, count: 4}
+  - {id: TYPE_3, capabilities: [scan],                    graph_idx: 2, count: 2}
+
+# Demand 의 required_capability 가 곧 어느 fleet_type 이 처리할지를 결정
+```
+
+**구현 매핑**:
+- 🟡 **F1a Multi-fleet** — graph_idx + capability 통합. spec 작성 완료 ([`F1a-multi-fleet/`](F1a-multi-fleet/))
+  - engine.md — Fleet.capabilities + Demand.required_capability + dispatch
+  - ui-editor.md — Active Graph 토글 + capability 시각화
+  - ui-quickrun.md — fleet_type 별 색 + 별도 KPI
+  - integration.md — YAML 스키마 + case 비교
+
+**OUT (현 spec 외)**:
+- Multi-stage / handover (별도 사이클)
+- OHT 같은 비-AGV 카테고리 (현 ICS 범위 외)
+
+---
+
 ## 🚨 GAP 종합 (다음 사이클 작업 후보)
 
 | GAP | 시나리오 | 견적 | 우선순위 |
@@ -103,7 +155,7 @@
 | **GAP-B** 수동 Job 부여 UI | #4 | ~0.5일 | **2순위** |
 | **GAP-C** Traffic 밀도 히트맵 | #3 | ~0.3일 | **3순위** |
 | **GAP-D** RMF YAML import/export | #1, #8 | ~0.5일 | **4순위** |
-| **F1a** Multi-fleet | #8 (장기) | ~4.5일 | 5순위 (ABCD 후) |
+| **F1a** Multi-fleet (graph isolation + capability) | #8 (장기), **#9** | ~5.5~6일 | 5순위 (ABCD 후) |
 
 **합산**: GAP A~D 합쳐도 **~1.8일** — F1a 의 절반 미만이면서 사용자 의도 4개 GAP 해소.
 → **다음 사이클 ABCD 먼저, 그 후 F1a 권장**.
@@ -126,4 +178,5 @@
 
 | 날짜 | 변경 |
 |---|---|
+| 2026-05-16 | 시나리오 #9 추가 (ICS: 이기종 AGV graph isolation + capability) — F1a 견적 ~4.5 → ~5.5~6일 |
 | 2026-05-16 | 8개 시나리오 박제 + GAP A-D 도출 + 우선순위 재정의 (ABCD > F1a) |

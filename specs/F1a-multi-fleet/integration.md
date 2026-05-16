@@ -38,14 +38,21 @@
 
 ```json
 {
-  "nodes": [...],
+  "nodes": [
+    {"id": "N001", ..., "capability": "overhead"}    // ★ (선택) 노드의 capability 태그
+  ],
   "links": [
     {"id": "L001", "connected": {"from": "N001", "to": "N002"},
-     "graph_idx": 0}    // ★ 신규 (없으면 0)
+     "graph_idx": 0}                                   // ★ 신규 (없으면 0)
   ],
-  "fleets": [             // ★ 신규 (optional — 없으면 단일 fleet)
-    {"id": "A", "graph_idx": 0, "color": "#0f9d58", "count": 6,
-     "max_speed_mps": 1.5, "priority": 1}
+  "fleets": [                                          // ★ 신규 (optional — 없으면 단일 fleet)
+    {"id": "TYPE_1", "graph_idx": 0, "color": "#0f9d58",
+     "capabilities": ["overhead", "pickup_small"],
+     "count": 6, "max_speed_mps": 1.5, "priority": 1}
+  ],
+  "demands": [                                         // ★ (선택) 수동 demand 정의
+    {"pickup": "ST_001", "dropoff": "ST_002",
+     "required_capability": "overhead"}
   ]
 }
 ```
@@ -56,12 +63,21 @@
 levels:
   L1:
     vertices:
-      - [x, y, "name", {is_charger: true}]
+      - [x, y, "name", {is_charger: true, capability: "overhead"}]
     lanes:
       - [v0, v1, {graph_idx: 0, bidirectional: true}]
 
 fleets:
-  - {id: A, graph_idx: 0, color: "#0f9d58", count: 6}
+  - {id: TYPE_1, graph_idx: 0, color: "#0f9d58",
+     capabilities: [overhead, pickup_small], count: 6}
+  - {id: TYPE_2, graph_idx: 1, color: "#2563eb",
+     capabilities: [floor, pickup_large], count: 4}
+  - {id: TYPE_3, graph_idx: 2, color: "#e0a000",
+     capabilities: [scan], count: 2}
+
+# (선택) 명시적 demand
+demands:
+  - {pickup: ST_001, dropoff: ST_002, required_capability: overhead}
 ```
 
 ### Case 비교 YAML 확장
@@ -93,34 +109,49 @@ label, seed, completion_rate, throughput, avg_wait, headon, retry, deadlock
 확장:
 ```
 label, seed, completion_rate, throughput, avg_wait, headon, retry, deadlock,
-fleet_A_throughput, fleet_A_utilization,
-fleet_B_throughput, fleet_B_utilization,
-fleet_C_throughput, fleet_C_utilization
+fleet_TYPE_1_throughput, fleet_TYPE_1_utilization,
+fleet_TYPE_2_throughput, fleet_TYPE_2_utilization,
+fleet_TYPE_3_throughput, fleet_TYPE_3_utilization,
+unmatched_demand_count                  ← capability 미매칭 누적
 ```
 
 ## Tests
 
 ```python
 def test_json_with_fleets_parsed():
-    """JSON 에 fleets 필드 있으면 ImportedMap.fleets 에 들어옴"""
+    """JSON 에 fleets 필드 있으면 ImportedMap.fleets 에 들어옴 (capabilities 포함)"""
+
+def test_json_with_demands_parsed():
+    """JSON 에 demands 필드 있으면 required_capability 도 함께 파싱"""
+
+def test_node_capability_parsed():
+    """노드의 capability 태그 (옵셔널) 파싱"""
 
 def test_yaml_rmf_building_map_loaded():
-    """Open-RMF YAML 형식 import — lanes graph_idx 인식"""
+    """Open-RMF YAML 형식 import — lanes graph_idx + fleets 인식"""
 
 def test_legacy_json_no_fleets_default_single_fleet():
     """기존 JSON (fleets 없음) → 단일 fleet 자동 생성 (호환성)"""
 
 def test_run_imported_cases_fleet_breakdown_in_csv():
-    """ranking.csv 에 fleet_A_throughput 등 컬럼 존재"""
+    """ranking.csv 에 fleet_TYPE_1_throughput 등 컬럼 존재"""
 
 def test_run_imported_cases_per_fleet_columns_populated():
     """fleet 별 KPI 가 0 이 아닌 값으로 채워짐 (3 fleet 시나리오)"""
 
-def test_editor_save_includes_fleets():
-    """*.edit.json 에 fleet override 정보 포함 (count 변경 등)"""
+def test_unmatched_demand_count_in_ranking():
+    """capability 미매칭 demand 가 ranking.csv 의 unmatched_demand_count 에 누적"""
+
+def test_editor_save_includes_fleets_and_capabilities():
+    """*.edit.json 에 fleet override + node capability override 포함"""
 
 def test_e2e_3fleet_synthetic_runs():
-    """maps/synthetic_3fleet.json 로 시뮬 정상 종료"""
+    """maps/synthetic_3fleet.json 로 시뮬 정상 종료 — 각 fleet 의 demand 가
+    적절한 fleet_type AGV 에 할당"""
+
+def test_capability_mismatch_pending():
+    """매칭 불가 demand (필요 capability 없는 fleet 만 존재) → pending,
+    완료율 떨어지고 unmatched_demand_count 증가"""
 ```
 
 ## DO NOT
@@ -170,4 +201,9 @@ python tests/integration/test_simulation.py
 □ 의도 #6: KPI fleet 별 분리됨
 □ 의도 #7: ranking.html 에서 case 비교 + fleet 분해
 □ 의도 #8: RMF building_map YAML import 됨
+□ 의도 #9 (★): Demand 의 required_capability 매칭으로 dispatch
+              - TYPE_1 의 capability 만 가능한 demand → TYPE_1 AGV 만 받음
+              - TYPE_3 의 capability demand → TYPE_3 AGV 만 받음
+              - capability 없는 demand → 모든 fleet 가능 (legacy)
+              - 매칭 불가 demand → pending + unmatched_demand_count 누적
 ```

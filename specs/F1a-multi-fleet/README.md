@@ -1,13 +1,13 @@
-# F1a — Multi-graph / 이기종 fleet 지원
+# F1a — Multi-graph / 이기종 AGV 지원
 
-> 다음 사이클 (ABCD 처리 후) 1순위. 견적 ~4.5일.
-> 2026-05-16 합의. Open-RMF traffic-editor 의 `graph_idx` 패턴 차용.
+> 다음 사이클 (ABCD 처리 후) 1순위. 견적 **~5.5~6일**.
+> 2026-05-16 합의. Open-RMF traffic-editor 의 `graph_idx` + capability 매칭 차용.
 
 ---
 
 ## 한 줄 요약
 
-같은 평면도에서 **여러 fleet 의 lane graph 를 분리** 운영. 이기종 로봇 (예: 소형 OHT + 대형 AGV + 보조 로봇) 이 각자의 graph 를 통해 다니되, **vertex 는 공유** (charger / station / 환승점 자연스럽게 표현).
+같은 평면도에서 **이기종 AGV (`TYPE_1`, `TYPE_2`, ...) 가 각자의 lane graph 분리** 운영. **vertex 는 공유** (충전소/스테이션 자연스럽게). **Demand 의 `required_capability` 와 Fleet 의 `capabilities` 매칭**으로 dispatch (single-stage, no handover).
 
 ---
 
@@ -15,8 +15,9 @@
 
 > [`../operations-scenarios.md`](../operations-scenarios.md) 참조.
 
-- **의도 #8 (장기)** — OpenRMF / VDA5050 모사. graph_idx 패턴 호환은 OpenRMF 의 핵심 데이터 구조.
-- (앞서 대화) 3종 로봇 요구사항 — OHT + AGV + 보조
+- **의도 #9 (★ 핵심)** — ICS 이기종 AGV: graph isolation + capability 매칭 + single-stage
+- **의도 #8 (장기)** — OpenRMF / VDA5050 모사. graph_idx + capability 가 OpenRMF 핵심
+- 폐쇄망 ICS 가 익숙한 모델 (capability 기반)
 
 ---
 
@@ -24,10 +25,12 @@
 
 | Layer | Spec 파일 | 담당 | 견적 |
 |---|---|---|---|
-| Engine (데이터 모델, 라우터, 예약) | [`engine.md`](engine.md) | Engine Agent | ~1.5일 |
-| Map Editor UI (Active graph 토글) | [`ui-editor.md`](ui-editor.md) | Claude Design | ~1일 |
-| Quickrun UI (fleet 색, KPI 카드) | [`ui-quickrun.md`](ui-quickrun.md) | Claude Design | ~0.7일 |
-| Integration (YAML, Case 비교, 시나리오 테스트) | [`integration.md`](integration.md) | 사용자 또는 Integration Agent | ~1.3일 |
+| Engine (데이터 모델 + 라우터 + 예약 + **capability dispatch**) | [`engine.md`](engine.md) | Engine Agent | ~2~2.5일 |
+| Map Editor UI (Active graph 토글 + Fleet Info 패널 + Capability stamp) | [`ui-editor.md`](ui-editor.md) | Claude Design | ~1일 |
+| Quickrun UI (fleet 색, fleet 별 KPI) | [`ui-quickrun.md`](ui-quickrun.md) | Claude Design | ~0.7일 |
+| Integration (YAML + demand required_capability + Case 비교 fleet 분해 + 시나리오 테스트) | [`integration.md`](integration.md) | 사용자 또는 Integration Agent | ~1.5일 |
+
+**총 ~5.2~5.7일** (안전마진 포함 ~6일).
 
 ---
 
@@ -69,5 +72,6 @@ python scripts/import_map_demo.py maps/synthetic_3fleet.json --edit --open
 
 | 날짜 | 변경 |
 |---|---|
+| 2026-05-16 | ★ ICS 시나리오 #9 반영 — capability 매칭 dispatch + single-stage 명시. 견적 4.5 → 5.5~6일 |
 | 2026-05-16 | 단일 파일 spec 을 layer 별 디렉토리로 분리 |
 | 2026-05-16 (초안) | 단일 파일 `F1a-multi-fleet.md` 작성 |

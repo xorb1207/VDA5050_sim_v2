@@ -23,7 +23,7 @@
 | 2 | **GAP-B** — 수동 Job 부여 UI | ~0.5일 | #4 | 🟡 spec 미작성 |
 | 3 | **GAP-C** — Traffic 밀도 히트맵 | ~0.3일 | #3 | 🟡 spec 미작성 |
 | 4 | **GAP-D** — RMF YAML import/export | ~0.5일 | #1, #8 | 🟡 spec 미작성 |
-| 5 | [**F1a**](F1a-multi-fleet/) — Multi-graph / 이기종 fleet | ~4.5일 | #8 (장기) | 🟢 spec 분리 완료 |
+| 5 | [**F1a**](F1a-multi-fleet/) — Multi-graph + capability (이기종 AGV) | ~5.5~6일 | **#9**, #8 (장기) | 🟢 spec 갱신 완료 (ICS) |
 
 **합의**: GAP A~D (~1.8일) 먼저, 그 다음 F1a. ABCD 가 사용자 의도 4개 GAP 직접 해소.
 
