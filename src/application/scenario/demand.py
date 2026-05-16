@@ -19,6 +19,7 @@ class TaskDemand:
     pickup_processing_time_s: float = 0.0
     dropoff_processing_time_s: float = 0.0
     priority: int = 0
+    required_capability: str | None = None
 
 
 @dataclass
