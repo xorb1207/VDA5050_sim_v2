@@ -27,17 +27,18 @@
   // backend nodes/edges → 목업 형태로 변환. label 은 id 마지막 토큰.
   function normalizeMap(rawMap) {
     const nodes = (rawMap.nodes || []).map((n) => ({
-      id: n.id,
+      id: n.node_id || n.id,
       x: n.x,
       y: n.y,
-      type: n.kind || "wp",
-      label: n.id, // backend id 가 의미 있는 라벨 (WP_C_000, ST_N_01 등)
+      type: n.kind || n.type || "wp",
+      label: n.node_id || n.id,
     }));
     const edges = (rawMap.edges || []).map((e) => ({
-      id: e.id,
-      a: e.src,
-      b: e.dst,
-      directed: e.directed !== false,
+      id: e.edge_id || e.id,
+      key: e.edge_key || `${e.start_node_id || e.src}__${e.end_node_id || e.dst}`,
+      a: e.start_node_id || e.src,
+      b: e.end_node_id || e.dst,
+      directed: e.bidirectional === false ? false : (e.directed !== false),
       corridor: e.corridor || "",
     }));
     const idx = {};
