@@ -63,6 +63,8 @@ class Edge:
     access_type: str = ""     # station_access / charger_access
     # F1b-core: 개별 edge 속도 제한 (블라인드 스팟 등). None이면 AGV intrinsic max_speed 사용.
     v_max: Optional[float] = None
+    # F1a: 다중 그래프 인덱스. None이면 단일 그래프(기본).
+    graph_idx: Optional[int] = None
 
 
 class MapGraph:

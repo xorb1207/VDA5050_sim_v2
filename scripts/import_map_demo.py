@@ -29,29 +29,35 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from src.analytics.playback_trace import PlaybackTraceRecorder, build_playback_html
-from src.domain.map.external_importer import apply_edits, build_map_graph, import_map_json
+from src.domain.map.external_importer import apply_edits, build_map_graph, import_map
 from src.interfaces.map_editor import build_editor_html
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("json_path", help="external map JSON path")
-    parser.add_argument("--out", default=None, help="output HTML path (default: <json>.preview.html)")
+    parser.add_argument("map_path", help="external map JSON/YAML path")
+    parser.add_argument("--out", default=None, help="output HTML path (default: <map>.preview.html)")
     parser.add_argument("--open", action="store_true", help="auto-open in browser")
     parser.add_argument("--edit", action="store_true",
                         help="open in Map Editor (편집 UI) instead of read-only preview")
     parser.add_argument("--edits", default=None,
                         help="apply edit.json before rendering/editing")
+    parser.add_argument("--format", default=None,
+                        help="force format: 'json' or 'yaml' (auto-detected from extension if not specified)")
     args = parser.parse_args()
 
-    json_path = Path(args.json_path)
-    if not json_path.exists():
-        print(f"✗ not found: {json_path}", file=sys.stderr)
+    map_path = Path(args.map_path)
+    if not map_path.exists():
+        print(f"✗ not found: {map_path}", file=sys.stderr)
         sys.exit(1)
 
-    # 1단계: import + infer
-    print(f"━━━ Importing {json_path} ━━━")
-    imp = import_map_json(json_path)
+    # 1단계: import + infer (auto-detect format)
+    print(f"━━━ Importing {map_path} ━━━")
+    try:
+        imp = import_map(map_path, format=args.format)
+    except Exception as exc:
+        print(f"✗ import failed: {exc}", file=sys.stderr)
+        sys.exit(1)
     # 1.5단계: --edits 가 있으면 적용
     if args.edits:
         edits_path = Path(args.edits)
@@ -81,10 +87,10 @@ def main():
         # Map Editor — 인터랙티브 편집 페이지
         html = build_editor_html(
             imp,
-            title=f"Map Editor — {json_path.stem}",
-            source_name=json_path.stem,
+            title=f"Map Editor — {map_path.stem}",
+            source_name=map_path.stem,
         )
-        out_path = Path(args.out) if args.out else json_path.with_suffix(".editor.html")
+        out_path = Path(args.out) if args.out else map_path.with_suffix(".editor.html")
         out_path.write_text(html, encoding="utf-8")
         print(f"✓ Map Editor written: {out_path}")
     else:
@@ -96,16 +102,16 @@ def main():
                 "duration_s": 0.0,
                 "sample_interval_s": 0.5,
                 "topology_type": "imported",
-                "topology_variant": json_path.stem,
+                "topology_variant": map_path.stem,
                 "description": {
-                    "headline": f"외부 맵 임포트: {json_path.name} ({r.node_count} nodes / {r.edge_count_after_merge} edges)",
+                    "headline": f"외부 맵 임포트: {map_path.name} ({r.node_count} nodes / {r.edge_count_after_merge} edges)",
                 },
             },
             "map": recorder._serialize_map(),
             "snapshots": [],
             "events": [],
         }
-        out_path = Path(args.out) if args.out else json_path.with_suffix(".preview.html")
+        out_path = Path(args.out) if args.out else map_path.with_suffix(".preview.html")
         html = build_playback_html(trace)
         out_path.write_text(html, encoding="utf-8")
         print(f"✓ Preview written: {out_path}")

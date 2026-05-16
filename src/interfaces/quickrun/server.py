@@ -27,13 +27,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import yaml
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.analytics.playback_trace import build_live_html
-from src.domain.map.external_importer import apply_edits, build_map_graph, import_map_json
+from src.domain.map.external_importer import apply_edits, build_map_graph, import_map, import_map_json, import_map_yaml
 from src.interfaces.map_editor import build_editor_html
 from src.interfaces.quickrun.runner import RealRunner
 
@@ -75,9 +76,10 @@ class ControlRequest(BaseModel):
 
 
 class UploadMapRequest(BaseModel):
-    name: str                  # 사용자 친화적 이름 (예: "synthetic_plant")
-    map_json: dict             # 원본 외부 맵 JSON (nodes/links)
-    edits_json: dict | None = None   # 선택: editor 의 *.edit.json 결과
+    name: str                      # 사용자 친화적 이름 (예: "synthetic_plant")
+    map_json: dict | None = None   # 원본 외부 맵 JSON (nodes/links)
+    map_yaml: str | None = None    # 또는 RMF YAML 문자열
+    edits_json: dict | None = None # 선택: editor 의 *.edit.json 결과
 
 
 # 업로드된 임포트 맵을 메모리에 보관 (단일 사용자 로컬 도구라 OK)
@@ -247,13 +249,25 @@ async def index():
 
 @app.post("/upload-map")
 async def upload_map(req: UploadMapRequest):
-    """외부 맵 JSON 업로드 → ImportedMap → (edits 있으면) apply_edits → MapGraph 메모리 보관.
+    """외부 맵 JSON/YAML 업로드 → ImportedMap → (edits 있으면) apply_edits → MapGraph 메모리 보관.
+
+    요청:
+      - map_json: dict (JSON 형식)
+      - map_yaml: str (YAML 문자열 형식)
+    하나만 제공하면 됨.
 
     응답에 importedMapId 반환. 이후 /init 호출 시 이 id 를 importedMapId 로 넘기면
     그 맵으로 시뮬 시작.
     """
     try:
-        imp = import_map_json(req.map_json)
+        if req.map_json:
+            imp = import_map_json(req.map_json)
+        elif req.map_yaml:
+            data = yaml.safe_load(req.map_yaml)
+            imp = import_map_yaml(data)
+        else:
+            raise ValueError("Either map_json or map_yaml must be provided")
+
         if req.edits_json:
             imp = apply_edits(imp, req.edits_json)
         graph = build_map_graph(imp)
