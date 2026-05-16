@@ -24,7 +24,13 @@
 
 스택: Python 3.12, asyncio, FastAPI, VDA5050 / Open-RMF 개념 참조.
 
-> **Companions**: 디렉토리/맵/토폴로지/KPI 표는 [`ARCHITECTURE.md`](ARCHITECTURE.md). 날짜별 실험 결과·완료 작업 이력은 [`HISTORY.md`](HISTORY.md). 사용자 가이드는 [`README.md`](README.md).
+> **Companions**:
+> - 사용자 가이드: [`README.md`](README.md) — 사용자가 무엇을 어떻게 쓰나
+> - 시스템 설계: [`ARCHITECTURE.md`](ARCHITECTURE.md) — 디렉토리/도메인/토폴로지/KPI 표
+> - 이력: [`HISTORY.md`](HISTORY.md) — 날짜별 실험 결과 + 완료 작업
+> - **다음 작업 정의서: [`specs/`](specs/)** — spec-driven, 진입은 [`specs/README.md`](specs/README.md)
+>   - 작성 표준: [`specs/SPEC-AUTHORING.md`](specs/SPEC-AUTHORING.md)
+>   - 사용자 의도 박제: [`specs/operations-scenarios.md`](specs/operations-scenarios.md) ← 모든 spec 의 상위 reference
 
 ---
 

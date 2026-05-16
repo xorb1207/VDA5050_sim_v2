@@ -28,6 +28,39 @@
 
 ---
 
+## 📚 문서 지도 — 어디서 무엇을 읽나
+
+```
+🔵 사용자 (도구 사용 / 운영)              ─→  README.md (이 파일)
+🟢 개발자 / AI (코드 / 아키텍처 이해)     ─→  CLAUDE.md  +  ARCHITECTURE.md
+🟡 설계자 (다음 작업 / spec)              ─→  specs/  (진입: specs/README.md)
+⚪ 이력 / 결정 (과거 무엇을 했나)         ─→  HISTORY.md
+```
+
+| 파일 | 누가 보나 | 무엇이 들어있나 |
+|---|---|---|
+| **[README.md](README.md)** | 도구 사용자 | 설치 · 실행 · 4 시나리오 · Editor 사용법 · API |
+| **[CLAUDE.md](CLAUDE.md)** | 개발자 / Claude AI | 🎯 정체성 · 핵심 아키텍처 결정 · 개발 원칙 · 현재 우선순위 |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | 개발자 | 디렉토리 / 도메인 / 토폴로지 / KPI 표 |
+| **[HISTORY.md](HISTORY.md)** | 모두 | 날짜별 실험 결과 · 완료 작업 이력 |
+| **[specs/](specs/)** | 설계자 / Agent | 다음 작업의 정의서. 진입은 `specs/README.md` |
+| **[specs/SPEC-AUTHORING.md](specs/SPEC-AUTHORING.md)** | spec 작성자 | **spec 을 어떻게 쓰는가** — 표준 템플릿 |
+| **[specs/operations-scenarios.md](specs/operations-scenarios.md)** | 모두 | **사용자가 무엇을 원하는가** — 8개 시나리오 (모든 spec 의 상위 reference) |
+
+### 일하는 방식 (spec-driven)
+
+```
+1. operations-scenarios 의 의도 확인
+2. specs/<feature>.md (또는 디렉토리) 작성  ← 사용자 = 아키텍트
+3. Agent 또는 Claude Design 에 의뢰         ← 사용자 = PM
+4. Agent: Discovery → 구현 → 검증           ← Agent = 실행자
+5. 통합 + main 머지                         ← 사용자 = integrator
+```
+
+자세한 룰은 [`specs/SPEC-AUTHORING.md`](specs/SPEC-AUTHORING.md).
+
+---
+
 ## 설치
 
 ### 1. 소스 가져오기
