@@ -68,6 +68,7 @@ class InitRequest(BaseModel):
     blockedEdges: list[str] = []
     taskIntervalS: float = 5.0   # 잡 생성 주기 (sim 초)
     importedMapId: str | None = None  # 업로드된 임포트 맵 ID (있으면 토폴로지 대신 사용)
+    agvCountByFleet: dict[str, int] | None = None  # F1a: fleet 별 AGV 수 override (UI 슬라이더)
 
 
 class ControlRequest(BaseModel):
@@ -296,7 +297,16 @@ async def upload_map(req: UploadMapRequest):
 @app.get("/imported-maps")
 async def list_imported_maps():
     """현재 메모리에 있는 임포트 맵 목록. Quickrun 페이지 토폴로지 드롭다운 채울 때 사용."""
-    return [{"id": k, "name": v["name"], "stats": v["stats"]} for k, v in _imported_maps.items()]
+    out = []
+    for k, v in _imported_maps.items():
+        fleets = list(getattr(v["imported"], "fleets", []) or [])
+        out.append({
+            "id": k,
+            "name": v["name"],
+            "stats": v["stats"],
+            "fleets": fleets,  # F1a: UI 가 슬라이더/색 미리 빌드할 때 사용
+        })
+    return out
 
 
 @app.get("/edit/{map_id}")
@@ -371,13 +381,15 @@ async def init_sim(req: InitRequest):
     async def _bcast(msg):
         await runner.broadcast(msg)
 
-    # 임포트 맵 사용 시 메모리에서 graph 가져옴
+    # 임포트 맵 사용 시 메모리에서 graph + fleets 가져옴
     imported_graph = None
+    imported_fleets: list[dict] = []
     if req.importedMapId:
         entry = _imported_maps.get(req.importedMapId)
         if entry is None:
             raise HTTPException(404, f"unknown importedMapId: {req.importedMapId}")
         imported_graph = entry["graph"]
+        imported_fleets = list(getattr(entry["imported"], "fleets", []) or [])
 
     real = RealRunner(
         topology=req.topology,
@@ -388,6 +400,8 @@ async def init_sim(req: InitRequest):
         broadcast=_bcast,
         task_interval_s=req.taskIntervalS,
         imported_graph=imported_graph,
+        imported_fleets=imported_fleets,
+        agv_count_by_fleet=req.agvCountByFleet,
     )
     try:
         real.setup()
@@ -405,10 +419,13 @@ async def init_sim(req: InitRequest):
     runner.task = asyncio.create_task(_runner_task())
     _active_runner = runner
     _runners_by_id[run_id] = runner
+    # F1a: fleets 메타 (단일 default fleet 포함). 응답에 fleet_id/color 노출.
+    fleets_payload = real.fleets_payload()
     return {
         "runId": run_id,
         "map": runner.map_data,
         "wsUrl": f"/ws/stream/{run_id}",
+        "fleets": fleets_payload,
     }
 
 

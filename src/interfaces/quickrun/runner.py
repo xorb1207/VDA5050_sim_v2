@@ -24,9 +24,67 @@ from src.application.engine.simulation_engine import SimulationEngine
 from src.application.scenario.task_generator import TaskGenerator
 from src.domain.agv.agv import AGV
 from src.domain.agv.fsm import AGVState
+from src.domain.fleet import Fleet
 from src.domain.map.graph import MapGraph, NodeRole
 from src.domain.map.topology_generator import MapTopologyGenerator
 from src.domain.reservation.scheduler import TimeWindowScheduler
+
+
+# ── Fleet 색 기본 팔레트 (3 fleet 까지 충돌 적은 채도) ─────────
+_DEFAULT_FLEET_COLORS = ("#0f9d58", "#2563eb", "#e0a000", "#9333ea", "#dc2626")
+
+
+def _build_fleets(
+    fleet_defs: list[dict] | None,
+    total_agv_count: int,
+    count_overrides: dict[str, int] | None = None,
+) -> list[Fleet]:
+    """ImportedMap.fleets (raw dict 리스트) → Fleet 객체 리스트.
+
+    fleet_defs 가 없거나 비어있으면 단일 fleet ("default") 생성 — total_agv_count 사용.
+    count_overrides 가 있으면 해당 fleet 의 count 를 덮어씀 (UI 슬라이더 값).
+    """
+    co = count_overrides or {}
+    if not fleet_defs:
+        return [Fleet(
+            id="default",
+            graph_idx=0,
+            color=_DEFAULT_FLEET_COLORS[0],
+            count=max(1, total_agv_count),
+        )]
+    fleets: list[Fleet] = []
+    for i, raw in enumerate(fleet_defs):
+        fid = str(raw.get("id", f"FLEET_{i+1}"))
+        cnt_override = co.get(fid)
+        try:
+            cnt_default = int(raw.get("count", 1))
+        except (TypeError, ValueError):
+            cnt_default = 1
+        cnt = int(cnt_override) if cnt_override is not None else cnt_default
+        try:
+            max_speed = float(raw.get("max_speed_mps", 1.5))
+        except (TypeError, ValueError):
+            max_speed = 1.5
+        try:
+            priority = int(raw.get("priority", i + 1))
+        except (TypeError, ValueError):
+            priority = i + 1
+        try:
+            gi = int(raw.get("graph_idx", 0))
+        except (TypeError, ValueError):
+            gi = 0
+        color = raw.get("color") or _DEFAULT_FLEET_COLORS[i % len(_DEFAULT_FLEET_COLORS)]
+        caps = list(raw.get("capabilities", []) or [])
+        fleets.append(Fleet(
+            id=fid,
+            graph_idx=gi,
+            capabilities=caps,
+            color=color,
+            max_speed_mps=max_speed,
+            priority=priority,
+            count=max(0, cnt),
+        ))
+    return fleets
 
 
 # ── 노드 kind 매핑 ─────────────────────────────────────────────
@@ -192,6 +250,8 @@ class RealRunner:
         push_interval_s: float = 0.1,  # wall-clock push 주기
         task_interval_s: float = 5.0,
         imported_graph: Optional[MapGraph] = None,  # 외부 맵 임포트 시 전달
+        imported_fleets: Optional[list[dict]] = None,  # F1a: 임포트 맵의 fleet 정의
+        agv_count_by_fleet: Optional[dict[str, int]] = None,  # F1a: UI 슬라이더 override
     ) -> None:
         self.topology = topology
         self.agv_count = max(1, agv_count)
@@ -203,6 +263,8 @@ class RealRunner:
         self.push_interval_s = push_interval_s
         self.task_interval_s = max(0.5, task_interval_s)
         self._imported_graph = imported_graph
+        self._imported_fleets = list(imported_fleets or [])
+        self._agv_count_by_fleet = dict(agv_count_by_fleet or {})
         self._stop = False
         self.sim_time = 0.0
         self._kpi = RollingKpi()
@@ -213,6 +275,11 @@ class RealRunner:
         self._task_gen: Optional[TaskGenerator] = None
         self._recorder: Optional[PlaybackTraceRecorder] = None
         self._last_sent_event_idx: int = 0
+        # F1a: fleets 와 AGV→fleet 매핑
+        self.fleets: list[Fleet] = []
+        self._fleet_by_agv: dict[str, Fleet] = {}
+        # Rolling demand-completed 누적치 (fleet 별)
+        self._fleet_demand_completed: dict[str, int] = {}
 
     # ── 외부 컨트롤 ─────────────────────────────────────────
     def stop(self) -> None:
@@ -230,6 +297,24 @@ class RealRunner:
         if self._recorder is None:
             raise RuntimeError("setup() not called")
         return self._recorder._serialize_map()
+
+    def fleets_payload(self) -> list[dict]:
+        """F1a: /init 응답에 포함될 fleet 메타.
+
+        반환: [{id, color, graph_idx, count, capabilities, agv_ids}, ...]
+        단일 default fleet 의 경우에도 안전하게 1개 항목으로 반환.
+        """
+        out = []
+        for fl in self.fleets:
+            out.append({
+                "id": fl.id,
+                "color": fl.color,
+                "graph_idx": fl.graph_idx,
+                "count": fl.count,
+                "capabilities": list(fl.capabilities),
+                "agv_ids": list(self._agv_ids_by_fleet.get(fl.id, [])),
+            })
+        return out
 
     # ── 엔진 셋업 ──────────────────────────────────────────
     def setup(self) -> None:
@@ -264,13 +349,49 @@ class RealRunner:
         chargers = [n.node_id for n in graph.get_chargers()]
         if not chargers:
             raise RuntimeError("no chargers in topology")
-        for i in range(self.agv_count):
-            agv = AGV(f"AGV_{i+1:03d}", bus, graph, self._scheduler)
+
+        # F1a: fleet 정의 구성 + AGV→fleet 분배.
+        self.fleets = _build_fleets(
+            self._imported_fleets,
+            total_agv_count=self.agv_count,
+            count_overrides=self._agv_count_by_fleet,
+        )
+        # 단일-default fleet 면 self.agv_count 만큼 AGV 생성, 아니면 fleet.count 합산.
+        if len(self.fleets) == 1 and self.fleets[0].id == "default":
+            total = max(1, self.agv_count)
+            self.fleets[0].count = total
+            agv_alloc: list[tuple[str, Fleet]] = [
+                (f"AGV_{i+1:03d}", self.fleets[0]) for i in range(total)
+            ]
+        else:
+            agv_alloc = []
+            running = 0
+            for fl in self.fleets:
+                for _ in range(max(0, fl.count)):
+                    running += 1
+                    agv_alloc.append((f"AGV_{running:03d}", fl))
+            if not agv_alloc:
+                # 모든 fleet count=0 인 비정상 케이스 → 기본 1대
+                fl = self.fleets[0]
+                fl.count = 1
+                agv_alloc.append(("AGV_001", fl))
+
+        self._fleet_by_agv = {agv_id: fl for agv_id, fl in agv_alloc}
+        self._fleet_demand_completed = {fl.id: 0 for fl in self.fleets}
+
+        for i, (agv_id, fl) in enumerate(agv_alloc):
+            agv = AGV(agv_id, bus, graph, self._scheduler,
+                      max_speed_mps=fl.max_speed_mps, fleet=fl)
             agv.current_node_id = chargers[i % len(chargers)]
             agv.physics.x = graph.nodes[agv.current_node_id].x
             agv.physics.y = graph.nodes[agv.current_node_id].y
             self._engine.register_agv(agv)
             self._agvs.append(agv)
+        # /init 응답에서 사용할 fleet 메타 (agv_ids 포함)
+        agv_ids_by_fleet: dict[str, list[str]] = {fl.id: [] for fl in self.fleets}
+        for agv_id, fl in agv_alloc:
+            agv_ids_by_fleet[fl.id].append(agv_id)
+        self._agv_ids_by_fleet = agv_ids_by_fleet
 
     # ── 메인 루프 (asyncio task 로 호출) ───────────────────
     async def run(self) -> None:
@@ -333,6 +454,11 @@ class RealRunner:
             return
         snapshot = rec_snaps[-1]
 
+        # F1a: snapshot.agvs 각 항목에 fleet_id 부여 (recorder 는 fleet 모름)
+        for a in snapshot.get("agvs", []):
+            fl = self._fleet_by_agv.get(a.get("agv_id", ""))
+            a["fleet_id"] = fl.id if fl else ""
+
         # 이전 push 이후에 추가된 이벤트만 전송
         new_events = rec_events[self._last_sent_event_idx:]
         self._last_sent_event_idx = len(rec_events)
@@ -345,18 +471,27 @@ class RealRunner:
                 if edge_key:
                     edge_density[edge_key] = edge_density.get(edge_key, 0) + 1
 
-        # Rolling KPI
+        # Rolling KPI (overall)
         agv_states = [a._fsm.state for a in self._agvs]
         ho_summary = self._scheduler.get_headon_summary()
         demand_done = 0
         if self._task_gen is not None and hasattr(self._task_gen, "_diagnostics"):
             demand_done = getattr(self._task_gen._diagnostics, "demands_completed", 0)
-        kpi = self._kpi.update(
+        overall_kpi = self._kpi.update(
             sim_time=self.sim_time,
             agv_states=agv_states,
             demand_completed_total=demand_done,
             headon_total=ho_summary["headon_total"],
         )
+
+        # F1a: by_fleet KPI 계산
+        # - tasksPerHr: demand_completed 이벤트를 fleet 별로 카운트 → 분당 rate
+        # - utilization: fleet 소속 AGV 의 NAVIGATING+PROCESSING 비율
+        # - avgWait: fleet 소속 AGV 의 WAITING_RESERVATION 비율 × 60s
+        # - headOn: fleet 소속 AGV 가 등장한 headon_block 이벤트 누적
+        by_fleet = self._compute_by_fleet_kpi(rec_events)
+        kpi = dict(overall_kpi)
+        kpi["by_fleet"] = by_fleet
 
         await self.broadcast({
             "type": "tick",
@@ -365,6 +500,55 @@ class RealRunner:
             "kpi": kpi,
             "edge_density": edge_density,
         })
+
+    def _compute_by_fleet_kpi(self, rec_events: list) -> dict:
+        """fleet 별 throughput / utilization / wait / headon 누적치 계산.
+
+        Engine 이 fleet 별 KPI 를 직접 노출하지 않으므로, 여기서 AGV 상태와 이벤트를
+        조합해 추정. by_fleet 값은 fleet 가 1개 (default) 인 단일 fleet 케이스에서도
+        안전하게 작동 (overall 과 동일 추세).
+        """
+        result: dict = {}
+        if not self.fleets:
+            return result
+        # AGV 상태를 fleet 별로 묶음
+        agv_states_by_fleet: dict[str, list] = {fl.id: [] for fl in self.fleets}
+        for a in self._agvs:
+            fl = a.fleet
+            fid = fl.id if fl else (self.fleets[0].id if self.fleets else "")
+            if fid in agv_states_by_fleet:
+                agv_states_by_fleet[fid].append(a._fsm.state)
+        # 이벤트로부터 demand_completed / headon_block 누적 카운트 (fleet 별)
+        completed_by_fleet: dict[str, int] = {fl.id: 0 for fl in self.fleets}
+        headon_by_fleet: dict[str, int] = {fl.id: 0 for fl in self.fleets}
+        for ev in rec_events:
+            kind = ev.get("kind", "")
+            agv_id = ev.get("agv_id", "")
+            fl = self._fleet_by_agv.get(agv_id)
+            if not fl:
+                continue
+            if kind == "demand_completed":
+                completed_by_fleet[fl.id] = completed_by_fleet.get(fl.id, 0) + 1
+            elif kind == "headon_block":
+                headon_by_fleet[fl.id] = headon_by_fleet.get(fl.id, 0) + 1
+        # 단순 rate 환산: 누적/elapsed × 3600
+        elapsed = max(self.sim_time, 0.001)
+        for fl in self.fleets:
+            states = agv_states_by_fleet.get(fl.id, [])
+            n = max(1, len(states))
+            util = sum(1 for s in states
+                       if s in (AGVState.NAVIGATING, AGVState.PROCESSING)) / n
+            wait_ratio = sum(1 for s in states
+                             if s == AGVState.WAITING_RESERVATION) / n
+            result[fl.id] = {
+                "tasksPerHr": completed_by_fleet.get(fl.id, 0) * 3600.0 / elapsed,
+                "utilization": util,
+                "avgWait": wait_ratio * 60.0,  # rolling 60s 윈도우 가정
+                "headOn": headon_by_fleet.get(fl.id, 0),
+                "color": fl.color,
+                "count": len(states),
+            }
+        return result
 
     async def _publish_end(self) -> None:
         try:

@@ -141,6 +141,10 @@ class ImportedMap:
     report: ImportReport
     config: InferenceConfig
     background_image: dict | None = None  # {url, opacity, x_offset, y_offset, scale}
+    # F1a: 다중 fleet 정의 (RMF YAML / JSON 의 fleets 섹션). 비어있으면 단일 fleet.
+    fleets: list[dict] = field(default_factory=list)
+    # F1a: capability 기반 dispatch 용 데이터 (선택)
+    demands: list[dict] = field(default_factory=list)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -209,7 +213,36 @@ def import_map_json(
     # 3단계: 검증 + 리포트
     report = _build_report(nodes, edges, raw_edges_count)
 
-    return ImportedMap(nodes=nodes, edges=edges, report=report, config=cfg)
+    fleets = list(data.get("fleets", []) or [])
+    demands = list(data.get("demands", []) or [])
+
+    # F1a: JSON 도 links 에 graph_idx 가 있으면 보존
+    if raw_links:
+        gi_by_pair: dict[tuple[str, str], int] = {}
+        for raw in raw_links:
+            conn = raw.get("connected") or {}
+            f, t = str(conn.get("from", "")), str(conn.get("to", ""))
+            if not f or not t:
+                continue
+            if "graph_idx" in raw:
+                try:
+                    gi_by_pair[(f, t)] = int(raw["graph_idx"])
+                except (TypeError, ValueError):
+                    pass
+        if gi_by_pair:
+            for e in edges:
+                if e.graph_idx is not None:
+                    continue
+                gi = gi_by_pair.get((e.src, e.dst))
+                if gi is None and e.inferred_bidirectional:
+                    gi = gi_by_pair.get((e.dst, e.src))
+                if gi is not None:
+                    e.graph_idx = gi
+
+    return ImportedMap(
+        nodes=nodes, edges=edges, report=report, config=cfg,
+        fleets=fleets, demands=demands,
+    )
 
 
 def import_map_yaml(
@@ -270,7 +303,13 @@ def import_map_yaml(
     # 검증 + 리포트
     report = _build_report(nodes, edges, raw_edges_count)
 
-    return ImportedMap(nodes=nodes, edges=edges, report=report, config=cfg)
+    fleets = list(data.get("fleets", []) or [])
+    demands = list(data.get("demands", []) or [])
+
+    return ImportedMap(
+        nodes=nodes, edges=edges, report=report, config=cfg,
+        fleets=fleets, demands=demands,
+    )
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -881,8 +920,15 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
     # 배경 이미지: edit에서 제공되면 그것을, 아니면 원본 유지
     background_image = edits.get("background_image") or imported.background_image
 
-    return ImportedMap(nodes=nodes, edges=edges, report=report, config=imported.config,
-                      background_image=background_image)
+    # F1a: fleets / demands — edits 에 override 가 있으면 사용, 아니면 원본 유지
+    fleets = edits.get("fleets") if "fleets" in edits else list(imported.fleets)
+    demands = edits.get("demands") if "demands" in edits else list(imported.demands)
+
+    return ImportedMap(
+        nodes=nodes, edges=edges, report=report, config=imported.config,
+        background_image=background_image,
+        fleets=fleets, demands=demands,
+    )
 
 
 # ────────────────────────────────────────────────────────────────────
