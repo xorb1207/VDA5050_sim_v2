@@ -86,6 +86,8 @@ class ImportedNode:
     # 검증용 메타
     degree_in: int = 0
     degree_out: int = 0
+    # F1a: 노드의 capability 태그 (선택). demand 매칭에 사용될 수 있음.
+    capability: Optional[str] = None
 
 
 @dataclass
@@ -141,6 +143,13 @@ class ImportedMap:
     report: ImportReport
     config: InferenceConfig
     background_image: dict | None = None  # {url, opacity, x_offset, y_offset, scale}
+    # F1a: fleets 정의 (선택). 비어 있으면 단일 fleet (app 레벨에서 자동 처리).
+    # 항목 예: {"id": "TYPE_1", "graph_idx": 0, "color": "#0f9d58",
+    #           "capabilities": ["overhead"], "count": 6, "max_speed_mps": 1.5, "priority": 1}
+    fleets: list[dict] = field(default_factory=list)
+    # F1a: 명시적 demand 정의 (선택).
+    # 항목 예: {"pickup": "ST_001", "dropoff": "ST_002", "required_capability": "overhead"}
+    demands: list[dict] = field(default_factory=list)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -209,7 +218,14 @@ def import_map_json(
     # 3단계: 검증 + 리포트
     report = _build_report(nodes, edges, raw_edges_count)
 
-    return ImportedMap(nodes=nodes, edges=edges, report=report, config=cfg)
+    # F1a: fleets / demands (선택)
+    fleets = _parse_fleets(data.get("fleets", []))
+    demands = _parse_demands(data.get("demands", []))
+
+    return ImportedMap(
+        nodes=nodes, edges=edges, report=report, config=cfg,
+        fleets=fleets, demands=demands,
+    )
 
 
 def import_map_yaml(
@@ -270,7 +286,65 @@ def import_map_yaml(
     # 검증 + 리포트
     report = _build_report(nodes, edges, raw_edges_count)
 
-    return ImportedMap(nodes=nodes, edges=edges, report=report, config=cfg)
+    # F1a: fleets / demands (선택)
+    fleets = _parse_fleets(data.get("fleets", []))
+    demands = _parse_demands(data.get("demands", []))
+
+    return ImportedMap(
+        nodes=nodes, edges=edges, report=report, config=cfg,
+        fleets=fleets, demands=demands,
+    )
+
+
+# ────────────────────────────────────────────────────────────────────
+# fleets / demands 파서 (JSON, YAML 공용)
+# ────────────────────────────────────────────────────────────────────
+def _parse_fleets(raw_fleets) -> list[dict]:
+    """fleets 섹션을 정규화된 dict 리스트로 변환.
+
+    각 dict 의 필수 키: id, graph_idx. 나머지는 보존.
+    """
+    if not raw_fleets:
+        return []
+    out: list[dict] = []
+    for raw in raw_fleets:
+        if not isinstance(raw, dict):
+            continue
+        fid = raw.get("id")
+        if fid is None:
+            continue
+        fleet: dict = {
+            "id": str(fid),
+            "graph_idx": int(raw.get("graph_idx", 0)),
+            "capabilities": list(raw.get("capabilities", []) or []),
+            "color": str(raw.get("color", "#0f9d58")),
+            "count": int(raw.get("count", 1)),
+            "max_speed_mps": float(raw.get("max_speed_mps", 1.5)),
+            "priority": int(raw.get("priority", 1)),
+        }
+        out.append(fleet)
+    return out
+
+
+def _parse_demands(raw_demands) -> list[dict]:
+    """demands 섹션을 정규화된 dict 리스트로 변환."""
+    if not raw_demands:
+        return []
+    out: list[dict] = []
+    for raw in raw_demands:
+        if not isinstance(raw, dict):
+            continue
+        pickup = raw.get("pickup")
+        dropoff = raw.get("dropoff")
+        if pickup is None or dropoff is None:
+            continue
+        cap = raw.get("required_capability", None)
+        out.append({
+            "pickup": str(pickup),
+            "dropoff": str(dropoff),
+            "required_capability": (None if cap in (None, "", "null") else str(cap)),
+        })
+    return out
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -280,6 +354,8 @@ def _import_nodes(raw_nodes: list[dict]) -> list[ImportedNode]:
     nodes = []
     for raw in raw_nodes:
         pos = raw.get("position", {}) or {}
+        cap_raw = raw.get("capability", None)
+        capability = None if cap_raw in (None, "", "null") else str(cap_raw)
         nodes.append(ImportedNode(
             node_id=str(raw.get("id", "")),
             x=float(pos.get("x", 0.0)),
@@ -287,6 +363,7 @@ def _import_nodes(raw_nodes: list[dict]) -> list[ImportedNode]:
             name=str(raw.get("name", "") or raw.get("id", "")),
             raw_node_type_cd=str(raw.get("node_type_cd", "") or ""),
             raw_align_type_cd=str(raw.get("align_type_cd", "") or ""),
+            capability=capability,
         ))
     return nodes
 
@@ -310,6 +387,14 @@ def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[I
         if (f, t) not in by_pair:
             by_pair[(f, t)] = raw
 
+    def _gidx(raw: dict) -> int:
+        # F1a: 링크의 graph_idx (없으면 0 = 단일 그래프 기본)
+        v = raw.get("graph_idx", 0)
+        try:
+            return int(v) if v is not None else 0
+        except (TypeError, ValueError):
+            return 0
+
     edges: list[ImportedEdge] = []
     consumed: set[tuple[str, str]] = set()
     for (f, t), raw in by_pair.items():
@@ -325,6 +410,7 @@ def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[I
                 inferred_bidirectional=True,
                 raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
                 merged_from=[str(raw.get("id", "")), str(rev_raw.get("id", ""))],
+                graph_idx=_gidx(raw),
             ))
             consumed.add((f, t))
             consumed.add(reverse)
@@ -336,6 +422,7 @@ def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[I
                 inferred_bidirectional=False,
                 raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
                 merged_from=[str(raw.get("id", ""))],
+                graph_idx=_gidx(raw),
             ))
             consumed.add((f, t))
     return edges
@@ -798,6 +885,7 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
             raw_node_type_cd=n.raw_node_type_cd,
             raw_align_type_cd=n.raw_align_type_cd,
             degree_in=n.degree_in, degree_out=n.degree_out,
+            capability=n.capability,
         )
         nodes.append(nn)
     edges = []
@@ -835,6 +923,9 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
             n.inferred_is_charger = bool(ov["is_charger"])
         if "is_holding" in ov:
             n.inferred_is_holding = bool(ov["is_holding"])
+        if "capability" in ov:
+            cap_ov = ov["capability"]
+            n.capability = None if cap_ov in (None, "", "null") else str(cap_ov)
 
     # 3. edge_overrides
     edge_overrides = edits.get("edge_overrides", {})
@@ -854,12 +945,14 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
 
     # 4. added_nodes
     for an in edits.get("added_nodes", []):
+        cap_raw = an.get("capability", None)
         nodes.append(ImportedNode(
             node_id=an["id"], x=float(an["x"]), y=float(an["y"]),
             name=an.get("name", an["id"]),
             inferred_role=an.get("role", "standard"),
             inferred_is_charger=bool(an.get("is_charger", False)),
             inferred_is_holding=bool(an.get("is_holding", False)),
+            capability=(None if cap_raw in (None, "", "null") else str(cap_raw)),
         ))
 
     # 5. added_edges
@@ -881,8 +974,13 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
     # 배경 이미지: edit에서 제공되면 그것을, 아니면 원본 유지
     background_image = edits.get("background_image") or imported.background_image
 
+    # F1a: fleets / demands — edit 에서 명시 override 되지 않았으면 원본 보존
+    fleets = _parse_fleets(edits.get("fleets")) if "fleets" in edits else list(imported.fleets)
+    demands = _parse_demands(edits.get("demands")) if "demands" in edits else list(imported.demands)
+
     return ImportedMap(nodes=nodes, edges=edges, report=report, config=imported.config,
-                      background_image=background_image)
+                      background_image=background_image,
+                      fleets=fleets, demands=demands)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -923,6 +1021,8 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
         sx, sy = g.nodes[e.src].x, g.nodes[e.src].y
         dx, dy = g.nodes[e.dst].x, g.nodes[e.dst].y
         dist = math.hypot(dx - sx, dy - sy)
+        # F1a: ImportedEdge.graph_idx 가 None 이면 단일 그래프 기본 0 으로
+        gidx = 0 if e.graph_idx is None else int(e.graph_idx)
         edge = Edge(
             edge_id=e.edge_id,
             start_node_id=e.src,
@@ -932,7 +1032,7 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
             corridor=e.inferred_corridor,
             access_type=e.inferred_access_type,
             v_max=e.v_max,
-            graph_idx=e.graph_idx,
+            graph_idx=gidx,
         )
         g.edges[e.edge_id] = edge
         g._out_edges.setdefault(e.src, []).append(e.edge_id)
@@ -948,7 +1048,7 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
                 corridor=e.inferred_corridor,
                 access_type=e.inferred_access_type,
                 v_max=e.v_max,
-                graph_idx=e.graph_idx,
+                graph_idx=gidx,
             )
             g.edges[edge_rev.edge_id] = edge_rev
             g._out_edges.setdefault(e.dst, []).append(edge_rev.edge_id)
