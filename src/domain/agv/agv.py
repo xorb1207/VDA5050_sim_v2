@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from src.interfaces.bus import IMessageBus
     from src.domain.map.graph import MapGraph
     from src.domain.reservation.scheduler import TimeWindowScheduler
+    from src.domain.fleet import Fleet
 
 BATTERY_ENABLED = False
 
@@ -70,12 +71,14 @@ class AGV:
         scheduler: TimeWindowScheduler,
         max_speed_mps: float = 1.5,
         policy=None,
+        fleet: Optional["Fleet"] = None,
     ) -> None:
         self.agv_id   = agv_id
         self._bus     = bus
         self._graph   = graph
         self._sched   = scheduler
         self._policy  = policy
+        self.fleet    = fleet
 
         self._fsm    = AGVStateMachine()
         self._motion = MotionModel(max_speed_mps)
