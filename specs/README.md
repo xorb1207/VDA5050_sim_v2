@@ -8,8 +8,9 @@
 ## 📂 진입 순서
 
 1. [`SPEC-AUTHORING.md`](SPEC-AUTHORING.md) — **spec 을 어떻게 쓰는가**. 표준 템플릿 + 작성 룰. (메타)
-2. [`operations-scenarios.md`](operations-scenarios.md) — **사용자가 무엇을 원하는가**. 8개 시나리오 + GAP. 모든 spec 이 이걸 참조.
+2. [`operations-scenarios.md`](operations-scenarios.md) — **사용자가 무엇을 원하는가**. 9개 시나리오 + GAP. 모든 spec 이 이걸 참조.
 3. 개별 feature spec — 아래 인덱스.
+4. (선택) [`ics-demo-outline.md`](ics-demo-outline.md) — ICS 시연 흐름 + Q&A 대응. 시연 직전 head-up reference.
 
 ---
 
@@ -19,11 +20,14 @@
 
 | # | Spec | 견적 | 사용자 의도 | 상태 |
 |---|---|---|---|---|
-| 1 | **GAP-A** — Quickrun 라이브 Edge 차단 UI | ~0.5일 | #5 | 🟡 spec 미작성 |
-| 2 | **GAP-B** — 수동 Job 부여 UI | ~0.5일 | #4 | 🟡 spec 미작성 |
-| 3 | **GAP-C** — Traffic 밀도 히트맵 | ~0.3일 | #3 | 🟡 spec 미작성 |
-| 4 | **GAP-D** — RMF YAML import/export | ~0.5일 | #1, #8 | 🟡 spec 미작성 |
-| 5 | [**F1a**](F1a-multi-fleet/) — Multi-graph + capability (이기종 AGV) | ~5.5~6일 | **#9**, #8 (장기) | 🟢 spec 갱신 완료 (ICS) |
+| 1 | [**GAP-A**](GAP-A-edge-block-ui.md) — Quickrun 라이브 Edge 차단 UI | ~0.5일 | #5 | 🟢 spec 완료 |
+| 2 | [**GAP-B**](GAP-B-manual-job-ui.md) — 수동 Job 부여 UI | ~0.5일 | #4 | 🟢 spec 완료 |
+| 3 | [**GAP-C**](GAP-C-traffic-heatmap.md) — Traffic 밀도 히트맵 | ~0.3일 | #3 | 🟢 spec 완료 |
+| 4 | [**GAP-D**](GAP-D-rmf-yaml.md) — RMF YAML import (+ 기본 export) | ~0.5~0.7일 | #1, #8 | 🟢 spec 완료 |
+| 5 | [**F1a**](F1a-multi-fleet/) — Multi-graph + capability (이기종 AGV) | ~5.5~6일 | **#9**, #8 (장기) | 🟢 spec 완료 (ICS) |
+
+**합산 활성 spec**: GAP A~D ~1.8일 + F1a ~6일 = **~8일**.
+ABCD 먼저 (병렬 의뢰 시 ~1일 + 통합), 그 후 F1a (Engine ★ → UI 병렬 → Integration) ~2주.
 
 **합의**: GAP A~D (~1.8일) 먼저, 그 다음 F1a. ABCD 가 사용자 의도 4개 GAP 직접 해소.
 
