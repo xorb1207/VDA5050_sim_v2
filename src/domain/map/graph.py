@@ -63,6 +63,8 @@ class Edge:
     access_type: str = ""     # station_access / charger_access
     # F1b-core: 개별 edge 속도 제한 (블라인드 스팟 등). None이면 AGV intrinsic max_speed 사용.
     v_max: Optional[float] = None
+    # F1a: 이 edge 가 속한 fleet 의 lane graph index (기본 0, 단일 graph 환경)
+    graph_idx: int = 0
 
 
 class MapGraph:
@@ -214,6 +216,7 @@ class MapGraph:
                 corridor=edge.corridor,
                 access_type=edge.access_type,
                 v_max=edge.v_max,
+                graph_idx=edge.graph_idx,  # F1a: 역방향도 같은 graph에 속함
             )
             self.edges[rev_id] = rev
             self._out_edges.setdefault(edge.end_node_id, []).append(rev_id)
@@ -238,10 +241,13 @@ class MapGraph:
         start_id: str,
         end_id: str,
         blocked_edges: Optional[set[tuple[str, str]]] = None,
+        fleet = None,
     ) -> list[str]:
         """
         A* 경로 탐색.
         blocked_edges: {(src, dst), ...} — 해당 엣지를 무한 비용으로 처리.
+        fleet: Fleet 인스턴스. 지정되면 그 fleet.graph_idx에 속한 edge만 사용.
+               None이면 모든 edge 사용 (legacy 동작).
         그래프를 수정하지 않으므로 동시 호출 안전.
         """
         if start_id == end_id:
@@ -249,6 +255,7 @@ class MapGraph:
         if start_id not in self.nodes or end_id not in self.nodes:
             return []
         blocked = blocked_edges or set()
+        fleet_graph_idx = fleet.graph_idx if fleet is not None else None
         open_heap: list[tuple[float, str]] = [(0.0, start_id)]
         came_from: dict[str, str] = {}
         g: dict[str, float] = {start_id: 0.0}
@@ -265,6 +272,9 @@ class MapGraph:
                 edge = self.edges[eid]
                 nb = edge.end_node_id
                 if nb not in self.nodes:
+                    continue
+                # F1a: fleet 지정되면 graph_idx 필터링
+                if fleet_graph_idx is not None and edge.graph_idx != fleet_graph_idx:
                     continue
                 # blocked_edges: 해당 엣지 스킵
                 if (current, nb) in blocked:
