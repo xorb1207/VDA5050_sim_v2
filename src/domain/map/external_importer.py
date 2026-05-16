@@ -1,14 +1,13 @@
 """
-external_importer.py — 폐쇄망 외부 맵 JSON 임포터.
+external_importer.py — 폐쇄망 외부 맵 JSON/YAML 임포터.
 
 전제:
   - 사용자가 제공하는 JSON 은 top-level 에 {nodes, links} 만 신뢰 가능
   - 각 node 는 {id, name, position{x,y,z}, ...} 형식
   - 각 link 는 {id, name, connected{from,to}, ...} 형식
-  - node_type_cd / link_type_cd / align_type_cd 같은 코드 필드는 들어와도 OK,
-    없어도 OK (importer 는 정책 추론에 쓰지 않음 — 좌표/연결만으로 추론)
+  - YAML 은 Open-RMF building_map 표준 포맷 (levels → vertices/lanes)
 
-처리 흐름:
+처리 흐름 (JSON):
   1. 구조 임포트 — 좌표/연결 그대로 받음
   2. 자동 추론
      a. 양방향 병합: (from,to) + (to,from) 짝 발견 시 1개 bidirectional edge 로
@@ -16,6 +15,13 @@ external_importer.py — 폐쇄망 외부 맵 JSON 임포터.
      c. role 추론: degree, 위치, hint code 종합해서 charger/holding/station/wp 후보 마킹
      d. 도달성 분석: connected component, dead-end, 고립 노드 검출
   3. ImportReport 로 모든 추론 결과 + 경고 반환 — UI 에서 검토/수정 가능
+
+처리 흐름 (YAML):
+  1. Open-RMF 표준 파싱 (levels → 첫 레벨 → vertices/lanes)
+  2. vertices/lanes → nodes/edges 변환
+  3. graph_idx 인식 (F1a 다중 그래프 호환)
+  4. fleets 섹션 처리 (선택)
+  5. 기존 자동 추론 파이프라인 재사용
 
 자동 추론은 "초안" 일 뿐, 최종 정책은 사용자가 검토 UI 에서 확정. importer 는 그 초안을
 ImportedMap 으로 반환하고, 검증 리포트도 함께 제공.
@@ -28,6 +34,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional
+
+import yaml
 
 from src.domain.map.graph import Edge, MapGraph, Node, NodeRole
 
@@ -95,6 +103,8 @@ class ImportedEdge:
     merged_from: list[str] = field(default_factory=list)
     # F1b-ux: 사용자가 map editor에서 설정한 per-edge 속도 제한 (m/s). None이면 미설정.
     v_max: Optional[float] = None
+    # F1a: 다중 그래프 인덱스 (RMF YAML의 graph_idx). None이면 단일 그래프.
+    graph_idx: Optional[int] = None
 
 
 @dataclass
@@ -130,11 +140,44 @@ class ImportedMap:
     edges: list[ImportedEdge]
     report: ImportReport
     config: InferenceConfig
+    background_image: dict | None = None  # {url, opacity, x_offset, y_offset, scale}
 
 
 # ────────────────────────────────────────────────────────────────────
 # 메인 임포터
 # ────────────────────────────────────────────────────────────────────
+def import_map(
+    path_or_data: str | Path | dict,
+    config: Optional[InferenceConfig] = None,
+    format: Optional[str] = None,
+) -> ImportedMap:
+    """Auto-dispatch to import_map_json or import_map_yaml based on file extension or format param.
+
+    경로면 확장자 감지 (.yaml/.yml → YAML, .json → JSON).
+    format param 으로 강제 지정 가능 ("json" / "yaml").
+    """
+    # 포맷 결정
+    if format:
+        detected_format = format.lower()
+    elif isinstance(path_or_data, (str, Path)):
+        path_str = str(path_or_data)
+        if path_str.endswith((".yaml", ".yml")):
+            detected_format = "yaml"
+        elif path_str.endswith(".json"):
+            detected_format = "json"
+        else:
+            raise ValueError(f"Unknown file extension in {path_str}. Use format='json'/'yaml' to specify.")
+    else:
+        raise ValueError("format parameter required when passing dict. Use 'json' or 'yaml'.")
+
+    if detected_format == "yaml":
+        return import_map_yaml(path_or_data, config)
+    elif detected_format == "json":
+        return import_map_json(path_or_data, config)
+    else:
+        raise ValueError(f"Unknown format: {detected_format}. Use 'json' or 'yaml'.")
+
+
 def import_map_json(
     path_or_data: str | Path | dict,
     config: Optional[InferenceConfig] = None,
@@ -164,6 +207,67 @@ def import_map_json(
     _infer_roles(nodes, edges, cfg, raw_nodes)
 
     # 3단계: 검증 + 리포트
+    report = _build_report(nodes, edges, raw_edges_count)
+
+    return ImportedMap(nodes=nodes, edges=edges, report=report, config=cfg)
+
+
+def import_map_yaml(
+    path_or_data: str | Path | dict,
+    config: Optional[InferenceConfig] = None,
+    level: Optional[str] = None,
+) -> ImportedMap:
+    """RMF YAML 경로 또는 dict 또는 YAML 문자열을 받아서 ImportedMap 반환.
+
+    포맷: Open-RMF building_map 표준
+      levels:
+        L1:
+          vertices: [[x, y, "name", {is_charger, is_holding_point, ...}], ...]
+          lanes: [[src_idx, dst_idx, {bidirectional, graph_idx, speed_limit, ...}], ...]
+      fleets: (선택) [{id, graph_idx, color, capabilities, count}, ...]
+
+    level=None 이면 첫 번째 레벨 자동 선택.
+    """
+    cfg = config or InferenceConfig()
+
+    if isinstance(path_or_data, dict):
+        data = path_or_data
+    elif isinstance(path_or_data, (str, Path)):
+        # 파일 경로인지 YAML 문자열인지 판정
+        p = Path(path_or_data) if isinstance(path_or_data, str) else path_or_data
+        if p.exists() and p.is_file():
+            # 파일 경로
+            text = p.read_text(encoding="utf-8")
+        else:
+            # YAML 문자열로 취급
+            text = str(path_or_data)
+        data = yaml.safe_load(text)
+    else:
+        data = path_or_data
+
+    if not isinstance(data, dict):
+        raise ValueError("YAML must be a dict at top level")
+
+    levels = data.get("levels", {})
+    if not levels:
+        raise ValueError("No 'levels' section found in YAML")
+
+    # 첫 번째 레벨 선택
+    level_name = level or next(iter(levels))
+    lvl = levels.get(level_name)
+    if not lvl:
+        raise ValueError(f"Level '{level_name}' not found")
+
+    # YAML 포맷 → internal nodes/edges 로 변환
+    nodes, edges, raw_edges_count = _import_from_yaml_level(lvl)
+
+    # 자동 추론 파이프라인 적용
+    _compute_degrees(nodes, edges)
+    _infer_corridors(nodes, edges, cfg)
+    # YAML 은 role 을 이미 포함할 수 있으므로 조심스럽게 추론 (existing 을 overwrite 하지 않음)
+    _infer_roles_for_yaml(nodes, edges, cfg)
+
+    # 검증 + 리포트
     report = _build_report(nodes, edges, raw_edges_count)
 
     return ImportedMap(nodes=nodes, edges=edges, report=report, config=cfg)
@@ -551,6 +655,121 @@ def _count_weak_components(nodes: list[ImportedNode], edges: list[ImportedEdge])
 
 
 # ────────────────────────────────────────────────────────────────────
+# YAML 임포트 헬퍼
+# ────────────────────────────────────────────────────────────────────
+def _import_from_yaml_level(
+    level_data: dict,
+) -> tuple[list[ImportedNode], list[ImportedEdge], int]:
+    """RMF YAML 레벨 데이터 → nodes/edges.
+
+    vertices: [[x, y, "name", {is_charger, is_holding_point, ...}], ...]
+    lanes: [[src_idx, dst_idx, {bidirectional, graph_idx, speed_limit, ...}], ...]
+
+    반환: (nodes, edges, raw_edges_count)
+    """
+    nodes: list[ImportedNode] = []
+    edges: list[ImportedEdge] = []
+
+    raw_vertices = level_data.get("vertices", [])
+    raw_lanes = level_data.get("lanes", [])
+
+    # 1. vertices → nodes
+    idx_to_id: dict[int, str] = {}
+    for i, vertex in enumerate(raw_vertices):
+        if not vertex or len(vertex) < 2:
+            continue
+        x = float(vertex[0])
+        y = float(vertex[1])
+        # 3번째 요소가 name (또는 params dict)
+        name = None
+        params: dict = {}
+
+        if len(vertex) > 2:
+            third = vertex[2]
+            if isinstance(third, str):
+                name = third
+            elif isinstance(third, dict):
+                params = third
+                name = params.get("name")
+
+        if len(vertex) > 3 and isinstance(vertex[3], dict):
+            params.update(vertex[3])
+
+        node_id = name or f"node_{i:04d}"
+        node = ImportedNode(
+            node_id=node_id,
+            x=x,
+            y=y,
+            name=node_id,
+            inferred_is_charger=bool(params.get("is_charger", False)),
+            inferred_is_holding=bool(params.get("is_holding_point", False)),
+        )
+        # YAML 에 role 힌트가 있으면 적용
+        if "rmf_role" in params:
+            node.inferred_role = params["rmf_role"]
+        nodes.append(node)
+        idx_to_id[i] = node_id
+
+    # 2. lanes → edges
+    for li, lane in enumerate(raw_lanes):
+        if not lane or len(lane) < 2:
+            continue
+        src_idx = int(lane[0])
+        dst_idx = int(lane[1])
+        params: dict = lane[2] if len(lane) > 2 else {}
+
+        if src_idx not in idx_to_id or dst_idx not in idx_to_id:
+            continue
+
+        src_id = idx_to_id[src_idx]
+        dst_id = idx_to_id[dst_idx]
+        bidir = bool(params.get("bidirectional", False))
+
+        # graph_idx 추출 (F1a 호환)
+        graph_idx = None
+        if "graph_idx" in params:
+            graph_idx = int(params["graph_idx"])
+
+        edge = ImportedEdge(
+            edge_id=f"lane_{li:04d}",
+            src=src_id,
+            dst=dst_id,
+            inferred_bidirectional=bidir,
+            v_max=float(params["v_max"]) if "v_max" in params and params["v_max"] is not None else None,
+            graph_idx=graph_idx,
+        )
+
+        edges.append(edge)
+
+    return nodes, edges, len(raw_lanes)
+
+
+def _infer_roles_for_yaml(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    cfg: InferenceConfig,
+) -> None:
+    """YAML 에서 온 노드의 role 추론 (기존 값을 해치지 않음)."""
+    by_id = {n.node_id: n for n in nodes}
+
+    # is_charger 플래그가 있으면 role=charger (JSON 처럼)
+    for n in nodes:
+        if n.inferred_is_charger and n.inferred_role == "standard":
+            n.inferred_role = "charger"
+        elif n.inferred_is_holding and n.inferred_role == "standard":
+            n.inferred_role = "holding"
+
+    # 차수 기반 추론 (low degree → holding candidate)
+    for n in nodes:
+        if n.inferred_role != "standard":
+            continue
+        total_degree = n.degree_in + n.degree_out
+        if total_degree <= cfg.terminal_degree_threshold:
+            n.inferred_role = "holding_candidate"
+            n.inferred_is_holding = True
+
+
+# ────────────────────────────────────────────────────────────────────
 # Edit.json 적용 (Editor 페이지에서 Save 한 결과)
 # ────────────────────────────────────────────────────────────────────
 def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
@@ -591,6 +810,7 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
             raw_link_type_cd=e.raw_link_type_cd,
             merged_from=list(e.merged_from),
             v_max=e.v_max,
+            graph_idx=e.graph_idx,
         )
         edges.append(ee)
 
@@ -645,10 +865,12 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
     # 5. added_edges
     for ae in edits.get("added_edges", []):
         v_max_raw = ae.get("v_max", None)
+        graph_idx_raw = ae.get("graph_idx", None)
         edges.append(ImportedEdge(
             edge_id=ae["id"], src=ae["src"], dst=ae["dst"],
             inferred_bidirectional=bool(ae.get("bidir", False)),
             v_max=(None if v_max_raw is None else float(v_max_raw)),
+            graph_idx=(None if graph_idx_raw is None else int(graph_idx_raw)),
         ))
 
     # 차수 + 리포트 재계산
@@ -656,7 +878,11 @@ def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
     raw_edges_count = len(imported.edges) - len(deleted_edges) + len(edits.get("added_edges", []))
     report = _build_report(nodes, edges, raw_edges_count)
 
-    return ImportedMap(nodes=nodes, edges=edges, report=report, config=imported.config)
+    # 배경 이미지: edit에서 제공되면 그것을, 아니면 원본 유지
+    background_image = edits.get("background_image") or imported.background_image
+
+    return ImportedMap(nodes=nodes, edges=edges, report=report, config=imported.config,
+                      background_image=background_image)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -706,6 +932,7 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
             corridor=e.inferred_corridor,
             access_type=e.inferred_access_type,
             v_max=e.v_max,
+            graph_idx=e.graph_idx,
         )
         g.edges[e.edge_id] = edge
         g._out_edges.setdefault(e.src, []).append(e.edge_id)
@@ -721,6 +948,7 @@ def build_map_graph(imported: ImportedMap) -> MapGraph:
                 corridor=e.inferred_corridor,
                 access_type=e.inferred_access_type,
                 v_max=e.v_max,
+                graph_idx=e.graph_idx,
             )
             g.edges[edge_rev.edge_id] = edge_rev
             g._out_edges.setdefault(e.dst, []).append(edge_rev.edge_id)
