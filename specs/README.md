@@ -10,7 +10,6 @@
 1. [`SPEC-AUTHORING.md`](SPEC-AUTHORING.md) — **spec 을 어떻게 쓰는가**. 표준 템플릿 + 작성 룰. (메타)
 2. [`operations-scenarios.md`](operations-scenarios.md) — **사용자가 무엇을 원하는가**. 9개 시나리오 + GAP. 모든 spec 이 이걸 참조.
 3. 개별 feature spec — 아래 인덱스.
-4. (선택) [`ics-demo-outline.md`](ics-demo-outline.md) — ICS 시연 흐름 + Q&A 대응. 시연 직전 head-up reference.
 
 ---
 
