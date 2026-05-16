@@ -67,6 +67,30 @@ class ScenarioValidator:
         if scenario.runtime_seconds <= 0:
             errors.append("runtime_seconds must be > 0")
 
+        # 7. F1a: fleets 섹션 검증 (있을 때만)
+        if scenario.fleets:
+            seen_ids: set[str] = set()
+            for i, f in enumerate(scenario.fleets):
+                fid = f.get("id")
+                if not fid:
+                    errors.append(f"fleets[{i}].id 누락")
+                    continue
+                if fid in seen_ids:
+                    errors.append(f"fleets[{i}].id 중복: {fid}")
+                seen_ids.add(fid)
+                if int(f.get("count", 0)) <= 0:
+                    errors.append(f"fleets[{fid}].count must be > 0")
+                if int(f.get("graph_idx", -1)) < 0:
+                    errors.append(f"fleets[{fid}].graph_idx must be >= 0")
+            # fleet_size 와 sum(count) 정합성 (사용자가 fleet_size 를 명시한 경우)
+            sum_count = sum(int(f.get("count", 0)) for f in scenario.fleets)
+            if scenario.fleet_size != sum_count:
+                # 경고만 — 사용자가 의도적으로 다르게 설정할 수도 있음
+                print(
+                    f"[WARN] {scenario.name}: fleet_size ({scenario.fleet_size}) "
+                    f"!= sum(fleets.count) ({sum_count})"
+                )
+
         if errors:
             raise ValueError(
                 f"Scenario '{scenario.name}' validation failed:\n"
