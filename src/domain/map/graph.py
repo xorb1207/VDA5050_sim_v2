@@ -216,7 +216,7 @@ class MapGraph:
                 corridor=edge.corridor,
                 access_type=edge.access_type,
                 v_max=edge.v_max,
-                graph_idx=edge.graph_idx,
+                graph_idx=edge.graph_idx,  # F1a: 역방향도 같은 graph에 속함
             )
             self.edges[rev_id] = rev
             self._out_edges.setdefault(edge.end_node_id, []).append(rev_id)
@@ -279,6 +279,9 @@ class MapGraph:
                 edge = self.edges[eid]
                 nb = edge.end_node_id
                 if nb not in self.nodes:
+                    continue
+                # F1a: fleet 지정되면 graph_idx 필터링
+                if _gidx is not None and edge.graph_idx != _gidx:
                     continue
                 # blocked_edges: 해당 엣지 스킵
                 if (current, nb) in blocked:
