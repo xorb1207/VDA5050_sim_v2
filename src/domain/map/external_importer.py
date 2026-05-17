@@ -286,14 +286,23 @@ def import_map_yaml(
     if isinstance(path_or_data, dict):
         data = path_or_data
     elif isinstance(path_or_data, (str, Path)):
-        # 파일 경로인지 YAML 문자열인지 판정
-        p = Path(path_or_data) if isinstance(path_or_data, str) else path_or_data
-        if p.exists() and p.is_file():
-            # 파일 경로
-            text = p.read_text(encoding="utf-8")
-        else:
-            # YAML 문자열로 취급
-            text = str(path_or_data)
+        # 파일 경로인지 YAML 문자열인지 판정 — 줄바꿈/콜론 포함이거나
+        # 너무 길어서 path 검사 자체가 실패할 케이스는 YAML 본문으로 간주
+        s = str(path_or_data)
+        is_path_like = (
+            isinstance(path_or_data, Path)
+            or ("\n" not in s and len(s) < 1024)
+        )
+        text: Optional[str] = None
+        if is_path_like:
+            try:
+                p = Path(path_or_data)
+                if p.exists() and p.is_file():
+                    text = p.read_text(encoding="utf-8")
+            except OSError:
+                text = None
+        if text is None:
+            text = s
         data = yaml.safe_load(text)
     else:
         data = path_or_data
@@ -331,6 +340,439 @@ def import_map_yaml(
         nodes=nodes, edges=edges, report=report, config=cfg,
         fleets=fleets, demands=demands,
     )
+
+
+# ────────────────────────────────────────────────────────────────────
+# 1단계: 구조 임포트
+# ────────────────────────────────────────────────────────────────────
+def _import_nodes(raw_nodes: list[dict]) -> list[ImportedNode]:
+    nodes = []
+    for raw in raw_nodes:
+        pos = raw.get("position", {}) or {}
+        nodes.append(ImportedNode(
+            node_id=str(raw.get("id", "")),
+            x=float(pos.get("x", 0.0)),
+            y=float(pos.get("y", 0.0)),
+            name=str(raw.get("name", "") or raw.get("id", "")),
+            raw_node_type_cd=str(raw.get("node_type_cd", "") or ""),
+            raw_align_type_cd=str(raw.get("align_type_cd", "") or ""),
+        ))
+    return nodes
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-a: 양방향 자동 병합
+# ────────────────────────────────────────────────────────────────────
+def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[ImportedEdge]:
+    """(from,to) + (to,from) 짝 발견 시 1개 양방향 엣지로 병합.
+
+    원본 link id 는 merged_from 에 보존. 병합되지 않은 단방향 링크는 그대로.
+    """
+    by_pair: dict[tuple[str, str], dict] = {}
+    for raw in raw_links:
+        conn = raw.get("connected") or {}
+        f, t = str(conn.get("from", "")), str(conn.get("to", ""))
+        if not f or not t:
+            continue
+        if (f, t) not in by_pair:
+            by_pair[(f, t)] = raw
+
+    edges: list[ImportedEdge] = []
+    consumed: set[tuple[str, str]] = set()
+    for (f, t), raw in by_pair.items():
+        if (f, t) in consumed:
+            continue
+        reverse = (t, f)
+        if reverse in by_pair and reverse not in consumed:
+            rev_raw = by_pair[reverse]
+            edges.append(ImportedEdge(
+                edge_id=str(raw.get("id", "") or f"{f}__{t}"),
+                src=f, dst=t,
+                inferred_bidirectional=True,
+                raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
+                merged_from=[str(raw.get("id", "")), str(rev_raw.get("id", ""))],
+            ))
+            consumed.add((f, t))
+            consumed.add(reverse)
+        else:
+            edges.append(ImportedEdge(
+                edge_id=str(raw.get("id", "") or f"{f}__{t}"),
+                src=f, dst=t,
+                inferred_bidirectional=False,
+                raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
+                merged_from=[str(raw.get("id", ""))],
+            ))
+            consumed.add((f, t))
+    return edges
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-b: 차수 계산
+# ────────────────────────────────────────────────────────────────────
+def _compute_degrees(nodes: list[ImportedNode], edges: list[ImportedEdge]) -> None:
+    by_id = {n.node_id: n for n in nodes}
+    for e in edges:
+        if e.src in by_id:
+            by_id[e.src].degree_out += 1
+            if e.inferred_bidirectional:
+                by_id[e.src].degree_in += 1
+        if e.dst in by_id:
+            by_id[e.dst].degree_in += 1
+            if e.inferred_bidirectional:
+                by_id[e.dst].degree_out += 1
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-c: 코리도 추론
+# ────────────────────────────────────────────────────────────────────
+def _infer_corridors(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    cfg: InferenceConfig,
+) -> None:
+    """각 엣지의 corridor 라벨을 좌표 기반으로 추론."""
+    pos_by_id = {n.node_id: (n.x, n.y) for n in nodes}
+
+    all_lengths = []
+    for e in edges:
+        if e.src in pos_by_id and e.dst in pos_by_id:
+            x1, y1 = pos_by_id[e.src]
+            x2, y2 = pos_by_id[e.dst]
+            all_lengths.append(math.hypot(x2 - x1, y2 - y1))
+    short_threshold = _percentile(all_lengths, cfg.short_edge_percentile) if all_lengths else 0.0
+
+    horizontal_edges: list[tuple[ImportedEdge, float]] = []
+    vertical_edges: list[tuple[ImportedEdge, float]] = []
+    diagonal_edges: list[ImportedEdge] = []
+    short_edges: list[ImportedEdge] = []
+
+    for e in edges:
+        if e.src not in pos_by_id or e.dst not in pos_by_id:
+            continue
+        x1, y1 = pos_by_id[e.src]
+        x2, y2 = pos_by_id[e.dst]
+        dx, dy = abs(x2 - x1), abs(y2 - y1)
+        length = math.hypot(x2 - x1, y2 - y1)
+
+        if length < 0.1:
+            diagonal_edges.append(e)
+            continue
+        if length <= short_threshold:
+            short_edges.append(e)
+            continue
+        if dy <= cfg.corridor_y_tolerance and dx > dy * 2:
+            horizontal_edges.append((e, (y1 + y2) / 2))
+        elif dx <= cfg.corridor_x_tolerance and dy > dx * 2:
+            vertical_edges.append((e, (x1 + x2) / 2))
+        else:
+            diagonal_edges.append(e)
+
+    h_clusters = _cluster_1d(horizontal_edges, cfg.corridor_y_tolerance)
+    reverse = (cfg.y_axis == "y_up")
+    h_clusters_sorted = sorted(h_clusters, key=lambda c: c["band_center"], reverse=reverse)
+    h_names = _assign_horizontal_names(h_clusters_sorted, cfg.horizontal_corridor_names)
+
+    for cluster, name in zip(h_clusters_sorted, h_names):
+        if len(cluster["edges"]) < cfg.min_corridor_size:
+            label = "misc"
+        else:
+            label = name
+        for e in cluster["edges"]:
+            e.inferred_corridor = label
+
+    v_clusters = _cluster_1d(vertical_edges, cfg.corridor_x_tolerance)
+    v_clusters_sorted = sorted(v_clusters, key=lambda c: c["band_center"])
+    for i, cluster in enumerate(v_clusters_sorted):
+        if len(cluster["edges"]) < cfg.min_corridor_size:
+            label = "misc"
+        else:
+            label = "bay"
+        for e in cluster["edges"]:
+            e.inferred_corridor = label
+
+    for e in diagonal_edges:
+        e.inferred_corridor = "misc"
+
+    for e in short_edges:
+        e.inferred_corridor = ""
+        e.inferred_access_type = "access"
+
+
+def _cluster_1d(items: list[tuple], tolerance: float) -> list[dict]:
+    if not items:
+        return []
+    sorted_items = sorted(items, key=lambda x: x[1])
+    clusters: list[dict] = []
+    current = {"band_center": sorted_items[0][1], "edges": [sorted_items[0][0]], "values": [sorted_items[0][1]]}
+    for edge, value in sorted_items[1:]:
+        if value - current["values"][-1] <= tolerance:
+            current["edges"].append(edge)
+            current["values"].append(value)
+            current["band_center"] = sum(current["values"]) / len(current["values"])
+        else:
+            clusters.append(current)
+            current = {"band_center": value, "edges": [edge], "values": [value]}
+    clusters.append(current)
+    return clusters
+
+
+def _assign_horizontal_names(clusters: list[dict], name_pool: tuple[str, ...]) -> list[str]:
+    n = len(clusters)
+    if n == 0:
+        return []
+    if n == 1:
+        return ["center"]
+    if n == 2:
+        return ["north", "south"]
+    if n == 3:
+        return list(name_pool)
+    names = ["north"]
+    middle_count = n - 2
+    for i in range(middle_count):
+        if middle_count == 1:
+            names.append("center")
+        else:
+            names.append(f"center_{i}")
+    names.append("south")
+    return names
+
+
+def _percentile(values: list[float], p: float) -> float:
+    if not values:
+        return 0.0
+    sorted_v = sorted(values)
+    k = (len(sorted_v) - 1) * (p / 100.0)
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return sorted_v[int(k)]
+    return sorted_v[f] * (c - k) + sorted_v[c] * (k - f)
+
+
+# ────────────────────────────────────────────────────────────────────
+# 2-d: role 추론
+# ────────────────────────────────────────────────────────────────────
+def _infer_roles(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    cfg: InferenceConfig,
+    raw_nodes: list[dict],
+) -> None:
+    """hint 코드 + 차수 기반 role 후보 마킹."""
+    if cfg.use_code_hints:
+        for n in nodes:
+            cd = (n.raw_node_type_cd or "").upper()
+            if not cd:
+                continue
+            if cd in ("CH", "CHARGER", "CHRG"):
+                n.inferred_role = "charger"
+                n.inferred_is_charger = True
+            elif cd in ("ST", "STN", "STATION", "WORK"):
+                n.inferred_role = "station"
+            elif cd in ("HP", "HOLD", "HOLDING", "IDLE"):
+                n.inferred_role = "holding"
+                n.inferred_is_holding = True
+            elif cd in ("SD", "SIDING"):
+                n.inferred_role = "siding"
+
+    for n in nodes:
+        if n.inferred_role != "standard":
+            continue
+        total_degree = n.degree_in + n.degree_out
+        if total_degree <= cfg.terminal_degree_threshold:
+            n.inferred_role = "holding_candidate"
+            n.inferred_is_holding = True
+
+
+# ────────────────────────────────────────────────────────────────────
+# 3단계: 검증 리포트
+# ────────────────────────────────────────────────────────────────────
+def _build_report(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    raw_edges_count: int,
+) -> ImportReport:
+    report = ImportReport(
+        node_count=len(nodes),
+        edge_count_raw=raw_edges_count,
+        edge_count_after_merge=len(edges),
+        bidirectional_count=sum(1 for e in edges if e.inferred_bidirectional),
+        inferred_chargers=sum(1 for n in nodes if n.inferred_is_charger),
+        inferred_stations=sum(1 for n in nodes if n.inferred_role == "station"),
+        inferred_holding=sum(1 for n in nodes if n.inferred_is_holding),
+    )
+
+    c = Counter(e.inferred_corridor or "(none)" for e in edges)
+    report.corridor_stats = dict(c)
+
+    for n in nodes:
+        if n.degree_in == 0 and n.degree_out == 0:
+            report.isolated_nodes.append(n.node_id)
+        elif n.degree_in > 0 and n.degree_out == 0 and not n.inferred_is_charger:
+            report.dead_end_nodes.append(n.node_id)
+
+    report.connected_components = _count_weak_components(nodes, edges)
+
+    if report.isolated_nodes:
+        report.warnings.append(ImportWarning(
+            severity="error",
+            code="isolated_nodes",
+            message=f"{len(report.isolated_nodes)} 개 노드가 어떤 링크에도 연결되지 않음",
+            nodes=report.isolated_nodes[:20],
+        ))
+    if report.dead_end_nodes:
+        report.warnings.append(ImportWarning(
+            severity="warn",
+            code="dead_end_nodes",
+            message=f"{len(report.dead_end_nodes)} 개 노드가 dead-end (들어오기만 가능)",
+            nodes=report.dead_end_nodes[:20],
+        ))
+    if report.connected_components > 1:
+        report.warnings.append(ImportWarning(
+            severity="warn",
+            code="multiple_components",
+            message=f"그래프가 {report.connected_components} 개 단편으로 나뉨 (AGV 도달 불가 구간 존재)",
+        ))
+    if report.inferred_chargers == 0:
+        report.warnings.append(ImportWarning(
+            severity="error",
+            code="no_chargers",
+            message="charger 로 추론된 노드가 없음. 검토 UI 에서 charger 지정 필요",
+        ))
+    misc_corridor = report.corridor_stats.get("misc", 0) + report.corridor_stats.get("(none)", 0)
+    if misc_corridor > 0:
+        report.warnings.append(ImportWarning(
+            severity="info",
+            code="unlabeled_corridor",
+            message=f"{misc_corridor} 개 엣지 corridor 추론 실패 (access/짧은 엣지일 수 있음)",
+        ))
+
+    return report
+
+
+def _count_weak_components(nodes: list[ImportedNode], edges: list[ImportedEdge]) -> int:
+    """weakly connected components."""
+    parent: dict[str, str] = {n.node_id: n.node_id for n in nodes}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for e in edges:
+        if e.src in parent and e.dst in parent:
+            union(e.src, e.dst)
+    roots = set(find(n.node_id) for n in nodes)
+    return len(roots)
+
+
+# ────────────────────────────────────────────────────────────────────
+# YAML 임포트 헬퍼
+# ────────────────────────────────────────────────────────────────────
+def _import_from_yaml_level(
+    level_data: dict,
+) -> tuple[list[ImportedNode], list[ImportedEdge], int]:
+    """RMF YAML 레벨 데이터 → nodes/edges.
+
+    vertices: [[x, y, "name", {is_charger, is_holding_point, ...}], ...]
+    lanes: [[src_idx, dst_idx, {bidirectional, graph_idx, speed_limit, ...}], ...]
+    """
+    nodes: list[ImportedNode] = []
+    edges: list[ImportedEdge] = []
+
+    raw_vertices = level_data.get("vertices", [])
+    raw_lanes = level_data.get("lanes", [])
+
+    idx_to_id: dict[int, str] = {}
+    for i, vertex in enumerate(raw_vertices):
+        if not vertex or len(vertex) < 2:
+            continue
+        x = float(vertex[0])
+        y = float(vertex[1])
+        name = None
+        params: dict = {}
+
+        if len(vertex) > 2:
+            third = vertex[2]
+            if isinstance(third, str):
+                name = third
+            elif isinstance(third, dict):
+                params = third
+                name = params.get("name")
+
+        if len(vertex) > 3 and isinstance(vertex[3], dict):
+            params.update(vertex[3])
+
+        node_id = name or f"node_{i:04d}"
+        node = ImportedNode(
+            node_id=node_id,
+            x=x,
+            y=y,
+            name=node_id,
+            inferred_is_charger=bool(params.get("is_charger", False)),
+            inferred_is_holding=bool(params.get("is_holding_point", False)),
+        )
+        if "rmf_role" in params:
+            node.inferred_role = params["rmf_role"]
+        nodes.append(node)
+        idx_to_id[i] = node_id
+
+    for li, lane in enumerate(raw_lanes):
+        if not lane or len(lane) < 2:
+            continue
+        src_idx = int(lane[0])
+        dst_idx = int(lane[1])
+        params: dict = lane[2] if len(lane) > 2 else {}
+
+        if src_idx not in idx_to_id or dst_idx not in idx_to_id:
+            continue
+
+        src_id = idx_to_id[src_idx]
+        dst_id = idx_to_id[dst_idx]
+        bidir = bool(params.get("bidirectional", False))
+
+        graph_idx = None
+        if "graph_idx" in params:
+            graph_idx = int(params["graph_idx"])
+
+        edge = ImportedEdge(
+            edge_id=f"lane_{li:04d}",
+            src=src_id,
+            dst=dst_id,
+            inferred_bidirectional=bidir,
+            v_max=float(params["v_max"]) if "v_max" in params and params["v_max"] is not None else None,
+            graph_idx=graph_idx,
+        )
+        edges.append(edge)
+
+    return nodes, edges, len(raw_lanes)
+
+
+def _infer_roles_for_yaml(
+    nodes: list[ImportedNode],
+    edges: list[ImportedEdge],
+    cfg: InferenceConfig,
+) -> None:
+    """YAML 에서 온 노드의 role 추론 (기존 값을 해치지 않음)."""
+    for n in nodes:
+        if n.inferred_is_charger and n.inferred_role == "standard":
+            n.inferred_role = "charger"
+        elif n.inferred_is_holding and n.inferred_role == "standard":
+            n.inferred_role = "holding"
+
+    for n in nodes:
+        if n.inferred_role != "standard":
+            continue
+        total_degree = n.degree_in + n.degree_out
+        if total_degree <= cfg.terminal_degree_threshold:
+            n.inferred_role = "holding_candidate"
+            n.inferred_is_holding = True
 
 
 # ────────────────────────────────────────────────────────────────────
