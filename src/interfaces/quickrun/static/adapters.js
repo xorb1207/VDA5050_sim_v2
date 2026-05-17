@@ -178,6 +178,7 @@
     blockEdge,
     connectStream,
     listImportedMaps,
+    dispatchManualJob,
     makeFleetColorLookup,
     mapState,
     UI_STATES,

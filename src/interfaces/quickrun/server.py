@@ -435,6 +435,32 @@ async def init_sim(req: InitRequest):
     }
 
 
+@app.post("/manual-job")
+async def manual_job(req: ManualJobRequest):
+    """GAP-B: 수동 demand 발행. UI 의 📋 토글이 두 노드 클릭 후 호출.
+
+    body: {pickup_node, dropoff_node, required_capability?, runId?}
+    응답: {ok, demand_id, agv_id, status, reason}
+      status: "dispatched" — 즉시 AGV 에 할당
+              "pending"    — 매칭 idle AGV 없음 (자동 retry 안 함)
+              "rejected"   — 검증 실패 (노드 없음 등)
+    """
+    runner = _runners_by_id.get(req.runId) if req.runId else _active_runner
+    if runner is None or runner.real_runner is None:
+        raise HTTPException(400, "no active simulation")
+    if runner.stopped:
+        raise HTTPException(400, "simulation already stopped")
+    try:
+        result = await runner.real_runner.dispatch_manual_demand(
+            pickup_node_id=req.pickup_node,
+            dropoff_node_id=req.dropoff_node,
+            required_capability=req.required_capability,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"manual dispatch failed: {exc}")
+    return result
+
+
 @app.post("/control")
 async def control(req: ControlRequest):
     runner = _runners_by_id.get(req.runId)

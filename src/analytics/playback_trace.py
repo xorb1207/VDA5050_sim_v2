@@ -2179,6 +2179,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     </section>
   </div>
 
+  <div id="mj-toast" class="mj-toast"></div>
+
   <script>
     // ── 시간 포맷 헬퍼 (파라미터 폼용) ─────────────────────────
     function fmtDur(s) {{
@@ -2820,7 +2822,14 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             else if (isSiding) inner=`<circle r="4" fill="#e0a000" opacity="0.95" />`;
             else if (isHolding) inner=`<circle r="4" fill="#fff" stroke="#8b98a8" stroke-width="${{1.5/zoomScale}}" vector-effect="non-scaling-stroke" />`;
             else {{ const radius=isAccess?2.5:3; inner=`<circle r="${{radius}}" fill="#8b98a8" opacity="0.7" />`; }}
-            return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{inner}}</g>`;
+            // 수동 Job 모드 시 pickup 으로 선택된 노드는 초록 ring 강조
+            const isPickupSel = window.__mjPickup === id;
+            const pickupRing = isPickupSel
+              ? `<circle r="11" class="node-pickup-ring"><animate attributeName="r" values="9;13;9" dur="1.2s" repeatCount="indefinite" /></circle>`
+              : '';
+            // 노드 클릭용 hit 영역 — 평소엔 투명, 수동 모드에선 hover 가능
+            const hit = `<circle r="10" class="node-hit" data-node-id="${{id}}" />`;
+            return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{pickupRing}}${{inner}}${{hit}}</g>`;
           }}).join('')}}
           ${{fadedDisplay.map(item=>{{
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
@@ -3311,6 +3320,107 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       focusedAgvId=next;
       document.getElementById('agv-focus').value=next;
       render();
+    }});
+
+    // ── GAP-B: 수동 Job UI ───────────────────────────────────────
+    let manualJobMode = false;
+    window.__mjPickup = null;  // renderMap 가 참조 (전역 노출)
+    const mjToast = document.getElementById('mj-toast');
+    let mjToastTimer = null;
+    function showToast(msg, kind) {{
+      mjToast.textContent = msg;
+      mjToast.className = 'mj-toast show' + (kind ? ' ' + kind : '');
+      if (mjToastTimer) clearTimeout(mjToastTimer);
+      mjToastTimer = setTimeout(()=>{{ mjToast.className='mj-toast'; }}, 2400);
+    }}
+    function updateManualJobPanel() {{
+      const panel = document.getElementById('manual-job-panel');
+      const label = document.getElementById('mj-state-label');
+      const badge = document.getElementById('mj-pickup-badge');
+      if (!manualJobMode) {{
+        panel.classList.remove('active');
+        return;
+      }}
+      panel.classList.add('active');
+      if (window.__mjPickup) {{
+        label.textContent = 'dropoff 노드 선택 →';
+        badge.style.display = 'inline-block';
+        badge.textContent = window.__mjPickup;
+      }} else {{
+        label.textContent = 'pickup 노드 선택';
+        badge.style.display = 'none';
+      }}
+    }}
+    function resetManualPickup() {{
+      window.__mjPickup = null;
+      updateManualJobPanel();
+      render();
+    }}
+    function setManualJobMode(on) {{
+      manualJobMode = !!on;
+      window.__mjPickup = null;
+      document.body.classList.toggle('mj-mode', manualJobMode);
+      const btn = document.getElementById('manual-job-toggle');
+      btn.classList.toggle('active', manualJobMode);
+      updateManualJobPanel();
+      render();
+    }}
+    async function handleManualJobNodeClick(nodeId) {{
+      if (!runId) {{
+        showToast('시뮬레이션 미실행 — 먼저 ▶ 실행', 'err');
+        return;
+      }}
+      if (!nodeId) return;
+      // 같은 노드 또 클릭 → pickup 취소
+      if (window.__mjPickup === nodeId) {{
+        resetManualPickup();
+        showToast('pickup 선택 취소', 'warn');
+        return;
+      }}
+      if (!window.__mjPickup) {{
+        // 첫 클릭 → pickup 후보
+        window.__mjPickup = nodeId;
+        updateManualJobPanel();
+        render();
+        return;
+      }}
+      // 두 번째 클릭 → dropoff 확정 → POST
+      const pickup = window.__mjPickup;
+      const dropoff = nodeId;
+      try {{
+        const resp = await fetch('/manual-job', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{ pickup_node: pickup, dropoff_node: dropoff, runId }}),
+        }});
+        const data = await resp.json().catch(()=>({{}}));
+        if (!resp.ok) {{
+          showToast('발행 실패: ' + (data.detail || resp.status), 'err');
+        }} else if (data.status === 'dispatched') {{
+          showToast(`📋 Demand ${{data.demand_id}} → ${{data.agv_id}} (${{pickup}} → ${{dropoff}})`);
+        }} else if (data.status === 'pending') {{
+          showToast(`📋 ${{data.demand_id}} pending — ${{data.reason || ''}}`, 'warn');
+        }} else {{
+          showToast('거부: ' + (data.reason || data.status || 'unknown'), 'err');
+        }}
+      }} catch (err) {{
+        showToast('네트워크 오류: ' + err.message, 'err');
+      }}
+      resetManualPickup();
+    }}
+    document.getElementById('manual-job-toggle').addEventListener('click', ()=>{{
+      setManualJobMode(!manualJobMode);
+    }});
+    document.addEventListener('keydown', (e)=>{{
+      if (e.key === 'Escape' && manualJobMode) {{
+        if (window.__mjPickup) {{
+          resetManualPickup();
+          showToast('pickup 선택 취소', 'warn');
+        }} else {{
+          setManualJobMode(false);
+          showToast('수동 Job 모드 종료', 'warn');
+        }}
+      }}
     }});
     document.getElementById('map').addEventListener('dblclick',(e)=>{{
       if (e.target.closest('[data-agv-id]')) return;

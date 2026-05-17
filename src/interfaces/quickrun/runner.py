@@ -302,6 +302,10 @@ class RealRunner:
         self._fleet_by_agv: dict[str, Fleet] = {}
         # Rolling demand-completed 누적치 (fleet 별)
         self._fleet_demand_completed: dict[str, int] = {}
+        # GAP-B: 수동 demand 발행용 (UI 의 📋 토글에서 호출)
+        self._bus: Optional[LocalMemoryBus] = None
+        self._manual_counter: int = 0
+        self._pending_manual_demands: list[dict] = []
 
     # ── 외부 컨트롤 ─────────────────────────────────────────
     def stop(self) -> None:
@@ -406,6 +410,7 @@ class RealRunner:
         self._graph = graph
         self._scheduler = TimeWindowScheduler()
         bus = LocalMemoryBus()
+        self._bus = bus
         self._task_gen = TaskGenerator(graph, bus, task_interval_s=self.task_interval_s)
         # recorder 를 엔진에 연결 → AGV/스케줄러가 이벤트 자동 기록
         self._recorder = PlaybackTraceRecorder(graph, sample_interval_s=0.5)
@@ -617,6 +622,110 @@ class RealRunner:
                 "count": len(states),
             }
         return result
+
+    # ── GAP-B: 수동 demand 발행 ────────────────────────────
+    async def dispatch_manual_demand(
+        self,
+        pickup_node_id: str,
+        dropoff_node_id: str,
+        required_capability: Optional[str] = None,
+    ) -> dict:
+        """UI 📋 토글에서 두 노드 클릭 → 수동 demand 발행.
+
+        - pickup/dropoff 노드 존재 검증 (graph)
+        - required_capability 가 있으면 fleet.capabilities 매칭 AGV 만
+        - idle 가능 AGV 중 pickup 까지 hop 수가 가장 짧은 AGV 선택
+        - agv→pickup→dropoff 전체 path 로 VDA5050 Order 발행 (자동 발행과 동일 큐)
+        반환: {"ok": bool, "demand_id": str|None, "agv_id": str|None,
+               "status": "dispatched"|"pending"|"rejected", "reason": str|None}
+        """
+        if self._graph is None or self._bus is None:
+            return {"ok": False, "demand_id": None, "agv_id": None,
+                    "status": "rejected", "reason": "runner not setup"}
+        if pickup_node_id not in self._graph.nodes:
+            return {"ok": False, "demand_id": None, "agv_id": None,
+                    "status": "rejected",
+                    "reason": f"unknown pickup_node: {pickup_node_id}"}
+        if dropoff_node_id not in self._graph.nodes:
+            return {"ok": False, "demand_id": None, "agv_id": None,
+                    "status": "rejected",
+                    "reason": f"unknown dropoff_node: {dropoff_node_id}"}
+        if pickup_node_id == dropoff_node_id:
+            return {"ok": False, "demand_id": None, "agv_id": None,
+                    "status": "rejected", "reason": "pickup == dropoff"}
+
+        # capability 매칭 + idle 필터
+        idle = [a for a in self._agvs if a.is_available_for_dispatch()]
+        if required_capability:
+            idle = [
+                a for a in idle
+                if a.fleet and required_capability in (a.fleet.capabilities or [])
+            ]
+        # path 가능 한 AGV 만
+        idle = [
+            a for a in idle
+            if self._graph.get_path(a.current_node_id, pickup_node_id)
+        ]
+        if not idle:
+            # 매칭 idle AGV 없음 — pending 상태로 보고 (자동 retry 안 함, UI 가 인지)
+            self._manual_counter += 1
+            demand_id = f"manual_{self._manual_counter:05d}"
+            self._pending_manual_demands.append({
+                "demand_id": demand_id,
+                "pickup_node_id": pickup_node_id,
+                "dropoff_node_id": dropoff_node_id,
+                "required_capability": required_capability,
+            })
+            reason = "no eligible idle AGV"
+            if required_capability:
+                reason += f" with capability '{required_capability}'"
+            return {"ok": True, "demand_id": demand_id, "agv_id": None,
+                    "status": "pending", "reason": reason}
+
+        # 가장 가까운 AGV (hop count 기준)
+        agv = min(
+            idle,
+            key=lambda a: len(self._graph.get_path(a.current_node_id, pickup_node_id)),
+        )
+        path_to_pickup = self._graph.get_path(agv.current_node_id, pickup_node_id)
+        path_to_dropoff = self._graph.get_path(pickup_node_id, dropoff_node_id)
+        if not path_to_pickup:
+            return {"ok": False, "demand_id": None, "agv_id": agv.agv_id,
+                    "status": "rejected", "reason": "no path agv→pickup"}
+        if not path_to_dropoff:
+            return {"ok": False, "demand_id": None, "agv_id": agv.agv_id,
+                    "status": "rejected", "reason": "no path pickup→dropoff"}
+
+        full_path = path_to_pickup + path_to_dropoff[1:]
+        self._manual_counter += 1
+        demand_id = f"manual_{self._manual_counter:05d}"
+        nodes = [
+            {"nodeId": nid, "sequenceId": i * 2, "released": True, "actions": []}
+            for i, nid in enumerate(full_path)
+        ]
+        edges = [
+            {"edgeId": f"{full_path[i]}__{full_path[i+1]}",
+             "sequenceId": i * 2 + 1, "released": True}
+            for i in range(len(full_path) - 1)
+        ]
+        order_payload = {
+            "orderId": demand_id,
+            "orderUpdateId": 0,
+            "agvId": agv.agv_id,
+            "nodes": nodes,
+            "edges": edges,
+            "dispatchTimeS": self.sim_time,
+            "demandId": demand_id,
+            "pickupNodeId": pickup_node_id,
+            "dropoffNodeId": dropoff_node_id,
+        }
+        await self._bus.publish(f"uagv/v2/NEXT/{agv.agv_id}/order", order_payload)
+        # task_generator 의 diagnostics 에도 반영 (수동 + 자동 합산)
+        if self._task_gen is not None:
+            self._task_gen._diagnostics.orders_published += 1
+            self._task_gen._diagnostics.tasks_dispatched += 1
+        return {"ok": True, "demand_id": demand_id, "agv_id": agv.agv_id,
+                "status": "dispatched", "reason": None}
 
     async def _publish_end(self) -> None:
         try:
