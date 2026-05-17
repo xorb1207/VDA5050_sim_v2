@@ -1893,6 +1893,10 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     .speed-btn.active:hover {{ background:#1d4ed8; border-color:#1d4ed8; }}
     #heatmap-toggle.active {{ background:#c0392b; color:#fff; border-color:#c0392b; }}
     #collision-toggle.active {{ background:#f59e0b; color:#fff; border-color:#f59e0b; }}
+    #block-toggle.active {{ background:#dc2626; color:#fff; border-color:#dc2626; }}
+    /* 차단 모드 ON 일 때 SVG 엣지 hit 영역 시각 강조 */
+    .block-mode svg .edge-hit {{ cursor:pointer; }}
+    .block-mode svg .edge-hit:hover {{ stroke:#f59e0b; stroke-opacity:0.9; }}
     .heatmap-legend {{ display:none; align-items:center; gap:8px; font-size:11.5px;
       color:var(--muted); padding:4px 10px; background:var(--surface-2); border-radius:6px; margin-left:8px; }}
     .heatmap-legend.active {{ display:inline-flex; }}
@@ -2109,10 +2113,14 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
             <button id="heatmap-toggle" type="button" title="히트맵 토글">🔥 히트맵</button>
             <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커">⚠ 충돌</button>
+            <button id="block-toggle" type="button" title="엣지 클릭 차단/해제 — 영향 AGV 가 즉시 reroute">⛔ 차단</button>
           </div>
         </div>
         <div class="hint">
           맵: 휠 확대/축소, 드래그 이동, 더블클릭 줌 초기화. AGV 클릭 시 포커스. 우측 사고 묶음 클릭 시 해당 시점으로 점프.
+          <span id="block-mode-hint" style="display:none; color:var(--danger); font-weight:600; margin-left:6px;">
+            ⛔ 차단 모드: 엣지 클릭 → 차단/해제
+          </span>
           <span class="heatmap-legend" id="heatmap-legend">
             누적 사고 강도
             <span class="gradient"></span>
@@ -2241,6 +2249,9 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     let zoomScale = 1, zoomPanX = 0, zoomPanY = 0;
     let heatmapMode = false;
     let collisionMode = false;
+    // GAP-A: ⛔ 차단 모드 + 사용자가 차단한 엣지 키 집합 (서버 상태와 미러)
+    let blockMode = false;
+    let userBlockedEdges = new Set();
     let isDragging = false, dragStart = null;
     let highlightedIncident = null, highlightTimer = null;
     const HIGHLIGHT_DURATION_MS = 4500;
@@ -2395,6 +2406,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       index = 0;
       heatmapCounts = new Map(); heatmapMax = 0;
       _eventMarkersBuiltKey = '';
+      // GAP-A: 새 sim 시작 → 차단 엣지 초기화 (서버도 init 시 리셋)
+      userBlockedEdges = new Set();
       trace.meta.duration_s = duration;
       trace.meta.sample_interval_s = 0.5;
 
@@ -2760,12 +2773,30 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             applyEdgeStyle(agv.blocked_edge_key,{{stroke:'#c0392b',width:6,opacity:1,dash:''}});
         }}
       }}
+      // GAP-A: 사용자 차단 엣지는 빨간 점선 + ⛔ 마커 (최상위 우선)
+      for (const ek of userBlockedEdges) {{
+        applyEdgeStyle(ek,{{stroke:'#c0392b',width:5,opacity:0.95,dash:'4 4'}});
+      }}
       const labelScale=1/Math.max(zoomScale,0.0001);
       svg.innerHTML=`
         <g id="viewport" transform="translate(${{zoomPanX}} ${{zoomPanY}}) scale(${{zoomScale}})">
           ${{(map.edges||[]).map(edge=>{{
             const style=edgeStyles.get(edge.edge_key)||{{stroke:'#c6d0db',width:2,opacity:1,dash:''}};
-            return `<line x1="${{sx(edge.x1)}}" y1="${{sy(edge.y1)}}" x2="${{sx(edge.x2)}}" y2="${{sy(edge.y2)}}" stroke="${{style.stroke}}" stroke-width="${{style.width/zoomScale}}" stroke-opacity="${{style.opacity}}" stroke-dasharray="${{style.dash}}" stroke-linecap="round" vector-effect="non-scaling-stroke" />`;
+            const blocked = userBlockedEdges.has(edge.edge_key);
+            // 차단된 엣지는 시각 강조 (그 위에 ⛔ 마커도 추가). 클릭 hit 영역은
+            // 별도 투명 stroke 로 두꺼워 모드 OFF 일 때 클릭 인터랙션 방해 X (pointer-events 제어).
+            const hit = `<line class="edge-hit" data-edge-key="${{edge.edge_key}}" x1="${{sx(edge.x1)}}" y1="${{sy(edge.y1)}}" x2="${{sx(edge.x2)}}" y2="${{sy(edge.y2)}}" stroke="transparent" stroke-width="${{14/zoomScale}}" stroke-linecap="round" pointer-events="${{blockMode?'stroke':'none'}}" vector-effect="non-scaling-stroke" />`;
+            const main = `<line x1="${{sx(edge.x1)}}" y1="${{sy(edge.y1)}}" x2="${{sx(edge.x2)}}" y2="${{sy(edge.y2)}}" stroke="${{style.stroke}}" stroke-width="${{style.width/zoomScale}}" stroke-opacity="${{style.opacity}}" stroke-dasharray="${{style.dash}}" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none" />`;
+            return main + hit;
+          }}).join('')}}
+          ${{Array.from(userBlockedEdges).map(ek=>{{
+            const edge=(map.edges||[]).find(e=>e.edge_key===ek);
+            if (!edge) return '';
+            const mx=sx((edge.x1+edge.x2)/2), my=sy((edge.y1+edge.y2)/2);
+            return `<g transform="translate(${{mx}} ${{my}}) scale(${{labelScale}})" pointer-events="none">
+              <circle r="9" fill="#fff" stroke="#c0392b" stroke-width="1.5" />
+              <text y="3.5" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">⛔</text>
+            </g>`;
           }}).join('')}}
           ${{oneWayEdges.map(edge=>{{
             const mx=sx((edge.x1+edge.x2)/2), my=sy((edge.y1+edge.y2)/2);
@@ -3172,6 +3203,36 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       document.getElementById('collision-toggle').classList.toggle('active',collisionMode);
       render();
     }});
+    // GAP-A: ⛔ 차단 모드 토글
+    document.getElementById('block-toggle').addEventListener('click',()=>{{
+      blockMode=!blockMode;
+      document.getElementById('block-toggle').classList.toggle('active',blockMode);
+      const hint=document.getElementById('block-mode-hint');
+      if (hint) hint.style.display = blockMode ? 'inline' : 'none';
+      document.body.classList.toggle('block-mode', blockMode);
+      render();
+    }});
+    // GAP-A: 엣지 클릭 → /block-edge POST (차단 모드 ON 일 때만 동작)
+    async function toggleEdgeBlock(edgeKey) {{
+      if (!runId || !edgeKey) return;
+      const willBlock = !userBlockedEdges.has(edgeKey);
+      try {{
+        const resp = await fetch('/block-edge', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ runId, edge_id: edgeKey, blocked: willBlock }}),
+        }});
+        if (!resp.ok) {{
+          console.error('block-edge failed', resp.status);
+          return;
+        }}
+        const data = await resp.json();
+        userBlockedEdges = new Set(data.currently_blocked || []);
+        render();
+      }} catch (e) {{
+        console.error('block-edge error', e);
+      }}
+    }}
     // ── 실시간 충돌 의심 감지 (같은 노드/엣지 점유) ──
     function detectCollisions(snapshot) {{
       const out = [];
@@ -3233,6 +3294,16 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     document.getElementById('map').addEventListener('pointerup',()=>{{ isDragging=false; dragStart=null; }});
     document.getElementById('map').addEventListener('pointerleave',()=>{{ isDragging=false; dragStart=null; }});
     document.getElementById('map').addEventListener('click',(e)=>{{
+      // GAP-A: 차단 모드 ON → AGV 포커스 대신 엣지 클릭으로 라우팅
+      if (blockMode) {{
+        const edgeHit=e.target.closest('[data-edge-key]');
+        if (edgeHit) {{
+          e.stopPropagation();
+          toggleEdgeBlock(edgeHit.dataset.edgeKey);
+          return;
+        }}
+        return; // 토글 ON 일 때 엣지 외 클릭은 무시 (AGV 포커스 비활성)
+      }}
       const hit=e.target.closest('[data-agv-id]');
       if (!hit) return;
       const agvId=hit.dataset.agvId;

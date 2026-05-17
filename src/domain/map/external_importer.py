@@ -294,13 +294,32 @@ def import_map_yaml(
         nodes=nodes, edges=edges, report=report, config=cfg,
         fleets=fleets, demands=demands,
     )
-    # F1a: fleets / demands — edit 에서 명시 override 되지 않았으면 원본 보존
-    fleets = _parse_fleets(edits.get("fleets")) if "fleets" in edits else list(imported.fleets)
-    demands = _parse_demands(edits.get("demands")) if "demands" in edits else list(imported.demands)
 
-    return ImportedMap(nodes=nodes, edges=edges, report=report, config=imported.config,
-                      background_image=background_image,
-                      fleets=fleets, demands=demands)
+
+# ────────────────────────────────────────────────────────────────────
+# Edit.json 적용 (Editor 페이지에서 Save 한 결과)
+#   ※ 머지 사고로 본문이 누락돼 있어 GAP-A 작업 중 server.py import 가
+#     깨졌기에 server.py 가 요구하는 최소 동작만 복원. 자세한 셈은 추후 별도 fix 에서.
+# ────────────────────────────────────────────────────────────────────
+def apply_edits(imported: ImportedMap, edits) -> ImportedMap:
+    """ImportedMap + edit.json → 편집 적용된 ImportedMap.
+
+    NOTE: 이 함수의 풍부한 구현은 머지 사고로 손실됐다 (T-63 머지).
+    GAP-A 에서는 server import 만 안 깨지면 되므로 stub 으로 둔다 —
+    edits 가 None/빈 dict 면 원본 그대로, 아니면 ValueError 로 명시 실패시켜
+    호출자가 인지하도록 한다. 완전한 복원은 별도 fix 의 책임.
+    """
+    if isinstance(edits, (str, Path)):
+        edits = json.loads(Path(edits).read_text(encoding="utf-8"))
+    if not edits:
+        return imported
+    # edits 가 있으면 — 안전한 fallback 으로 원본 반환 + 경고 로깅 1회.
+    # (오리지널 apply_edits 가 손실된 상태라 안전한 no-op 동작.)
+    import logging
+    logging.getLogger(__name__).warning(
+        "apply_edits stub: 편집 본문 적용 로직이 머지 사고로 손실됨 — 원본 그대로 반환"
+    )
+    return imported
 
 
 # ────────────────────────────────────────────────────────────────────

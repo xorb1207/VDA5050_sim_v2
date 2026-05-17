@@ -96,6 +96,21 @@
     return resp.ok;
   }
 
+  // GAP-A: 라이브 엣지 차단/해제. edgeKey = "src__dst".
+  // 응답: {ok, currently_blocked: [...], affected_agvs: [...]}.
+  async function blockEdge(runId, edgeKey, blocked) {
+    const resp = await fetch(backendBase() + "/block-edge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId, edge_id: edgeKey, blocked: !!blocked }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error("block-edge failed: " + resp.status + " " + text);
+    }
+    return await resp.json();
+  }
+
   // ── Engine adapter ──────────────────────────────────────────
   // WS 구독. onTick(snapshot), onEnd(reason).
   // 반환값: {disconnect()}.
@@ -160,6 +175,7 @@
   window.QuickRunAdapter = {
     init,
     control,
+    blockEdge,
     connectStream,
     listImportedMaps,
     makeFleetColorLookup,
