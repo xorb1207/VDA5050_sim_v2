@@ -34,6 +34,28 @@ from src.domain.reservation.scheduler import TimeWindowScheduler
 _DEFAULT_FLEET_COLORS = ("#0f9d58", "#2563eb", "#e0a000", "#9333ea", "#dc2626")
 
 
+def _edge_key_to_tuple(edge_key: str) -> Optional[tuple[str, str]]:
+    """edge_key "src__dst" → (src, dst) tuple. 형식 오류면 None."""
+    if not edge_key or "__" not in edge_key:
+        return None
+    src, _, dst = edge_key.partition("__")
+    if not src or not dst:
+        return None
+    return (src, dst)
+
+
+def _agv_planned_edge_keys(agv) -> list[str]:
+    """AGV 현재 _path 에서 남은 edge_key 시퀀스 추출. 차단 영향 판별용."""
+    path = getattr(agv, "_path", None)
+    if not path or len(path) < 2:
+        return []
+    idx = max(0, getattr(agv, "_path_index", 0) - 1)
+    out: list[str] = []
+    for i in range(idx, len(path) - 1):
+        out.append(f"{path[i]}__{path[i + 1]}")
+    return out
+
+
 def _build_fleets(
     fleet_defs: list[dict] | None,
     total_agv_count: int,
@@ -285,6 +307,48 @@ class RealRunner:
     def stop(self) -> None:
         self._stop = True
 
+    def block_edge(self, edge_key: str, blocked: bool) -> dict:
+        """GAP-A: 사용자가 ⛔ 로 엣지 차단/해제.
+
+        edge_key: "src__dst" 형식.
+        blocked: True 면 추가, False 면 해제.
+        반환: {"ok": bool, "currently_blocked": [edge_key...], "affected_agvs": [...]}.
+
+        영향:
+          1) self.blocked_edges 갱신 + graph._user_blocked_edges 동기화
+             → 이후 모든 path-find 가 차단 엣지를 회피.
+          2) 차단 시점에 그 엣지를 path 에 포함한 AGV 들에 대해 _reroute 트리거.
+        """
+        tup = _edge_key_to_tuple(edge_key)
+        if tup is None:
+            return {"ok": False, "error": f"invalid edge_key: {edge_key}",
+                    "currently_blocked": sorted(self.blocked_edges),
+                    "affected_agvs": []}
+        if blocked:
+            self.blocked_edges.add(edge_key)
+        else:
+            self.blocked_edges.discard(edge_key)
+
+        if self._graph is not None:
+            self._graph._user_blocked_edges = {
+                _edge_key_to_tuple(k) for k in self.blocked_edges
+                if _edge_key_to_tuple(k)
+            }
+
+        affected: list[str] = []
+        if blocked and self._engine is not None:
+            sim_time = self._engine.sim_time
+            for agv in self._engine.agvs.values():
+                planned = _agv_planned_edge_keys(agv)
+                if edge_key in planned:
+                    affected.append(agv.agv_id)
+                    asyncio.create_task(agv._reroute(sim_time, blocked_edge=tup))
+        return {
+            "ok": True,
+            "currently_blocked": sorted(self.blocked_edges),
+            "affected_agvs": affected,
+        }
+
     @property
     def map_json(self) -> dict:
         if self._graph is None:
@@ -334,7 +398,11 @@ class RealRunner:
         # 사용자가 미리 지정한 차단 엣지: 그래프에 표시만 (실제 차단 X — 엔진 mutation
         # 금지 원칙. 향후 path-find 시 blocked_edges 인자로 전달하는 식으로 결선).
         # MVP: 시각적으로만 빨간색으로 노출, 경로 차단은 안 함 (B-pure 의 한계 명시).
-        graph._user_blocked_edges = set(self.blocked_edges)
+        # 사용자가 ⛔ 로 차단한 엣지 — graph.get_path() 가 자동 회피한다.
+        # 포맷: edge_key 문자열 "src__dst" → (src, dst) tuple.
+        graph._user_blocked_edges = {
+            _edge_key_to_tuple(k) for k in self.blocked_edges if _edge_key_to_tuple(k)
+        }
         self._graph = graph
         self._scheduler = TimeWindowScheduler()
         bus = LocalMemoryBus()

@@ -76,6 +76,12 @@ class ControlRequest(BaseModel):
     action: str  # "stop" | "reset"
 
 
+class BlockEdgeRequest(BaseModel):
+    runId: str
+    edge_id: str   # edge_key "src__dst" 형식
+    blocked: bool
+
+
 class UploadMapRequest(BaseModel):
     name: str                      # 사용자 친화적 이름 (예: "synthetic_plant")
     map_json: dict | None = None   # 원본 외부 맵 JSON (nodes/links)
@@ -445,6 +451,24 @@ async def control(req: ControlRequest):
             runner.real_runner.stop()
         return {"ok": True, "state": "reset"}
     raise HTTPException(400, f"unknown action: {req.action}")
+
+
+@app.post("/block-edge")
+async def block_edge(req: BlockEdgeRequest):
+    """GAP-A: 라이브 시뮬 중 엣지 차단/해제.
+
+    body: {runId, edge_id (edge_key "src__dst" 형식), blocked: bool}
+    응답: {ok, currently_blocked: [...], affected_agvs: [...]}
+    """
+    runner = _runners_by_id.get(req.runId)
+    if runner is None:
+        raise HTTPException(404, "unknown runId")
+    if runner.real_runner is None:
+        raise HTTPException(400, "no active engine for this run")
+    result = runner.real_runner.block_edge(req.edge_id, req.blocked)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error", "block_edge failed"))
+    return result
 
 
 @app.websocket("/ws/stream/{run_id}")
