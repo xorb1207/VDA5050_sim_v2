@@ -256,7 +256,12 @@ class MapGraph:
             return [start_id]
         if start_id not in self.nodes or end_id not in self.nodes:
             return []
-        blocked = blocked_edges or set()
+        blocked = set(blocked_edges) if blocked_edges else set()
+        # 사용자가 Quickrun UI 에서 ⛔ 로 차단한 엣지는 모든 path-find 에서 자동 회피.
+        # 그래프를 mutate 하지 않으므로 동시 호출 안전.
+        user_blocked = getattr(self, "_user_blocked_edges", None)
+        if user_blocked:
+            blocked |= user_blocked
         # graph_idx 필터 결정: fleet 우선, 그 다음 직접 지정, 없으면 None(전체)
         _gidx: Optional[int] = None
         if fleet is not None:

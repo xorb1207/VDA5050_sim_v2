@@ -96,19 +96,19 @@
     return resp.ok;
   }
 
-  // GAP-B: 수동 Job 발행. body: {pickup_node, dropoff_node, required_capability?, runId?}
-  // 반환: {ok, demand_id, agv_id, status, reason}
-  async function dispatchManualJob(req) {
-    const resp = await fetch(backendBase() + "/manual-job", {
+  // GAP-A: 라이브 엣지 차단/해제. edgeKey = "src__dst".
+  // 응답: {ok, currently_blocked: [...], affected_agvs: [...]}.
+  async function blockEdge(runId, edgeKey, blocked) {
+    const resp = await fetch(backendBase() + "/block-edge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
+      body: JSON.stringify({ runId, edge_id: edgeKey, blocked: !!blocked }),
     });
-    const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      return { ok: false, status: "rejected", reason: data.detail || ("HTTP " + resp.status) };
+      const text = await resp.text();
+      throw new Error("block-edge failed: " + resp.status + " " + text);
     }
-    return data;
+    return await resp.json();
   }
 
   // ── Engine adapter ──────────────────────────────────────────
@@ -175,6 +175,7 @@
   window.QuickRunAdapter = {
     init,
     control,
+    blockEdge,
     connectStream,
     listImportedMaps,
     dispatchManualJob,

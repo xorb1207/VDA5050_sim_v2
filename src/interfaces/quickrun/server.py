@@ -76,12 +76,10 @@ class ControlRequest(BaseModel):
     action: str  # "stop" | "reset"
 
 
-class ManualJobRequest(BaseModel):
-    """GAP-B: UI 📋 토글에서 두 노드 클릭으로 발행되는 수동 demand."""
-    pickup_node: str
-    dropoff_node: str
-    required_capability: str | None = None
-    runId: str | None = None  # 옵션 — 없으면 _active_runner 사용
+class BlockEdgeRequest(BaseModel):
+    runId: str
+    edge_id: str   # edge_key "src__dst" 형식
+    blocked: bool
 
 
 class UploadMapRequest(BaseModel):
@@ -479,6 +477,24 @@ async def control(req: ControlRequest):
             runner.real_runner.stop()
         return {"ok": True, "state": "reset"}
     raise HTTPException(400, f"unknown action: {req.action}")
+
+
+@app.post("/block-edge")
+async def block_edge(req: BlockEdgeRequest):
+    """GAP-A: 라이브 시뮬 중 엣지 차단/해제.
+
+    body: {runId, edge_id (edge_key "src__dst" 형식), blocked: bool}
+    응답: {ok, currently_blocked: [...], affected_agvs: [...]}
+    """
+    runner = _runners_by_id.get(req.runId)
+    if runner is None:
+        raise HTTPException(404, "unknown runId")
+    if runner.real_runner is None:
+        raise HTTPException(400, "no active engine for this run")
+    result = runner.real_runner.block_edge(req.edge_id, req.blocked)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error", "block_edge failed"))
+    return result
 
 
 @app.websocket("/ws/stream/{run_id}")
