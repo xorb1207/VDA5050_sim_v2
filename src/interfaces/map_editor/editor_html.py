@@ -43,6 +43,8 @@ def build_editor_html(
         "is_holding": n.inferred_is_holding,
         "degree_in": n.degree_in,
         "degree_out": n.degree_out,
+        # F1a: 노드 capability 태그 (engine 에서 지원 시)
+        "capability": getattr(n, "capability", None),
     } for n in imported.nodes]
 
     edges_payload = [{
@@ -53,7 +55,36 @@ def build_editor_html(
         "corridor": e.inferred_corridor,
         "access": e.inferred_access_type,
         "v_max": e.v_max,   # F1b-ux: per-edge 속도 제한 (None=미설정)
+        # F1a: 어떤 graph 에 속한 lane 인지. None/누락이면 0 (단일 그래프 fallback)
+        "graph_idx": (e.graph_idx if e.graph_idx is not None else 0),
     } for e in imported.edges]
+
+    # F1a: fleets 정보 (engine 에서 지원 시)
+    # 각 fleet: {"id", "graph_idx", "color", "capabilities", "count", ...}
+    raw_fleets = getattr(imported, "fleets", None) or []
+    fleets_payload: list[dict] = []
+    for f in raw_fleets:
+        # dict 형 (T-61 integration) 또는 Fleet dataclass 둘 다 수용
+        if isinstance(f, dict):
+            fleets_payload.append({
+                "id": str(f.get("id", "")),
+                "graph_idx": int(f.get("graph_idx", 0)),
+                "color": str(f.get("color", "#0f9d58")),
+                "capabilities": list(f.get("capabilities", []) or []),
+                "count": int(f.get("count", 1)),
+                "max_speed_mps": float(f.get("max_speed_mps", 1.5)),
+                "priority": int(f.get("priority", 1)),
+            })
+        else:
+            fleets_payload.append({
+                "id": str(getattr(f, "id", "")),
+                "graph_idx": int(getattr(f, "graph_idx", 0)),
+                "color": str(getattr(f, "color", "#0f9d58")),
+                "capabilities": list(getattr(f, "capabilities", []) or []),
+                "count": int(getattr(f, "count", 1)),
+                "max_speed_mps": float(getattr(f, "max_speed_mps", 1.5)),
+                "priority": int(getattr(f, "priority", 1)),
+            })
 
     report = imported.report
     report_payload = {
@@ -79,6 +110,7 @@ def build_editor_html(
         "nodes": nodes_payload,
         "edges": edges_payload,
         "report": report_payload,
+        "fleets": fleets_payload,         # F1a: multi-fleet 환경 (비어 있으면 단일 graph)
     }
 
     # 배경 이미지 포함
@@ -288,6 +320,41 @@ _TEMPLATE = r"""<!doctype html>
     /* 노드 hover 강조 */
     .node-hover { stroke: var(--accent); stroke-width: 2; opacity: 0.5; }
 
+    /* F1a: Active Graph 라디오 */
+    .graph-row {
+      display:flex; align-items:center; gap:8px;
+      padding:6px 8px; border-radius:5px;
+      border:1px solid var(--border); background:var(--surface);
+      cursor:pointer; font-size:12px;
+    }
+    .graph-row:hover { background:var(--surface-3); }
+    .graph-row.active {
+      border-color:var(--accent); background:var(--accent-soft); color:var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft) inset;
+    }
+    .graph-row input[type="radio"] { margin:0; }
+    .graph-row .fleet-dot {
+      display:inline-block; width:10px; height:10px; border-radius:50%;
+      flex-shrink:0;
+    }
+    .graph-row .fleet-name { font-weight:600; }
+    .graph-row .fleet-count { color:var(--muted); margin-left:auto; font-size:11px; }
+    .fleet-info-row { padding:3px 0; font-size:12px; }
+    .fleet-info-row .k {
+      color:var(--muted); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.04em; font-weight:600; margin-bottom:3px;
+    }
+    .fleet-tag {
+      display:inline-block; padding:1px 7px; margin:2px 4px 2px 0;
+      background:var(--surface-3); border-radius:10px; font-size:11px;
+      font-family:var(--font-mono); color:var(--ink);
+    }
+    .station-pill {
+      display:inline-block; padding:1px 6px; margin:2px 3px 2px 0;
+      background:var(--surface-2); border:1px solid var(--border); border-radius:4px;
+      font-size:11px; font-family:var(--font-mono); color:var(--muted);
+    }
+    .station-pill.has-cap { color:var(--role-station); border-color:var(--role-station); }
     /* 토스트 (Phase 4 저장 알림 등) */
     .toast {
       position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
@@ -320,6 +387,25 @@ _TEMPLATE = r"""<!doctype html>
 
     <!-- 우측 패널: 도구 / 인스펙터 -->
     <aside class="side">
+      <!-- F1a: Active Graph (multi-fleet 환경에서만 표시) -->
+      <div class="panel" id="active-graph-panel" style="display:none;">
+        <h2>Active Graph</h2>
+        <div id="active-graph-list" style="display:flex; flex-direction:column; gap:4px;"></div>
+        <label style="display:flex; gap:6px; align-items:center; margin-top:10px; font-size:11.5px;">
+          <input type="checkbox" id="show-inactive-toggle" checked />
+          <span>Show inactive graphs (faded)</span>
+        </label>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:6px;">
+          <kbd class="hint-key">Tab</kbd> 또는 <kbd class="hint-key">G</kbd> 키로 순환
+        </div>
+      </div>
+
+      <!-- F1a: Fleet Info (활성 fleet 정보) -->
+      <div class="panel" id="fleet-info-panel" style="display:none;">
+        <h2 id="fleet-info-title">Fleet 정보</h2>
+        <div id="fleet-info-body"></div>
+      </div>
+
       <!-- 모드 토글 -->
       <div class="panel">
         <h2>Edit Mode</h2>
@@ -495,11 +581,41 @@ _TEMPLATE = r"""<!doctype html>
     const edges = PAYLOAD.edges;            // 편집 대상 (mutable)
     const report = PAYLOAD.report;
     const nodeById = new Map(nodes.map(n => [n.id, n]));
+    // F1a: fleets 정의 (PAYLOAD.fleets 비어 있으면 multi-graph UI 비활성)
+    const FLEETS = Array.isArray(PAYLOAD.fleets) ? PAYLOAD.fleets : [];
+    // 사용 가능한 graph_idx 목록 (fleets 가 있으면 그 graph_idx 들, 없으면 edges 의 graph_idx 들)
+    const GRAPH_INDICES = (() => {
+      const seen = new Set();
+      for (const f of FLEETS) seen.add(f.graph_idx);
+      if (seen.size === 0) {
+        for (const e of edges) seen.add(e.graph_idx ?? 0);
+      }
+      return [...seen].sort((a, b) => a - b);
+    })();
+    const FLEET_BY_GRAPH = new Map(FLEETS.map(f => [f.graph_idx, f]));
+    // multi-fleet 활성 조건: fleets 가 정의되어 있고 graph 가 2개 이상이거나 fleets 가 있음
+    const MULTI_FLEET_ACTIVE = FLEETS.length > 0;
+    // 기본 fleet 색 (graph_idx 가 fleet 매핑 없을 때)
+    const DEFAULT_GRAPH_COLORS = ["#0f9d58", "#2563eb", "#e0a000", "#c0392b", "#7c3aed"];
+    function colorForGraphIdx(idx) {
+      const f = FLEET_BY_GRAPH.get(idx);
+      if (f && f.color) return f.color;
+      return DEFAULT_GRAPH_COLORS[idx % DEFAULT_GRAPH_COLORS.length];
+    }
+    function fleetNameForGraphIdx(idx) {
+      const f = FLEET_BY_GRAPH.get(idx);
+      return f ? f.id : `Graph ${idx}`;
+    }
     // 원본 상태 보존 (Save 시 diff 계산용)
     const ORIGINAL_NODES = new Map(PAYLOAD.nodes.map(n => [n.id, JSON.parse(JSON.stringify(n))]));
     const ORIGINAL_EDGES = new Map(PAYLOAD.edges.map(e => [e.id, JSON.parse(JSON.stringify(e))]));
 
     // ── 편집 상태 ───────────────────────────────────────────────
+    // F1a: 현재 편집 중인 graph (multi-fleet 환경). fleets 가 정의되어 있을 때만 의미 있음.
+    //   - activeGraphIdx: 활성 graph 의 idx (Paint/Build 액션 대상 + 색 강조 기준)
+    //   - showInactiveGraphs: 비활성 graph 의 lane 도 회색으로 보일지 여부 (기본 on)
+    let activeGraphIdx = (GRAPH_INDICES.length > 0 ? GRAPH_INDICES[0] : 0);
+    let showInactiveGraphs = true;
     let mode = "paint";              // paint / stamp / build / speed
     let pinnedEdgeId = "";           // Speed 모드: 클릭으로 고정된 edge (인스펙터 유지)
     let stampTool = "inspect";       // inspect / station / charger / holding / siding / reset
@@ -685,6 +801,183 @@ _TEMPLATE = r"""<!doctype html>
       document.getElementById("validation-list").innerHTML = html;
     }
 
+    // ── F1a: Active Graph 패널 + Fleet Info 패널 ────────────────
+    function renderActiveGraphPanel() {
+      const panel = document.getElementById("active-graph-panel");
+      const infoPanel = document.getElementById("fleet-info-panel");
+      if (!MULTI_FLEET_ACTIVE) {
+        panel.style.display = "none";
+        infoPanel.style.display = "none";
+        return;
+      }
+      panel.style.display = "";
+      const list = document.getElementById("active-graph-list");
+      // 최대 3 graph 까지 (spec)
+      const displayIndices = GRAPH_INDICES.slice(0, 3);
+      list.innerHTML = displayIndices.map(idx => {
+        const f = FLEET_BY_GRAPH.get(idx);
+        const color = colorForGraphIdx(idx);
+        const name = fleetNameForGraphIdx(idx);
+        const count = f ? f.count : 0;
+        const active = (idx === activeGraphIdx) ? "active" : "";
+        return `<label class="graph-row ${active}" data-graph-idx="${idx}">
+          <input type="radio" name="active-graph" value="${idx}" ${idx === activeGraphIdx ? "checked" : ""} />
+          <span class="fleet-dot" style="background:${color};"></span>
+          <span class="fleet-name">Graph ${idx}</span>
+          <span style="color:var(--muted); font-size:11px;">${name}</span>
+          <span class="fleet-count">${count} AGVs</span>
+        </label>`;
+      }).join("");
+      // 라디오 이벤트 위임
+      list.querySelectorAll(".graph-row").forEach(row => {
+        row.addEventListener("click", () => {
+          const idx = parseInt(row.dataset.graphIdx, 10);
+          if (Number.isFinite(idx)) setActiveGraph(idx);
+        });
+      });
+      renderFleetInfoPanel();
+    }
+
+    function setActiveGraph(idx) {
+      if (idx === activeGraphIdx) return;
+      activeGraphIdx = idx;
+      // 진행 중 인터랙션 cancel
+      paintTrajectory = null;
+      edgeStartNodeId = "";
+      edgePreviewClient = null;
+      selectedNodeIds.clear();
+      selectionBox = null;
+      renderActiveGraphPanel();
+      render();
+    }
+
+    function cycleActiveGraph() {
+      if (!MULTI_FLEET_ACTIVE || GRAPH_INDICES.length === 0) return;
+      const display = GRAPH_INDICES.slice(0, 3);
+      const pos = display.indexOf(activeGraphIdx);
+      const next = display[(pos + 1) % display.length];
+      setActiveGraph(next);
+    }
+
+    function renderFleetInfoPanel() {
+      const infoPanel = document.getElementById("fleet-info-panel");
+      if (!MULTI_FLEET_ACTIVE) {
+        infoPanel.style.display = "none";
+        return;
+      }
+      infoPanel.style.display = "";
+      const f = FLEET_BY_GRAPH.get(activeGraphIdx);
+      const title = document.getElementById("fleet-info-title");
+      const body = document.getElementById("fleet-info-body");
+      const fleetName = f ? f.id : `Graph ${activeGraphIdx}`;
+      const fleetColor = colorForGraphIdx(activeGraphIdx);
+      title.innerHTML =
+        `<span class="fleet-dot" style="display:inline-block; width:9px; height:9px; border-radius:50%; background:${fleetColor}; margin-right:6px; vertical-align:middle;"></span>` +
+        `${fleetName} 정보`;
+      const caps = f ? f.capabilities : [];
+      const count = f ? f.count : 0;
+      // 활성 graph 에서 도달 가능한 station / charger 분석 (BFS)
+      const reachable = computeReachableNodes(activeGraphIdx);
+      const stations = nodes.filter(n =>
+        reachable.has(n.id) &&
+        (n.role === "station" || n.role === "work")
+      );
+      const chargers = nodes.filter(n =>
+        reachable.has(n.id) &&
+        (n.is_charger || n.role === "charger")
+      );
+      let capsHtml = "—";
+      if (caps && caps.length > 0) {
+        capsHtml = caps.map(c => `<span class="fleet-tag">${escapeHtml(c)}</span>`).join("");
+      }
+      let stationsHtml = `<span style="color:var(--muted); font-size:11px;">없음</span>`;
+      if (stations.length > 0) {
+        const max = 20;
+        const shown = stations.slice(0, max);
+        stationsHtml = shown.map(n => {
+          const hasCap = n.capability != null && n.capability !== "";
+          const capLabel = hasCap ? ` (${escapeHtml(n.capability)})` : "";
+          return `<span class="station-pill ${hasCap ? 'has-cap' : ''}" title="${n.id}${capLabel}">${escapeHtml(n.id)}${capLabel}</span>`;
+        }).join("");
+        if (stations.length > max) {
+          stationsHtml += `<span style="color:var(--muted); font-size:11px;"> … +${stations.length - max}</span>`;
+        }
+      }
+      let chargersHtml = `<span style="color:var(--muted); font-size:11px;">없음</span>`;
+      if (chargers.length > 0) {
+        chargersHtml = chargers.slice(0, 20).map(n =>
+          `<span class="station-pill" style="border-color:var(--role-charger); color:var(--role-charger);">${escapeHtml(n.id)}</span>`
+        ).join("");
+      }
+      body.innerHTML = `
+        <div class="fleet-info-row">
+          <div class="k">Fleet ID</div>
+          <div class="v" style="font-family:var(--font-mono);">${escapeHtml(fleetName)}</div>
+        </div>
+        <div class="fleet-info-row">
+          <div class="k">AGV count</div>
+          <div class="v" style="font-family:var(--font-mono);">${count}</div>
+        </div>
+        <div class="fleet-info-row">
+          <div class="k">Capabilities</div>
+          <div class="v">${capsHtml}</div>
+        </div>
+        <div class="fleet-info-row" style="border-top:1px dashed var(--border); margin-top:6px; padding-top:8px;">
+          <div class="k">도달 가능 stations (${stations.length})</div>
+          <div class="v">${stationsHtml}</div>
+        </div>
+        <div class="fleet-info-row">
+          <div class="k">도달 가능 chargers (${chargers.length})</div>
+          <div class="v">${chargersHtml}</div>
+        </div>
+      `;
+    }
+
+    // BFS — 활성 graph 의 lane 만 사용하여 도달 가능한 노드 집합 산출
+    function computeReachableNodes(gIdx) {
+      const adj = new Map(nodes.map(n => [n.id, []]));
+      for (const e of edges) {
+        const eg = (e.graph_idx == null) ? 0 : e.graph_idx;
+        if (eg !== gIdx) continue;
+        if (!adj.has(e.src) || !adj.has(e.dst)) continue;
+        adj.get(e.src).push(e.dst);
+        if (e.bidir) adj.get(e.dst).push(e.src);
+      }
+      const visited = new Set();
+      for (const n of nodes) {
+        if (visited.has(n.id)) continue;
+        // 컴포넌트별로 모두 포함 (시작점 무관 — 어디든 graph 에 연결되어 있으면 도달 가능 노드)
+        // 단, 고립 노드(어떤 lane 에도 안 닿음)는 제외
+        const inAdj = adj.get(n.id);
+        const hasOut = inAdj && inAdj.length > 0;
+        const hasIn = [...adj.values()].some(list => list.includes(n.id));
+        if (!hasOut && !hasIn) continue;
+        // BFS
+        const stack = [n.id];
+        while (stack.length) {
+          const cur = stack.pop();
+          if (visited.has(cur)) continue;
+          visited.add(cur);
+          for (const nb of (adj.get(cur) || [])) {
+            if (!visited.has(nb)) stack.push(nb);
+          }
+        }
+      }
+      return visited;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
+    }
+
+    // Show inactive toggle 핸들러
+    document.getElementById("show-inactive-toggle").addEventListener("change", (e) => {
+      showInactiveGraphs = !!e.target.checked;
+      render();
+    });
+
     // ── 모드 토글 ───────────────────────────────────────────────
     function setMode(newMode) {
       mode = newMode;
@@ -787,6 +1080,12 @@ _TEMPLATE = r"""<!doctype html>
         setMode("paint");
         return;
       }
+      // ── F1a: Tab / G → 활성 graph 순환 (multi-fleet 환경에서만) ──
+      if (MULTI_FLEET_ACTIVE && (e.key === "Tab" || e.key === "g" || e.key === "G")) {
+        cycleActiveGraph();
+        e.preventDefault();
+        return;
+      }
       if (e.code === "Space" && !spaceKeyDown) {
         spaceKeyDown = true;
         document.querySelector(".map-shell").classList.add("pan-mode");
@@ -810,15 +1109,31 @@ _TEMPLATE = r"""<!doctype html>
       const edgesSvg = edges.map(e => {
         const a = nodeById.get(e.src), b = nodeById.get(e.dst);
         if (!a || !b) return "";
+        // F1a: multi-fleet 환경 — 비활성 graph 의 lane 은 보이지 않거나 회색으로
+        const eGraphIdx = (e.graph_idx == null) ? 0 : e.graph_idx;
+        const isActiveGraph = (!MULTI_FLEET_ACTIVE) || (eGraphIdx === activeGraphIdx);
+        if (MULTI_FLEET_ACTIVE && !isActiveGraph && !showInactiveGraphs) return "";
         const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
         // F1b-ux: v_max 설정된 edge 는 amber, 일반 edge 는 기존 색
         const hasVMax = (e.v_max !== null && e.v_max !== undefined);
         const isActive = (e.id === hoveredEdgeId);
         const isPinned = (e.id === pinnedEdgeId);
         let stroke;
-        if (hasVMax) stroke = "var(--warn)";              // 속도 제한 표시색 (amber)
-        else if (e.bidir) stroke = "var(--edge-bidir)";
-        else stroke = "var(--edge-unidir)";
+        let strokeOpacity = 1;
+        if (MULTI_FLEET_ACTIVE && !isActiveGraph) {
+          // 비활성 graph: 회색 + 흐리게
+          stroke = "#9aa5b1";
+          strokeOpacity = 0.3;
+        } else if (hasVMax) {
+          stroke = "var(--warn)";                          // 속도 제한 표시색 (amber)
+        } else if (MULTI_FLEET_ACTIVE) {
+          // 활성 graph: fleet 색깔 (양방향/단방향 구분은 화살촉으로 명확하므로 fleet 색 우선)
+          stroke = colorForGraphIdx(eGraphIdx);
+        } else if (e.bidir) {
+          stroke = "var(--edge-bidir)";
+        } else {
+          stroke = "var(--edge-unidir)";
+        }
         // 활성/hover/pinned 시 두께 증가
         const width = (isPinned ? 5 : (isActive ? 4 : 2));
         const dx = x2-x1, dy = y2-y1;
@@ -847,7 +1162,10 @@ _TEMPLATE = r"""<!doctype html>
         // 실 visual line(2px) 위에 더 두꺼운 transparent stroke 을 깔고 pointer-events="stroke" 로
         // 클릭/호버 잡음. 시각 두께는 그대로 유지.
         const hitW = 9 / zoomScale;
-        return `<g data-edge-id="${e.id}">
+        // F1a: 비활성 graph 의 lane 은 클릭/hover 차단 (Paint/Build 도 막힘)
+        const grpEvents = (MULTI_FLEET_ACTIVE && !isActiveGraph) ? "none" : "auto";
+        return `<g data-edge-id="${e.id}" data-graph-idx="${eGraphIdx}"
+                  opacity="${strokeOpacity}" pointer-events="${grpEvents}">
           <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
                 stroke="transparent" stroke-width="${hitW}"
                 pointer-events="stroke" stroke-linecap="round" />
@@ -1529,6 +1847,11 @@ _TEMPLATE = r"""<!doctype html>
       for (const e of edges) {
         const a = nodeById.get(e.src), b = nodeById.get(e.dst);
         if (!a || !b) continue;
+        // F1a: 활성 graph 의 lane 만 영향
+        if (MULTI_FLEET_ACTIVE) {
+          const eg = (e.graph_idx == null) ? 0 : e.graph_idx;
+          if (eg !== activeGraphIdx) continue;
+        }
         const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
         // 엣지 중점이 trajectory 어느 segment 와 가까운가
         const mx = (x1+x2)/2, my = (y1+y2)/2;
@@ -1657,16 +1980,25 @@ _TEMPLATE = r"""<!doctype html>
       }
       pushHistory();
       const id = nextEdgeId();
+      // F1a: 새 엣지는 활성 graph 에 귀속
+      const graphIdx = MULTI_FLEET_ACTIVE ? activeGraphIdx : 0;
       edges.push({
         id, src: srcId, dst: dstId,
         bidir: !!bidir, corridor: "", access: "",
+        graph_idx: graphIdx,
       });
-      showToast(`+ Edge ${srcId} ${bidir ? '↔' : '→'} ${dstId}`);
+      const gLabel = MULTI_FLEET_ACTIVE ? ` [graph ${graphIdx}]` : "";
+      showToast(`+ Edge ${srcId} ${bidir ? '↔' : '→'} ${dstId}${gLabel}`);
     }
     // F1d: 단↔양방향 토글
     function toggleEdgeBidir(edgeId) {
       const edge = edges.find(e => e.id === edgeId);
       if (!edge) return;
+      // F1a: 비활성 graph 의 lane 은 건드리지 않음
+      if (MULTI_FLEET_ACTIVE) {
+        const eg = (edge.graph_idx == null) ? 0 : edge.graph_idx;
+        if (eg !== activeGraphIdx) { showToast(`다른 graph 의 edge — 무시`); return; }
+      }
       pushHistory();
       edge.bidir = !edge.bidir;
       showToast(`Edge ${edge.src} ${edge.bidir ? '↔' : '→'} ${edge.dst}`);
@@ -1684,12 +2016,18 @@ _TEMPLATE = r"""<!doctype html>
       showToast(`- Node ${id} (+ ${before - edges.length} edges)`);
     }
     function deleteEdge(id) {
+      const ed = edges.find(e => e.id === id);
+      if (!ed) return;
+      // F1a: 비활성 graph 의 lane 삭제 무시 (spec acceptance)
+      if (MULTI_FLEET_ACTIVE) {
+        const eg = (ed.graph_idx == null) ? 0 : ed.graph_idx;
+        if (eg !== activeGraphIdx) { showToast(`다른 graph 의 edge — 무시`); return; }
+      }
       pushHistory();
-      const idx = edges.findIndex(e => e.id === id);
+      const idx = edges.indexOf(ed);
       if (idx >= 0) {
-        const e = edges[idx];
         edges.splice(idx, 1);
-        showToast(`- Edge ${e.src} → ${e.dst}`);
+        showToast(`- Edge ${ed.src} → ${ed.dst}`);
       }
     }
     function deleteSelected() {
@@ -1809,6 +2147,8 @@ _TEMPLATE = r"""<!doctype html>
         if (!ORIGINAL_EDGES.has(e.id)) {
           const payload = {id: e.id, src: e.src, dst: e.dst, bidir: !!e.bidir};
           if (e.v_max !== null && e.v_max !== undefined) payload.v_max = e.v_max;
+          // F1a: 새 엣지의 graph_idx 도 보존 (multi-fleet 환경)
+          if (e.graph_idx !== null && e.graph_idx !== undefined) payload.graph_idx = e.graph_idx;
           added_edges.push(payload);
         }
       }
@@ -1838,6 +2178,10 @@ _TEMPLATE = r"""<!doctype html>
         const curV = (e.v_max === null || e.v_max === undefined) ? null : Number(e.v_max);
         const origV = (orig.v_max === null || orig.v_max === undefined) ? null : Number(orig.v_max);
         if (curV !== origV) diff.v_max = curV;
+        // F1a: graph_idx 변경 추적
+        const curG = (e.graph_idx === null || e.graph_idx === undefined) ? 0 : e.graph_idx;
+        const origG = (orig.graph_idx === null || orig.graph_idx === undefined) ? 0 : orig.graph_idx;
+        if (curG !== origG) diff.graph_idx = curG;
         if (Object.keys(diff).length > 0) edge_overrides[e.id] = diff;
       }
 
@@ -1964,6 +2308,8 @@ _TEMPLATE = r"""<!doctype html>
 
     // 초기 UI 상태 설정
     updateBackgroundImageUI();
+    // F1a: Active Graph / Fleet Info 패널 초기 렌더 (multi-fleet 환경에서만 노출)
+    renderActiveGraphPanel();
 
     // ── 초기 렌더 ───────────────────────────────────────────────
     render();
