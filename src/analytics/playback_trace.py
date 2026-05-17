@@ -2019,6 +2019,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           <span class="kpi-chip">이벤트 <strong id="event-count">—</strong></span>
         </div>
       </div>
+      <!-- F1a: fleet 별 KPI 카드 (multi-fleet 일 때만 표시) -->
+      <div id="fleet-kpi-row" class="kpi-strip" style="display:none; gap:8px; padding-top:4px; border-top:1px dashed var(--border);"></div>
       <!-- 파라미터 폼 -->
       <div class="live-params" id="live-params">
         <div class="param-group">
@@ -2043,13 +2045,15 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           <input type="file" id="upload-map-input" accept=".json"
             style="display:none;" multiple>
         </div>
-        <div class="param-group">
+        <div class="param-group" id="agv-count-group">
           <span class="param-label">AGV</span>
           <input type="range" id="live-agv-count" min="4" max="24" value="{agv_count}"
             oninput="document.getElementById('live-agv-val').textContent=this.value" style="width:100px">
           <span class="param-value" id="live-agv-val">{agv_count}</span>
           <span class="param-label">대</span>
         </div>
+        <!-- F1a: 임포트 맵에 fleets 가 있을 때만 표시 -->
+        <div class="param-group" id="fleet-slider-group" style="display:none; gap:14px;"></div>
         <div class="param-group">
           <span class="param-label">시뮬 속도</span>
           <select id="live-sim-speed">
@@ -2132,6 +2136,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <span class="legend-item"><span class="swatch" style="background:#1f6feb"></span>충전(CH)</span>
             <span class="legend-item"><span class="swatch" style="background:#e0a000"></span>사이딩(SD)</span>
             <span class="legend-item"><span class="swatch swatch-ring"></span>홀딩(HP)</span>
+            <span class="legend-divider" id="fleet-legend-divider" style="display:none"></span>
+            <span id="fleet-legend" style="display:inline-flex; gap:10px;"></span>
           </div>
           <span id="live-sim-time" class="meta"></span>
         </div>
@@ -2257,6 +2263,114 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       document.getElementById('live-kpi-util').textContent = fmt((kpi.utilization||0)*100,0) + '%' + trend(tr.utilization);
       document.getElementById('live-kpi-headon').textContent = fmt(kpi.headOn,0) + '회';
       document.getElementById('live-kpi-wait').textContent = fmt(kpi.avgWait) + 's' + trend(tr.avgWait);
+      // F1a: fleet 별 KPI 카드
+      updateFleetKpiCards(kpi.by_fleet || null);
+    }}
+
+    // ── F1a: fleet 색/카드 상태 ────────────────────────────────
+    let currentFleets = []; // [{{id, color, graph_idx, count, agv_ids}}]
+    let fleetById = new Map();
+    let fleetByAgvId = new Map();
+    function setCurrentFleets(fleets) {{
+      currentFleets = Array.isArray(fleets) ? fleets : [];
+      fleetById = new Map(currentFleets.map(f => [f.id, f]));
+      fleetByAgvId = new Map();
+      for (const fl of currentFleets) {{
+        for (const aid of (fl.agv_ids || [])) {{
+          fleetByAgvId.set(aid, fl);
+        }}
+      }}
+      renderFleetLegend();
+      // 카드 row 초기화 (값은 tick 받기 전까지 — 표시)
+      const row = document.getElementById('fleet-kpi-row');
+      const isMulti = currentFleets.length > 1
+        || (currentFleets.length === 1 && currentFleets[0].id !== 'default');
+      if (!isMulti) {{
+        row.style.display = 'none';
+        row.innerHTML = '';
+        return;
+      }}
+      row.style.display = 'inline-flex';
+      row.innerHTML = currentFleets.map(fl => `
+        <span class="kpi-chip" data-fleet="${{fl.id}}" style="border:1px solid ${{fl.color}}33;">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${{fl.color}};margin-right:4px;"></span>
+          ${{fl.id}}
+          · 처리량 <strong class="fk-tasks">—</strong>
+          · 가동률 <strong class="fk-util">—</strong>
+        </span>`).join('');
+    }}
+    function updateFleetKpiCards(byFleet) {{
+      if (!byFleet) return;
+      const fmt = (v, d=1) => v != null ? Number(v).toFixed(d) : '—';
+      for (const fid of Object.keys(byFleet)) {{
+        const card = document.querySelector(`#fleet-kpi-row [data-fleet="${{fid}}"]`);
+        if (!card) continue;
+        const k = byFleet[fid] || {{}};
+        const tasksEl = card.querySelector('.fk-tasks');
+        const utilEl = card.querySelector('.fk-util');
+        if (tasksEl) tasksEl.textContent = fmt(k.tasksPerHr) + '/h';
+        if (utilEl) utilEl.textContent = fmt((k.utilization||0)*100, 0) + '%';
+      }}
+    }}
+    function renderFleetLegend() {{
+      const el = document.getElementById('fleet-legend');
+      const div = document.getElementById('fleet-legend-divider');
+      const isMulti = currentFleets.length > 1
+        || (currentFleets.length === 1 && currentFleets[0].id !== 'default');
+      if (!el) return;
+      if (!isMulti) {{ el.innerHTML = ''; if (div) div.style.display='none'; return; }}
+      if (div) div.style.display = 'inline-block';
+      el.innerHTML = currentFleets.map(fl => `
+        <span class="legend-item">
+          <span class="swatch" style="background:${{fl.color}}"></span>
+          ${{fl.id}}
+        </span>`).join('');
+    }}
+    function fleetColorOfAgv(agv) {{
+      const fid = agv.fleet_id || '';
+      if (fid) {{
+        const fl = fleetById.get(fid);
+        if (fl && fl.color) return fl.color;
+      }}
+      const fl = fleetByAgvId.get(agv.agv_id);
+      return (fl && fl.color) ? fl.color : '#3a4555';
+    }}
+    window.__fleetColorOfAgv = fleetColorOfAgv;  // renderMap 에서 사용
+    // F1a: imported map 의 fleets 로 슬라이더 빌드
+    function buildFleetSliders(fleets) {{
+      const sliderGroup = document.getElementById('fleet-slider-group');
+      const agvGroup = document.getElementById('agv-count-group');
+      if (!fleets || fleets.length === 0) {{
+        sliderGroup.style.display = 'none';
+        sliderGroup.innerHTML = '';
+        agvGroup.style.display = '';
+        return;
+      }}
+      // multi-fleet (imported) → fleet 별 슬라이더 표시, 단일 AGV 슬라이더 숨김
+      agvGroup.style.display = 'none';
+      sliderGroup.style.display = 'inline-flex';
+      sliderGroup.innerHTML = fleets.map((fl, idx) => {{
+        const color = fl.color || '#3a4555';
+        const def = Math.max(1, Number(fl.count || 1));
+        return `
+          <span class="param-group" data-fleet-slider="${{fl.id}}" style="gap:6px;">
+            <span class="param-label" style="display:inline-flex;align-items:center;gap:4px;">
+              <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${{color}};"></span>
+              ${{fl.id}}
+            </span>
+            <input type="range" min="0" max="12" step="1" value="${{def}}"
+              class="fleet-count-input" data-fleet="${{fl.id}}" style="width:80px"
+              oninput="this.nextElementSibling.textContent=this.value">
+            <span class="param-value">${{def}}</span>
+          </span>`;
+      }}).join('');
+    }}
+    function getAgvCountByFleet() {{
+      const inputs = document.querySelectorAll('.fleet-count-input');
+      if (inputs.length === 0) return null;
+      const m = {{}};
+      inputs.forEach(inp => {{ m[inp.dataset.fleet] = Number(inp.value); }});
+      return m;
     }}
 
     // ── 라이브 실행 ───────────────────────────────────────────────
@@ -2290,12 +2404,14 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       document.getElementById('live-params').style.pointerEvents = 'none';
       document.getElementById('live-badge').classList.remove('active');
 
+      // F1a: 임포트 맵에 fleet 슬라이더가 있으면 fleet 별 count 전달
+      const agvCountByFleet = importedMapId ? getAgvCountByFleet() : null;
       try {{
         const resp = await fetch('/init', {{
           method: 'POST',
           headers: {{'Content-Type': 'application/json'}},
           body: JSON.stringify({{ topology, agvCount, speed: simSpeed, duration, blockedEdges: [],
-                                  taskIntervalS, importedMapId }}),
+                                  taskIntervalS, importedMapId, agvCountByFleet }}),
         }});
         if (!resp.ok) throw new Error('init failed: ' + resp.status + ' ' + await resp.text());
         const data = await resp.json();
@@ -2303,6 +2419,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
         trace.map = data.map;
         rebuildMapState();
         populateAgvFocusOptions();
+        // F1a: /init 응답의 fleets 로 색/legend/카드 초기화
+        setCurrentFleets(data.fleets || []);
 
         // WS 연결
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -2393,6 +2511,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       document.getElementById('live-kpi-util').textContent = '—';
       document.getElementById('live-kpi-headon').textContent = '—';
       document.getElementById('live-kpi-wait').textContent = '—';
+      // F1a: fleet 카드/legend 도 초기화 (단일 default 로 돌림)
+      setCurrentFleets([]);
       populateAgvFocusOptions();
       render();
     }}
@@ -2673,14 +2793,16 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           }}).join('')}}
           ${{fadedDisplay.map(item=>{{
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
-            const inner=item.anchored?agvShapeMarkup(0,0,'#3a4555',true,true):agvArrowMarkup(0,0,'#3a4555',agv.heading,true);
+            const color = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const inner=item.anchored?agvShapeMarkup(0,0,color,true,true):agvArrowMarkup(0,0,color,agv.heading,true);
             return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{inner}}</g>`;
           }}).join('')}}
           ${{visibleDisplay.map(item=>{{
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
             const labelX=cx+item.labelOx, labelY=cy+item.labelOy;
             const labelText=item.bucketCount>1?agvCaption(agv,true):agvCaption(agv,false);
-            const inner=item.anchored?agvShapeMarkup(0,0,'#3a4555',true,false):agvArrowMarkup(0,0,'#3a4555',agv.heading,false);
+            const color = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const inner=item.anchored?agvShapeMarkup(0,0,color,true,false):agvArrowMarkup(0,0,color,agv.heading,false);
             return `
               <g class="agv-hit" data-agv-id="${{agv.agv_id}}" style="cursor:pointer;" transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">
                 <circle r="18" fill="transparent" />
@@ -2910,6 +3032,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     }}
 
     // ── 외부 맵 업로드 ───────────────────────────────────────────
+    // F1a: imported map id → fleets[] 매핑 (슬라이더 빌드용)
+    const importedFleetsById = {{}};
     async function refreshImportedMaps() {{
       try {{
         const resp = await fetch('/imported-maps');
@@ -2933,6 +3057,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           opt.value = 'imported:' + m.id;
           opt.textContent = `📂 ${{m.name}} (${{m.stats.nodes}}n/${{m.stats.edges}}e)`;
           sel.appendChild(opt);
+          importedFleetsById[m.id] = m.fleets || [];
         }}
       }} catch(e) {{ /* server 안 떠있을 수도 — 무시 */ }}
     }}
@@ -2978,11 +3103,19 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       }}
       e.target.value = ''; // input 리셋
     }});
-    // 토폴로지 드롭다운 change → "🛠 Editor" 버튼 활성 토글
+    // 토폴로지 드롭다운 change → "🛠 Editor" 버튼 활성 토글 + F1a fleet 슬라이더 표시
     function updateEditorBtn() {{
       const sel = document.getElementById('live-topology').value;
       const btn = document.getElementById('edit-map-btn');
       btn.disabled = !sel.startsWith('imported:');
+      // F1a: imported map fleet 정의로 슬라이더 갱신 (기본 단일-fleet 케이스는 슬라이더 숨김)
+      if (sel.startsWith('imported:')) {{
+        const id = sel.slice('imported:'.length);
+        const fleets = importedFleetsById[id] || [];
+        buildFleetSliders(fleets);
+      }} else {{
+        buildFleetSliders([]);
+      }}
     }}
     document.getElementById('live-topology').addEventListener('change', updateEditorBtn);
     document.getElementById('edit-map-btn').addEventListener('click', ()=>{{

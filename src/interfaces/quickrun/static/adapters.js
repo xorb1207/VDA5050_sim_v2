@@ -59,6 +59,9 @@
       duration: params.duration || 600,
       blockedEdges: Array.from(params.blockedEdges || []),
     };
+    // F1a: 임포트 맵 + fleet 별 AGV 수 override (있을 때만)
+    if (params.importedMapId) body.importedMapId = params.importedMapId;
+    if (params.agvCountByFleet) body.agvCountByFleet = params.agvCountByFleet;
     const resp = await fetch(backendBase() + "/init", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -73,7 +76,15 @@
       runId: data.runId,
       map: normalizeMap(data.map),
       wsUrl: data.wsUrl, // path. ws base 는 별도 prepend.
+      fleets: data.fleets || [], // F1a: [{id, color, graph_idx, count, agv_ids}, ...]
     };
+  }
+
+  // F1a: 업로드된 임포트 맵 목록 + fleet 정의 조회 (UI 가 슬라이더 빌드용)
+  async function listImportedMaps() {
+    const resp = await fetch(backendBase() + "/imported-maps");
+    if (!resp.ok) return [];
+    return await resp.json();
   }
 
   async function control(runId, action) {
@@ -130,11 +141,28 @@
     return UI_STATES.indexOf(s) >= 0 ? s : "WAITING";
   }
 
+  // ── F1a: fleet color helper ────────────────────────────────
+  // fleets: [{id, color, agv_ids:[...]}]  → fn(agv) → "#hex" or fallback.
+  function makeFleetColorLookup(fleets) {
+    const byId = new Map();
+    const byAgv = new Map();
+    for (const fl of (fleets || [])) {
+      byId.set(fl.id, fl);
+      for (const aid of (fl.agv_ids || [])) byAgv.set(aid, fl);
+    }
+    return function colorOf(agv) {
+      const fl = (agv.fleet_id && byId.get(agv.fleet_id)) || byAgv.get(agv.agv_id || agv.id);
+      return (fl && fl.color) ? fl.color : "#3a4555";
+    };
+  }
+
   // ── 노출 ────────────────────────────────────────────────────
   window.QuickRunAdapter = {
     init,
     control,
     connectStream,
+    listImportedMaps,
+    makeFleetColorLookup,
     mapState,
     UI_STATES,
   };
