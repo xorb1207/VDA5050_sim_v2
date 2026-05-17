@@ -153,6 +153,43 @@ class ImportedMap:
 
 
 # ────────────────────────────────────────────────────────────────────
+# F1a 파서 헬퍼
+# ────────────────────────────────────────────────────────────────────
+def _parse_fleets(raw: list) -> list[dict]:
+    """fleet 정의 리스트 정규화. 누락 필드에 기본값 보충."""
+    out = []
+    for i, f in enumerate(raw or []):
+        if not isinstance(f, dict):
+            continue
+        out.append({
+            "id":           str(f.get("id", f.get("fleet_id", f"fleet_{i}"))),
+            "graph_idx":    int(f.get("graph_idx", i)),
+            "color":        str(f.get("color", "#888888")),
+            "capabilities": list(f.get("capabilities", [])),
+            "count":        int(f.get("count", f.get("agv_count", 1))),
+            "max_speed_mps": float(f.get("max_speed_mps", f.get("max_speed", 1.0))),
+            "priority":     int(f.get("priority", 0)),
+        })
+    return out
+
+
+def _parse_demands(raw: list) -> list[dict]:
+    """demand 정의 리스트 정규화. required_capability 포함."""
+    out = []
+    for d in raw or []:
+        if not isinstance(d, dict):
+            continue
+        out.append({
+            "pickup":               str(d.get("pickup", d.get("from", ""))),
+            "dropoff":              str(d.get("dropoff", d.get("to", ""))),
+            "required_capability":  d.get("required_capability") or None,
+            "count":                int(d.get("count", 1)),
+            "priority":             int(d.get("priority", 0)),
+        })
+    return [d for d in out if d["pickup"] and d["dropoff"]]
+
+
+# ────────────────────────────────────────────────────────────────────
 # 메인 임포터
 # ────────────────────────────────────────────────────────────────────
 def import_map(
