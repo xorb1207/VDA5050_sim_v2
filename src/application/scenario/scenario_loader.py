@@ -6,6 +6,28 @@ from pathlib import Path
 from src.application.scenario.scenario import Scenario
 
 
+# 지원 맵 포맷 확장자 (GAP-D: RMF YAML + 기존 JSON)
+_MAP_JSON_EXTS = (".json",)
+_MAP_YAML_EXTS = (".yaml", ".yml")
+_MAP_SUPPORTED_EXTS = _MAP_JSON_EXTS + _MAP_YAML_EXTS
+
+
+def detect_map_format(path: str) -> str:
+    """맵 파일 확장자로 포맷 자동 감지. 반환: 'json' | 'yaml'.
+
+    .json → 'json', .yaml/.yml → 'yaml'. 그 외는 ValueError.
+    """
+    p = str(path).lower()
+    if p.endswith(_MAP_YAML_EXTS):
+        return "yaml"
+    if p.endswith(_MAP_JSON_EXTS):
+        return "json"
+    raise ValueError(
+        f"Unknown map file extension: {path}. "
+        f"Supported: {', '.join(_MAP_SUPPORTED_EXTS)}"
+    )
+
+
 class ScenarioLoader:
     """YAML 파일 → Scenario 객체 변환."""
 
@@ -32,9 +54,14 @@ class ScenarioValidator:
     def validate(scenario: Scenario) -> None:
         errors = []
 
-        # 1. 맵 파일 존재 여부
+        # 1. 맵 파일 존재 + 지원 확장자 여부 (GAP-D: .json/.yaml/.yml 자동 감지)
         if not Path(scenario.map_file).exists():
             errors.append(f"map_file not found: {scenario.map_file}")
+        else:
+            try:
+                detect_map_format(scenario.map_file)
+            except ValueError as ex:
+                errors.append(str(ex))
 
         # 2. fleet_size > 0
         if scenario.fleet_size <= 0:
