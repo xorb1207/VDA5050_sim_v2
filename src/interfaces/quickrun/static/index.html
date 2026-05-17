@@ -35,7 +35,10 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-<!-- 어댑터: backend REST/WS 결선. window.QuickRunAdapter 노출 -->
+<!-- 어댑터: backend REST/WS 결선. window.QuickRunAdapter 노출
+     - init / control / connectStream / listImportedMaps
+     - dispatchManualJob({pickup_node, dropoff_node, runId})  ← GAP-B 수동 Job (📋 토글)
+     - makeFleetColorLookup / mapState -->
 <script src="/static/adapters.js"></script>
 
 <!-- React 앱 본체. window.QuickRunAdapter 사용. -->

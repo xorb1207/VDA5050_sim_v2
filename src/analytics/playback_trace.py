@@ -1893,6 +1893,26 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     .speed-btn.active:hover {{ background:#1d4ed8; border-color:#1d4ed8; }}
     #heatmap-toggle.active {{ background:#c0392b; color:#fff; border-color:#c0392b; }}
     #collision-toggle.active {{ background:#f59e0b; color:#fff; border-color:#f59e0b; }}
+    #manual-job-toggle.active {{ background:#0f9d58; color:#fff; border-color:#0f9d58; }}
+    .manual-job-panel {{ display:none; align-items:center; gap:8px; font-size:11.5px;
+      color:var(--ink); padding:4px 10px; background:var(--success-soft); border:1px solid #c4ebd5;
+      border-radius:6px; margin-left:6px; font-weight:500; }}
+    .manual-job-panel.active {{ display:inline-flex; }}
+    .manual-job-panel .pickup-badge {{ display:inline-block; padding:1px 6px; border-radius:4px;
+      background:#0f9d58; color:#fff; font-family:var(--font-mono); font-size:11px; font-weight:600; }}
+    /* 노드 hit 영역 — 평소엔 투명, 수동 모드에선 hover 시 외곽선 */
+    .node-hit {{ fill:transparent; cursor:default; }}
+    body.mj-mode .node-hit {{ cursor:crosshair; }}
+    body.mj-mode .node-hit:hover {{ stroke:#0f9d58; stroke-width:2; fill:rgba(15,157,88,0.08); }}
+    .node-pickup-ring {{ fill:none; stroke:#0f9d58; stroke-width:2.5; pointer-events:none; }}
+    /* 우상단 토스트 */
+    .mj-toast {{ position:fixed; top:18px; right:18px; z-index:9999;
+      padding:10px 14px; border-radius:8px; background:#0f9d58; color:#fff;
+      font-size:12.5px; font-weight:600; box-shadow:0 4px 12px rgba(15,23,42,0.18);
+      opacity:0; transform:translateY(-6px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; }}
+    .mj-toast.show {{ opacity:1; transform:translateY(0); pointer-events:auto; }}
+    .mj-toast.err {{ background:#c0392b; }}
+    .mj-toast.warn {{ background:#e0a000; }}
     .heatmap-legend {{ display:none; align-items:center; gap:8px; font-size:11.5px;
       color:var(--muted); padding:4px 10px; background:var(--surface-2); border-radius:6px; margin-left:8px; }}
     .heatmap-legend.active {{ display:inline-flex; }}
@@ -2109,6 +2129,12 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
             <button id="heatmap-toggle" type="button" title="히트맵 토글">🔥 히트맵</button>
             <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커">⚠ 충돌</button>
+            <button id="manual-job-toggle" type="button" title="수동으로 demand 부여 (노드 2개 클릭)">📋 수동 Job</button>
+            <span class="manual-job-panel" id="manual-job-panel">
+              <span id="mj-state-label">pickup 노드 선택</span>
+              <span id="mj-pickup-badge" class="pickup-badge" style="display:none"></span>
+              <span class="meta" style="font-weight:400;color:var(--muted);">ESC: 취소</span>
+            </span>
           </div>
         </div>
         <div class="hint">
@@ -2170,6 +2196,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       </aside>
     </section>
   </div>
+
+  <div id="mj-toast" class="mj-toast"></div>
 
   <script>
     // ── 시간 포맷 헬퍼 (파라미터 폼용) ─────────────────────────
@@ -2789,7 +2817,14 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             else if (isSiding) inner=`<circle r="4" fill="#e0a000" opacity="0.95" />`;
             else if (isHolding) inner=`<circle r="4" fill="#fff" stroke="#8b98a8" stroke-width="${{1.5/zoomScale}}" vector-effect="non-scaling-stroke" />`;
             else {{ const radius=isAccess?2.5:3; inner=`<circle r="${{radius}}" fill="#8b98a8" opacity="0.7" />`; }}
-            return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{inner}}</g>`;
+            // 수동 Job 모드 시 pickup 으로 선택된 노드는 초록 ring 강조
+            const isPickupSel = window.__mjPickup === id;
+            const pickupRing = isPickupSel
+              ? `<circle r="11" class="node-pickup-ring"><animate attributeName="r" values="9;13;9" dur="1.2s" repeatCount="indefinite" /></circle>`
+              : '';
+            // 노드 클릭용 hit 영역 — 평소엔 투명, 수동 모드에선 hover 가능
+            const hit = `<circle r="10" class="node-hit" data-node-id="${{id}}" />`;
+            return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{pickupRing}}${{inner}}${{hit}}</g>`;
           }}).join('')}}
           ${{fadedDisplay.map(item=>{{
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
@@ -3233,6 +3268,17 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     document.getElementById('map').addEventListener('pointerup',()=>{{ isDragging=false; dragStart=null; }});
     document.getElementById('map').addEventListener('pointerleave',()=>{{ isDragging=false; dragStart=null; }});
     document.getElementById('map').addEventListener('click',(e)=>{{
+      // ── 수동 Job 모드: 노드 클릭 우선 처리 ──
+      if (manualJobMode) {{
+        const nodeHit=e.target.closest('[data-node-id]');
+        if (nodeHit) {{
+          e.stopPropagation();
+          handleManualJobNodeClick(nodeHit.dataset.nodeId);
+          return;
+        }}
+        // 수동 모드 중엔 AGV 포커스 비활성 (오작동 방지)
+        return;
+      }}
       const hit=e.target.closest('[data-agv-id]');
       if (!hit) return;
       const agvId=hit.dataset.agvId;
@@ -3240,6 +3286,107 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       focusedAgvId=next;
       document.getElementById('agv-focus').value=next;
       render();
+    }});
+
+    // ── GAP-B: 수동 Job UI ───────────────────────────────────────
+    let manualJobMode = false;
+    window.__mjPickup = null;  // renderMap 가 참조 (전역 노출)
+    const mjToast = document.getElementById('mj-toast');
+    let mjToastTimer = null;
+    function showToast(msg, kind) {{
+      mjToast.textContent = msg;
+      mjToast.className = 'mj-toast show' + (kind ? ' ' + kind : '');
+      if (mjToastTimer) clearTimeout(mjToastTimer);
+      mjToastTimer = setTimeout(()=>{{ mjToast.className='mj-toast'; }}, 2400);
+    }}
+    function updateManualJobPanel() {{
+      const panel = document.getElementById('manual-job-panel');
+      const label = document.getElementById('mj-state-label');
+      const badge = document.getElementById('mj-pickup-badge');
+      if (!manualJobMode) {{
+        panel.classList.remove('active');
+        return;
+      }}
+      panel.classList.add('active');
+      if (window.__mjPickup) {{
+        label.textContent = 'dropoff 노드 선택 →';
+        badge.style.display = 'inline-block';
+        badge.textContent = window.__mjPickup;
+      }} else {{
+        label.textContent = 'pickup 노드 선택';
+        badge.style.display = 'none';
+      }}
+    }}
+    function resetManualPickup() {{
+      window.__mjPickup = null;
+      updateManualJobPanel();
+      render();
+    }}
+    function setManualJobMode(on) {{
+      manualJobMode = !!on;
+      window.__mjPickup = null;
+      document.body.classList.toggle('mj-mode', manualJobMode);
+      const btn = document.getElementById('manual-job-toggle');
+      btn.classList.toggle('active', manualJobMode);
+      updateManualJobPanel();
+      render();
+    }}
+    async function handleManualJobNodeClick(nodeId) {{
+      if (!runId) {{
+        showToast('시뮬레이션 미실행 — 먼저 ▶ 실행', 'err');
+        return;
+      }}
+      if (!nodeId) return;
+      // 같은 노드 또 클릭 → pickup 취소
+      if (window.__mjPickup === nodeId) {{
+        resetManualPickup();
+        showToast('pickup 선택 취소', 'warn');
+        return;
+      }}
+      if (!window.__mjPickup) {{
+        // 첫 클릭 → pickup 후보
+        window.__mjPickup = nodeId;
+        updateManualJobPanel();
+        render();
+        return;
+      }}
+      // 두 번째 클릭 → dropoff 확정 → POST
+      const pickup = window.__mjPickup;
+      const dropoff = nodeId;
+      try {{
+        const resp = await fetch('/manual-job', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{ pickup_node: pickup, dropoff_node: dropoff, runId }}),
+        }});
+        const data = await resp.json().catch(()=>({{}}));
+        if (!resp.ok) {{
+          showToast('발행 실패: ' + (data.detail || resp.status), 'err');
+        }} else if (data.status === 'dispatched') {{
+          showToast(`📋 Demand ${{data.demand_id}} → ${{data.agv_id}} (${{pickup}} → ${{dropoff}})`);
+        }} else if (data.status === 'pending') {{
+          showToast(`📋 ${{data.demand_id}} pending — ${{data.reason || ''}}`, 'warn');
+        }} else {{
+          showToast('거부: ' + (data.reason || data.status || 'unknown'), 'err');
+        }}
+      }} catch (err) {{
+        showToast('네트워크 오류: ' + err.message, 'err');
+      }}
+      resetManualPickup();
+    }}
+    document.getElementById('manual-job-toggle').addEventListener('click', ()=>{{
+      setManualJobMode(!manualJobMode);
+    }});
+    document.addEventListener('keydown', (e)=>{{
+      if (e.key === 'Escape' && manualJobMode) {{
+        if (window.__mjPickup) {{
+          resetManualPickup();
+          showToast('pickup 선택 취소', 'warn');
+        }} else {{
+          setManualJobMode(false);
+          showToast('수동 Job 모드 종료', 'warn');
+        }}
+      }}
     }});
     document.getElementById('map').addEventListener('dblclick',(e)=>{{
       if (e.target.closest('[data-agv-id]')) return;

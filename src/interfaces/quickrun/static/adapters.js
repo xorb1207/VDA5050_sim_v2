@@ -96,6 +96,21 @@
     return resp.ok;
   }
 
+  // GAP-B: 수동 Job 발행. body: {pickup_node, dropoff_node, required_capability?, runId?}
+  // 반환: {ok, demand_id, agv_id, status, reason}
+  async function dispatchManualJob(req) {
+    const resp = await fetch(backendBase() + "/manual-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { ok: false, status: "rejected", reason: data.detail || ("HTTP " + resp.status) };
+    }
+    return data;
+  }
+
   // ── Engine adapter ──────────────────────────────────────────
   // WS 구독. onTick(snapshot), onEnd(reason).
   // 반환값: {disconnect()}.
@@ -162,6 +177,7 @@
     control,
     connectStream,
     listImportedMaps,
+    dispatchManualJob,
     makeFleetColorLookup,
     mapState,
     UI_STATES,
