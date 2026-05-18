@@ -436,6 +436,12 @@ def build_playback_html(trace: dict) -> str:
       color: #fff;
       border-color: #c0392b;
     }
+    /* Traffic toggle 활성 상태 (T-70 / GAP-C) — 사고 히트맵과 색조 구분 */
+    #traffic-toggle.active {
+      background: #4338ca;
+      color: #fff;
+      border-color: #4338ca;
+    }
     /* Collision toggle 활성 상태 */
     #collision-toggle.active {
       background: #f59e0b;
@@ -458,6 +464,23 @@ def build_playback_html(trace: dict) -> str:
     .heatmap-legend .gradient {
       width: 80px; height: 6px; border-radius: 3px;
       background: linear-gradient(90deg, #fde6e2 0%, #f5a695 50%, #c0392b 100%);
+    }
+    /* Traffic 범례 — heatmap 과 동일 구조, gradient 색조만 다르게 */
+    .traffic-legend {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--muted);
+      padding: 4px 10px;
+      background: var(--surface-2);
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+    .traffic-legend.active { display: inline-flex; }
+    .traffic-legend .gradient {
+      width: 80px; height: 6px; border-radius: 3px;
+      background: linear-gradient(90deg, #e0e7ff 0%, #818cf8 50%, #4338ca 100%);
     }
     /* Range slider polish */
     input[type=range] {
@@ -810,6 +833,7 @@ def build_playback_html(trace: dict) -> str:
             </select>
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
             <button id="heatmap-toggle" type="button" title="엣지별 사고 누적 히트맵 토글">🔥 히트맵</button>
+            <button id="traffic-toggle" type="button" title="엣지별 AGV 통과 횟수 트래픽 히트맵 (사고 히트맵과 동시 활성 불가)">🚦 트래픽</button>
             <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커 토글 (같은 노드/엣지 점유)">⚠ 충돌</button>
           </div>
         </div>
@@ -819,6 +843,11 @@ def build_playback_html(trace: dict) -> str:
             누적 사고 강도
             <span class="gradient"></span>
             <span id="heatmap-max-label">최대 —</span>
+          </span>
+          <span class="traffic-legend" id="traffic-legend">
+            통과 횟수
+            <span class="gradient"></span>
+            <span id="traffic-max-label">최대 —</span>
           </span>
         </div>
       </div>
@@ -887,6 +916,7 @@ def build_playback_html(trace: dict) -> str:
     let zoomPanX = 0;
     let zoomPanY = 0;
     let heatmapMode = false;
+    let trafficMode = false;     // 🚦 트래픽 (엣지 통과 횟수) — heatmap 과 mutually exclusive
     let collisionMode = false;   // ⚠ 충돌 의심 마커 토글
     // 엣지별 누적 사고 카운트 — heatmap mode 에서 색조로 표시.
     // 사고 종류: headon_block, section_conflict, followon_block (실제 충돌만 가산).
@@ -905,6 +935,23 @@ def build_playback_html(trace: dict) -> str:
     const heatmapMax = (() => {
       let mx = 0;
       for (const v of heatmapCounts.values()) if (v > mx) mx = v;
+      return mx;
+    })();
+    // 엣지별 통과 횟수 — edge_enter 이벤트 누적 (T-70 / GAP-C).
+    // playback 은 trace 가 완성된 상태라 한 번만 집계해 두면 됨.
+    const trafficCounts = (() => {
+      const m = new Map();
+      for (const ev of events) {
+        if (ev.kind !== 'edge_enter') continue;
+        const k = ev.edge_key || '';
+        if (!k) continue;
+        m.set(k, (m.get(k) || 0) + 1);
+      }
+      return m;
+    })();
+    const trafficMax = (() => {
+      let mx = 0;
+      for (const v of trafficCounts.values()) if (v > mx) mx = v;
       return mx;
     })();
     let isDragging = false;
@@ -1241,9 +1288,23 @@ def build_playback_html(trace: dict) -> str:
           applyEdgeStyle(edgeKey, { stroke, width, opacity: 0.92, dash: '' });
         }
       }
-      // ★ 히트맵 모드일 때는 AGV 오버레이 (planned/reserved/current/blocked) skip.
-      //   사고 누적 패턴에 집중하는 뷰 — AGV planned 색이 히트맵을 덮어 가리지 않게.
-      if (!heatmapMode) {
+      // 트래픽 모드 (T-70): edge_enter 누적 횟수를 파랑~보라 그라데이션으로 표시.
+      // heatmap 과 mutually exclusive (둘 다 활성될 일 없음, 클릭 핸들러가 보장).
+      if (trafficMode && trafficMax > 0) {
+        const logMax = Math.log(trafficMax + 1);
+        for (const [edgeKey, count] of trafficCounts) {
+          const t = Math.log(count + 1) / Math.max(logMax, 0.0001);
+          // #e0e7ff (옅은 라벤더) → #4338ca (인디고)
+          const lerp = (a, b) => Math.round(a + (b - a) * t);
+          const r = lerp(0xe0, 0x43);
+          const g = lerp(0xe7, 0x38);
+          const b = lerp(0xff, 0xca);
+          applyEdgeStyle(edgeKey, { stroke: `rgb(${r},${g},${b})`, width: 3 + t * 5, opacity: 0.92, dash: '' });
+        }
+      }
+      // ★ 히트맵/트래픽 모드일 때는 AGV 오버레이 (planned/reserved/current/blocked) skip.
+      //   누적 패턴에 집중하는 뷰 — AGV planned 색이 베이스 색을 덮어 가리지 않게.
+      if (!heatmapMode && !trafficMode) {
         for (const agv of visibleAgvs) {
           const planned = agv.planned_edge_keys || [];
           planned.forEach((edgeKey, depth) => {
@@ -1642,6 +1703,12 @@ def build_playback_html(trace: dict) -> str:
     });
     document.getElementById('heatmap-toggle').addEventListener('click', () => {
       heatmapMode = !heatmapMode;
+      // mutually exclusive: heatmap 켜면 traffic 자동 끔
+      if (heatmapMode && trafficMode) {
+        trafficMode = false;
+        document.getElementById('traffic-toggle').classList.remove('active');
+        document.getElementById('traffic-legend').classList.remove('active');
+      }
       const btn = document.getElementById('heatmap-toggle');
       btn.classList.toggle('active', heatmapMode);
       const legend = document.getElementById('heatmap-legend');
@@ -1649,6 +1716,23 @@ def build_playback_html(trace: dict) -> str:
       const lab = document.getElementById('heatmap-max-label');
       if (lab) {
         lab.textContent = heatmapMax > 0 ? `최대 ${heatmapMax}회` : '데이터 없음';
+      }
+      render();
+    });
+    document.getElementById('traffic-toggle').addEventListener('click', () => {
+      trafficMode = !trafficMode;
+      // mutually exclusive: traffic 켜면 heatmap 자동 끔 (혼동 방지)
+      if (trafficMode && heatmapMode) {
+        heatmapMode = false;
+        document.getElementById('heatmap-toggle').classList.remove('active');
+        document.getElementById('heatmap-legend').classList.remove('active');
+      }
+      document.getElementById('traffic-toggle').classList.toggle('active', trafficMode);
+      const legend = document.getElementById('traffic-legend');
+      legend.classList.toggle('active', trafficMode);
+      const lab = document.getElementById('traffic-max-label');
+      if (lab) {
+        lab.textContent = trafficMax > 0 ? `최대 ${trafficMax}회` : '데이터 없음';
       }
       render();
     });
@@ -1892,6 +1976,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     .speed-btn.active {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
     .speed-btn.active:hover {{ background:#1d4ed8; border-color:#1d4ed8; }}
     #heatmap-toggle.active {{ background:#c0392b; color:#fff; border-color:#c0392b; }}
+    #traffic-toggle.active {{ background:#4338ca; color:#fff; border-color:#4338ca; }}
     #collision-toggle.active {{ background:#f59e0b; color:#fff; border-color:#f59e0b; }}
     #block-toggle.active {{ background:#dc2626; color:#fff; border-color:#dc2626; }}
     #manual-job-toggle.active {{ background:#059669; color:#fff; border-color:#059669; }}
@@ -1923,6 +2008,11 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     .heatmap-legend.active {{ display:inline-flex; }}
     .heatmap-legend .gradient {{ width:80px; height:6px; border-radius:3px;
       background:linear-gradient(90deg,#fde6e2 0%,#f5a695 50%,#c0392b 100%); }}
+    .traffic-legend {{ display:none; align-items:center; gap:8px; font-size:11.5px;
+      color:var(--muted); padding:4px 10px; background:var(--surface-2); border-radius:6px; margin-left:8px; }}
+    .traffic-legend.active {{ display:inline-flex; }}
+    .traffic-legend .gradient {{ width:80px; height:6px; border-radius:3px;
+      background:linear-gradient(90deg,#e0e7ff 0%,#818cf8 50%,#4338ca 100%); }}
     input[type=range] {{ -webkit-appearance:none; width:min(420px,100%); height:6px;
       background:transparent; cursor:pointer; }}
     input[type=range]::-webkit-slider-runnable-track {{ height:6px; border-radius:999px; background:var(--surface-3); }}
@@ -2133,6 +2223,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <select id="agv-focus"><option value="">전체</option></select>
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
             <button id="heatmap-toggle" type="button" title="히트맵 토글">🔥 히트맵</button>
+            <button id="traffic-toggle" type="button" title="엣지별 AGV 통과 횟수 트래픽 히트맵 (사고 히트맵과 동시 활성 불가)">🚦 트래픽</button>
             <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커">⚠ 충돌</button>
             <button id="block-toggle" type="button" title="엣지 클릭 차단/해제 — 영향 AGV 가 즉시 reroute">⛔ 차단</button>
             <button id="manual-job-toggle" type="button" title="노드 두 개 클릭(pickup → dropoff)으로 수동 demand 발행. ESC 로 취소">📋 수동 Job</button>
@@ -2152,6 +2243,11 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             누적 사고 강도
             <span class="gradient"></span>
             <span id="heatmap-max-label">최대 —</span>
+          </span>
+          <span class="traffic-legend" id="traffic-legend">
+            통과 횟수
+            <span class="gradient"></span>
+            <span id="traffic-max-label">최대 —</span>
           </span>
         </div>
       </div>
@@ -2239,6 +2335,9 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     const directionMarkerCorridors = new Set(['north','center','south','bay']);
     let heatmapCounts = new Map();
     let heatmapMax = 0;
+    // T-70: edge_enter 누적 통과 횟수 (트래픽 히트맵 source)
+    let trafficCounts = new Map();
+    let trafficMax = 0;
 
     function rebuildMapState() {{
       map = trace.map;
@@ -2270,6 +2369,25 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       for (const v of heatmapCounts.values()) if (v > heatmapMax) heatmapMax = v;
     }}
 
+    // T-70: edge_enter 이벤트를 누적해 엣지별 통과 횟수 집계. tick 마다 새 이벤트가
+    // 들어오므로 onWsTick 에서 호출 (heatmap 과 같은 패턴).
+    function rebuildTraffic() {{
+      trafficCounts = new Map();
+      for (const ev of events) {{
+        if (ev.kind !== 'edge_enter') continue;
+        const k = ev.edge_key || '';
+        if (!k) continue;
+        trafficCounts.set(k, (trafficCounts.get(k) || 0) + 1);
+      }}
+      trafficMax = 0;
+      for (const v of trafficCounts.values()) if (v > trafficMax) trafficMax = v;
+      // 활성 상태면 legend max 라벨도 갱신
+      if (trafficMode) {{
+        const lab = document.getElementById('traffic-max-label');
+        if (lab) lab.textContent = trafficMax > 0 ? `최대 ${{trafficMax}}회` : '데이터 없음';
+      }}
+    }}
+
     // ── 플레이백 UI 상태 ─────────────────────────────────────────
     let index = 0;
     let timer = null;
@@ -2277,6 +2395,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     let focusedAgvId = '';
     let zoomScale = 1, zoomPanX = 0, zoomPanY = 0;
     let heatmapMode = false;
+    let trafficMode = false;
     let collisionMode = false;
     // GAP-A: ⛔ 차단 모드 + 사용자가 차단한 엣지 키 집합 (서버 상태와 미러)
     let blockMode = false;
@@ -2434,6 +2553,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       agvIds = [];
       index = 0;
       heatmapCounts = new Map(); heatmapMax = 0;
+      trafficCounts = new Map(); trafficMax = 0;
       _eventMarkersBuiltKey = '';
       // GAP-A: 새 sim 시작 → 차단 엣지 초기화 (서버도 init 시 리셋)
       userBlockedEdges = new Set();
@@ -2491,6 +2611,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
         if (msg.new_events && msg.new_events.length) {{
           events.push(...msg.new_events);
           rebuildHeatmap();
+          rebuildTraffic();
           _eventMarkersBuiltKey = '';
         }}
         if (msg.kpi) updateLiveKpi(msg.kpi);
@@ -2541,7 +2662,9 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       if (liveWs) {{ try {{ liveWs.close(); }} catch(e) {{}} liveWs = null; }}
       snapshots.length = 0; events.length = 0;
       agvIds = []; index = 0; runId = null; liveStreaming = false;
-      heatmapCounts = new Map(); heatmapMax = 0; _eventMarkersBuiltKey = '';
+      heatmapCounts = new Map(); heatmapMax = 0;
+      trafficCounts = new Map(); trafficMax = 0;
+      _eventMarkersBuiltKey = '';
       trace.meta.duration_s = Number(document.getElementById('live-duration').value);
       document.getElementById('run-btn').disabled = false;
       document.getElementById('stop-btn').disabled = true;
@@ -2784,8 +2907,18 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           applyEdgeStyle(edgeKey,{{stroke,width:3+t*5,opacity:0.92,dash:''}});
         }}
       }}
-      // ★ 히트맵 모드일 때 AGV 오버레이 skip (히트맵 전용 뷰)
-      if (!heatmapMode) {{
+      // T-70: 트래픽 모드 — edge_enter 누적 횟수 파랑~보라 그라데이션. heatmap 과 mutually exclusive.
+      if (trafficMode && trafficMax>0) {{
+        const logMax=Math.log(trafficMax+1);
+        for (const [edgeKey,count] of trafficCounts) {{
+          const t=Math.log(count+1)/Math.max(logMax,0.0001);
+          const lerp=(a,b)=>Math.round(a+(b-a)*t);
+          const stroke=`rgb(${{lerp(0xe0,0x43)}},${{lerp(0xe7,0x38)}},${{lerp(0xff,0xca)}})`;
+          applyEdgeStyle(edgeKey,{{stroke,width:3+t*5,opacity:0.92,dash:''}});
+        }}
+      }}
+      // ★ 히트맵/트래픽 모드일 때 AGV 오버레이 skip (누적 패턴 전용 뷰)
+      if (!heatmapMode && !trafficMode) {{
         for (const agv of visibleAgvs) {{
           const planned=agv.planned_edge_keys||[];
           planned.forEach((edgeKey,depth)=>{{
@@ -3227,11 +3360,32 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     }});
     document.getElementById('heatmap-toggle').addEventListener('click',()=>{{
       heatmapMode=!heatmapMode;
+      // mutually exclusive: heatmap 켜면 traffic 자동 끔 (혼동 방지)
+      if (heatmapMode && trafficMode) {{
+        trafficMode = false;
+        document.getElementById('traffic-toggle').classList.remove('active');
+        document.getElementById('traffic-legend').classList.remove('active');
+      }}
       document.getElementById('heatmap-toggle').classList.toggle('active',heatmapMode);
       const legend=document.getElementById('heatmap-legend');
       legend.classList.toggle('active',heatmapMode);
       const lab=document.getElementById('heatmap-max-label');
       if (lab) lab.textContent=heatmapMax>0?`최대 ${{heatmapMax}}회`:'데이터 없음';
+      render();
+    }});
+    document.getElementById('traffic-toggle').addEventListener('click',()=>{{
+      trafficMode=!trafficMode;
+      // mutually exclusive: traffic 켜면 heatmap 자동 끔
+      if (trafficMode && heatmapMode) {{
+        heatmapMode = false;
+        document.getElementById('heatmap-toggle').classList.remove('active');
+        document.getElementById('heatmap-legend').classList.remove('active');
+      }}
+      document.getElementById('traffic-toggle').classList.toggle('active',trafficMode);
+      const legend=document.getElementById('traffic-legend');
+      legend.classList.toggle('active',trafficMode);
+      const lab=document.getElementById('traffic-max-label');
+      if (lab) lab.textContent=trafficMax>0?`최대 ${{trafficMax}}회`:'데이터 없음';
       render();
     }});
     document.getElementById('collision-toggle').addEventListener('click',()=>{{
