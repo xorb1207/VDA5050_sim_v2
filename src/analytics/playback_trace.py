@@ -1894,9 +1894,30 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     #heatmap-toggle.active {{ background:#c0392b; color:#fff; border-color:#c0392b; }}
     #collision-toggle.active {{ background:#f59e0b; color:#fff; border-color:#f59e0b; }}
     #block-toggle.active {{ background:#dc2626; color:#fff; border-color:#dc2626; }}
+    #manual-job-toggle.active {{ background:#059669; color:#fff; border-color:#059669; }}
     /* 차단 모드 ON 일 때 SVG 엣지 hit 영역 시각 강조 */
     .block-mode svg .edge-hit {{ cursor:pointer; }}
     .block-mode svg .edge-hit:hover {{ stroke:#f59e0b; stroke-opacity:0.9; }}
+    /* GAP-B: 수동 Job 모드 */
+    #manual-job-panel {{ display:none; color:#059669; font-weight:600; margin-left:6px; align-items:center; gap:4px; }}
+    #manual-job-panel.active {{ display:inline-flex; }}
+    #mj-pickup-badge {{ padding:1px 7px; border-radius:4px; background:#d1fae5;
+      color:#065f46; font-weight:600; font-variant-numeric:tabular-nums; }}
+    #manual-job-panel .mj-hint {{ color:var(--muted); font-weight:400; margin-left:4px; }}
+    .mj-mode svg .node-hit {{ cursor:crosshair; }}
+    .mj-mode svg .node-hit:hover {{ fill:rgba(5,150,105,0.18); }}
+    svg .node-hit {{ fill:transparent; pointer-events:auto; }}
+    svg .node-pickup-ring {{ fill:none; stroke:#059669; stroke-width:2.5;
+      vector-effect:non-scaling-stroke; opacity:0.9; }}
+    .mj-toast {{ position:fixed; left:50%; bottom:34px; transform:translateX(-50%) translateY(20px);
+      padding:10px 18px; border-radius:8px; background:#065f46; color:#fff;
+      font-size:13px; font-weight:600; letter-spacing:0.01em;
+      box-shadow:0 6px 20px rgba(15,23,42,0.25); opacity:0;
+      transition:opacity 0.25s, transform 0.25s; pointer-events:none; z-index:9999;
+      max-width:min(560px,90vw); }}
+    .mj-toast.show {{ opacity:1; transform:translateX(-50%) translateY(0); }}
+    .mj-toast.warn {{ background:#a16207; }}
+    .mj-toast.err {{ background:#b91c1c; }}
     .heatmap-legend {{ display:none; align-items:center; gap:8px; font-size:11.5px;
       color:var(--muted); padding:4px 10px; background:var(--surface-2); border-radius:6px; margin-left:8px; }}
     .heatmap-legend.active {{ display:inline-flex; }}
@@ -2114,12 +2135,18 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <button id="heatmap-toggle" type="button" title="히트맵 토글">🔥 히트맵</button>
             <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커">⚠ 충돌</button>
             <button id="block-toggle" type="button" title="엣지 클릭 차단/해제 — 영향 AGV 가 즉시 reroute">⛔ 차단</button>
+            <button id="manual-job-toggle" type="button" title="노드 두 개 클릭(pickup → dropoff)으로 수동 demand 발행. ESC 로 취소">📋 수동 Job</button>
           </div>
         </div>
         <div class="hint">
           맵: 휠 확대/축소, 드래그 이동, 더블클릭 줌 초기화. AGV 클릭 시 포커스. 우측 사고 묶음 클릭 시 해당 시점으로 점프.
           <span id="block-mode-hint" style="display:none; color:var(--danger); font-weight:600; margin-left:6px;">
             ⛔ 차단 모드: 엣지 클릭 → 차단/해제
+          </span>
+          <span id="manual-job-panel">
+            📋 수동 Job — <span id="mj-state-label">pickup 노드 선택</span>
+            <span id="mj-pickup-badge" style="display:none;"></span>
+            <span class="mj-hint">ESC 취소</span>
           </span>
           <span class="heatmap-legend" id="heatmap-legend">
             누적 사고 강도
@@ -3312,6 +3339,15 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           return;
         }}
         return; // 토글 ON 일 때 엣지 외 클릭은 무시 (AGV 포커스 비활성)
+      }}
+      // GAP-B: 수동 Job 모드 ON → 노드 클릭으로 pickup/dropoff 선택
+      if (manualJobMode) {{
+        const nodeHit=e.target.closest('[data-node-id]');
+        if (nodeHit) {{
+          e.stopPropagation();
+          handleManualJobNodeClick(nodeHit.dataset.nodeId);
+        }}
+        return; // 노드 외 클릭은 무시 (AGV 포커스 비활성)
       }}
       const hit=e.target.closest('[data-agv-id]');
       if (!hit) return;

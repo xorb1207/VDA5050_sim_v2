@@ -89,6 +89,18 @@ class UploadMapRequest(BaseModel):
     edits_json: dict | None = None # 선택: editor 의 *.edit.json 결과
 
 
+class ManualJobRequest(BaseModel):
+    """GAP-B: UI 📋 토글이 호출하는 수동 demand 발행 요청.
+
+    pickup_node / dropoff_node 는 graph 의 node_id. runId 가 비어있으면
+    현재 활성 sim 으로 라우팅. required_capability 가 있으면 매칭 fleet 만.
+    """
+    pickup_node: str
+    dropoff_node: str
+    runId: str | None = None
+    required_capability: str | None = None
+
+
 # 업로드된 임포트 맵을 메모리에 보관 (단일 사용자 로컬 도구라 OK)
 # key: importedMapId, value: {"name": str, "graph": MapGraph}
 _imported_maps: dict[str, dict] = {}
