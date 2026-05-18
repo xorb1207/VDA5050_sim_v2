@@ -335,28 +335,132 @@ def import_map_yaml(
 
 # ────────────────────────────────────────────────────────────────────
 # Edit.json 적용 (Editor 페이지에서 Save 한 결과)
-#   ※ 머지 사고로 본문이 누락돼 있어 GAP-A 작업 중 server.py import 가
-#     깨졌기에 server.py 가 요구하는 최소 동작만 복원. 자세한 셈은 추후 별도 fix 에서.
 # ────────────────────────────────────────────────────────────────────
-def apply_edits(imported: ImportedMap, edits) -> ImportedMap:
-    """ImportedMap + edit.json → 편집 적용된 ImportedMap.
+def apply_edits(imported: ImportedMap, edits: dict | str | Path) -> ImportedMap:
+    """ImportedMap + edit.json → 편집 적용된 새 ImportedMap.
 
-    NOTE: 이 함수의 풍부한 구현은 머지 사고로 손실됐다 (T-63 머지).
-    GAP-A 에서는 server import 만 안 깨지면 되므로 stub 으로 둔다 —
-    edits 가 None/빈 dict 면 원본 그대로, 아니면 ValueError 로 명시 실패시켜
-    호출자가 인지하도록 한다. 완전한 복원은 별도 fix 의 책임.
+    edits 포맷 (editor_html.py exportEdits() 결과, format_version=1):
+      · deleted_node_ids / deleted_edge_ids
+      · added_nodes [{id, x, y, role, is_charger, is_holding}]
+      · added_edges [{id, src, dst, bidir, v_max?, graph_idx?}]
+      · node_overrides {id: {role?, is_charger?, is_holding?}}
+      · edge_overrides {id: {bidir?, src?, dst?, v_max?, graph_idx?}}
+        - v_max=null 은 명시적 unset (intrinsic 속도 사용)
+      · background_image (선택)
+
+    원본 ImportedMap 은 mutate 하지 않고 새 ImportedMap 반환.
     """
     if isinstance(edits, (str, Path)):
         edits = json.loads(Path(edits).read_text(encoding="utf-8"))
     if not edits:
         return imported
-    # edits 가 있으면 — 안전한 fallback 으로 원본 반환 + 경고 로깅 1회.
-    # (오리지널 apply_edits 가 손실된 상태라 안전한 no-op 동작.)
-    import logging
-    logging.getLogger(__name__).warning(
-        "apply_edits stub: 편집 본문 적용 로직이 머지 사고로 손실됨 — 원본 그대로 반환"
+
+    # 필드 단위 복사 (원본 보존)
+    nodes: list[ImportedNode] = []
+    for n in imported.nodes:
+        nodes.append(ImportedNode(
+            node_id=n.node_id, x=n.x, y=n.y, name=n.name,
+            inferred_role=n.inferred_role,
+            inferred_is_charger=n.inferred_is_charger,
+            inferred_is_holding=n.inferred_is_holding,
+            raw_node_type_cd=n.raw_node_type_cd,
+            raw_align_type_cd=n.raw_align_type_cd,
+            degree_in=n.degree_in, degree_out=n.degree_out,
+            capability=n.capability,
+        ))
+    edges: list[ImportedEdge] = []
+    for e in imported.edges:
+        edges.append(ImportedEdge(
+            edge_id=e.edge_id, src=e.src, dst=e.dst,
+            inferred_bidirectional=e.inferred_bidirectional,
+            inferred_corridor=e.inferred_corridor,
+            inferred_access_type=e.inferred_access_type,
+            raw_link_type_cd=e.raw_link_type_cd,
+            merged_from=list(e.merged_from),
+            v_max=e.v_max,
+            graph_idx=e.graph_idx,
+        ))
+
+    # 1. 삭제
+    deleted_nodes = set(edits.get("deleted_node_ids", []) or [])
+    deleted_edges = set(edits.get("deleted_edge_ids", []) or [])
+    nodes = [n for n in nodes if n.node_id not in deleted_nodes]
+    edges = [e for e in edges if e.edge_id not in deleted_edges]
+    # 삭제된 노드와 연결된 엣지도 같이 정리 (방어적)
+    nodes_set = {n.node_id for n in nodes}
+    edges = [e for e in edges if e.src in nodes_set and e.dst in nodes_set]
+
+    # 2. node_overrides
+    node_overrides = edits.get("node_overrides", {}) or {}
+    for n in nodes:
+        ov = node_overrides.get(n.node_id)
+        if not ov:
+            continue
+        if "role" in ov:
+            n.inferred_role = ov["role"]
+        if "is_charger" in ov:
+            n.inferred_is_charger = bool(ov["is_charger"])
+        if "is_holding" in ov:
+            n.inferred_is_holding = bool(ov["is_holding"])
+        if "capability" in ov:
+            cap = ov["capability"]
+            n.capability = None if cap in (None, "", "null") else str(cap)
+
+    # 3. edge_overrides
+    edge_overrides = edits.get("edge_overrides", {}) or {}
+    for e in edges:
+        ov = edge_overrides.get(e.edge_id)
+        if not ov:
+            continue
+        if "bidir" in ov:
+            e.inferred_bidirectional = bool(ov["bidir"])
+        if "src" in ov:
+            e.src = ov["src"]
+        if "dst" in ov:
+            e.dst = ov["dst"]
+        if "v_max" in ov:
+            # null 도 명시적 unset 의미로 허용
+            e.v_max = None if ov["v_max"] is None else float(ov["v_max"])
+        if "graph_idx" in ov:
+            gi = ov["graph_idx"]
+            e.graph_idx = None if gi is None else int(gi)
+
+    # 4. added_nodes
+    for an in edits.get("added_nodes", []) or []:
+        cap_raw = an.get("capability", None)
+        nodes.append(ImportedNode(
+            node_id=str(an["id"]), x=float(an["x"]), y=float(an["y"]),
+            name=an.get("name", an["id"]),
+            inferred_role=an.get("role", "standard"),
+            inferred_is_charger=bool(an.get("is_charger", False)),
+            inferred_is_holding=bool(an.get("is_holding", False)),
+            capability=(None if cap_raw in (None, "", "null") else str(cap_raw)),
+        ))
+
+    # 5. added_edges
+    for ae in edits.get("added_edges", []) or []:
+        v_raw = ae.get("v_max", None)
+        gi_raw = ae.get("graph_idx", None)
+        edges.append(ImportedEdge(
+            edge_id=str(ae["id"]), src=str(ae["src"]), dst=str(ae["dst"]),
+            inferred_bidirectional=bool(ae.get("bidir", False)),
+            v_max=(None if v_raw is None else float(v_raw)),
+            graph_idx=(None if gi_raw is None else int(gi_raw)),
+        ))
+
+    # background_image 도 edits 에 있으면 반영 (editor 가 export 함)
+    bg = edits.get("background_image", imported.background_image)
+
+    # report 는 보수적으로 원본을 그대로 둔다 — _compute_degrees/_build_report 헬퍼
+    # 가 별도 머지 사고로 누락된 상태라 재계산 불가. 정확한 차수/리포트가 필요한
+    # 케이스가 생기면 그때 helper 들을 함께 복원할 것.
+    return ImportedMap(
+        nodes=nodes, edges=edges,
+        report=imported.report, config=imported.config,
+        background_image=bg,
+        fleets=list(imported.fleets),
+        demands=list(imported.demands),
     )
-    return imported
 
 
 # ────────────────────────────────────────────────────────────────────
