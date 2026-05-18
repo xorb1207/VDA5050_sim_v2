@@ -121,6 +121,7 @@ class PlaybackTraceRecorder:
                 "reserved_edge_keys": active_edge_by_agv.get(agv.agv_id, []),
                 "blocked_edge_key": blocked_edge_key,
                 "blocking_agv": snapshot["waiting_for"].get(agv.agv_id, ""),
+                "current_demand_id": getattr(agv, "_current_demand_id", "") or "",
             })
         self.snapshots.append(snapshot)
 
@@ -1234,6 +1235,54 @@ def build_playback_html(trace: dict) -> str:
       }
       return '';
     }
+    // ── AGV 상태별 색상 매핑 ────────────────────────────────────
+    // 우선순위: ERROR > CHARGING > 작업중(demand) > WAITING > NAVIGATING(빈손) > IDLE
+    function lightenHex(hex, amount) {
+      let h = (hex || '#3a4555').replace('#', '');
+      if (h.length === 3) h = h.split('').map(c => c + c).join('');
+      if (h.length !== 6) return hex;
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let hh = 0, s = 0, l = (max + min) / 510;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (510 - max - min) : d / (max + min);
+        if (max === r) hh = ((g - b) / d + (g < b ? 6 : 0));
+        else if (max === g) hh = ((b - r) / d + 2);
+        else hh = ((r - g) / d + 4);
+        hh /= 6;
+      }
+      l = Math.min(1, l + amount);
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      const nr = Math.round(hue2rgb(p, q, hh + 1 / 3) * 255);
+      const ng = Math.round(hue2rgb(p, q, hh) * 255);
+      const nb = Math.round(hue2rgb(p, q, hh - 1 / 3) * 255);
+      return '#' + [nr, ng, nb].map(c => c.toString(16).padStart(2, '0')).join('');
+    }
+    function agvDisplayColor(agv, baseColor) {
+      const base = baseColor || '#3a4555';
+      const state = (agv && agv.state) || '';
+      if (state === 'ERROR') return '#e74c3c';
+      if (state === 'CHARGING') return '#9b59b6';
+      const demandId = (agv && agv.current_demand_id) || '';
+      const hasJob = !!demandId;
+      if (hasJob && (state === 'NAVIGATING' || state === 'PROCESSING')) {
+        return demandId.startsWith('manual_') ? '#e67e22' : '#2980b9';
+      }
+      if (state === 'WAITING_RESERVATION') return '#f39c12';
+      if (state === 'NAVIGATING') return lightenHex(base, 0.3);
+      return base;
+    }
     function agvArrowMarkup(cx, cy, color, heading, faded) {
       const opacity = faded ? 0.18 : 1.0;
       // 화살표 크기도 축소 (본래 1.15 → 0.65). follow-on 시 시각 겹침 방지.
@@ -1381,9 +1430,10 @@ def build_playback_html(trace: dict) -> str:
             const agv = item.agv;
             const cx = sx(agv.x) + item.ox;
             const cy = sy(agv.y) + item.oy;
+            const fadedColor = agvDisplayColor(agv, '#3a4555');
             const inner = item.anchored
-              ? agvShapeMarkup(0, 0, '#3a4555', true, true)
-              : agvArrowMarkup(0, 0, '#3a4555', agv.heading, true);
+              ? agvShapeMarkup(0, 0, fadedColor, true, true)
+              : agvArrowMarkup(0, 0, fadedColor, agv.heading, true);
             return `<g transform="translate(${cx} ${cy}) scale(${labelScale})">${inner}</g>`;
           }).join('')}
           ${visibleDisplay.map(item => {
@@ -1395,9 +1445,10 @@ def build_playback_html(trace: dict) -> str:
             const labelText = item.bucketCount > 1
               ? agvCaption(agv, true)
               : agvCaption(agv, false);
+            const visColor = agvDisplayColor(agv, '#3a4555');
             const inner = item.anchored
-              ? agvShapeMarkup(0, 0, '#3a4555', true, false)
-              : agvArrowMarkup(0, 0, '#3a4555', agv.heading, false);
+              ? agvShapeMarkup(0, 0, visColor, true, false)
+              : agvArrowMarkup(0, 0, visColor, agv.heading, false);
             // Invisible 18px hit-circle (counter-scaled) so clicks land reliably.
             return `
               <g class="agv-hit" data-agv-id="${agv.agv_id}" style="cursor: pointer;" transform="translate(${cx} ${cy}) scale(${labelScale})">
@@ -2847,6 +2898,55 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       const points = [rp(14,0),rp(-8,-9),rp(-1,0),rp(-8,9)].join(' ');
       return `<polygon points="${{points}}" fill="${{color}}" opacity="${{opacity}}" />`;
     }}
+    // ── AGV 상태별 색상 매핑 ────────────────────────────────────
+    // 우선순위: ERROR > CHARGING > 작업중(demand) > WAITING > NAVIGATING(빈손) > IDLE
+    function lightenHex(hex, amount) {{
+      let h = (hex || '#3a4555').replace('#', '');
+      if (h.length === 3) h = h.split('').map(c => c + c).join('');
+      if (h.length !== 6) return hex;
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let hh = 0, s = 0, l = (max + min) / 510;
+      if (max !== min) {{
+        const d = max - min;
+        s = l > 0.5 ? d / (510 - max - min) : d / (max + min);
+        if (max === r) hh = ((g - b) / d + (g < b ? 6 : 0));
+        else if (max === g) hh = ((b - r) / d + 2);
+        else hh = ((r - g) / d + 4);
+        hh /= 6;
+      }}
+      l = Math.min(1, l + amount);
+      const hue2rgb = (p, q, t) => {{
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      }};
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      const nr = Math.round(hue2rgb(p, q, hh + 1 / 3) * 255);
+      const ng = Math.round(hue2rgb(p, q, hh) * 255);
+      const nb = Math.round(hue2rgb(p, q, hh - 1 / 3) * 255);
+      return '#' + [nr, ng, nb].map(c => c.toString(16).padStart(2, '0')).join('');
+    }}
+    function agvDisplayColor(agv, baseColor) {{
+      const base = baseColor || '#3a4555';
+      const state = (agv && agv.state) || '';
+      if (state === 'ERROR') return '#e74c3c';
+      if (state === 'CHARGING') return '#9b59b6';
+      const demandId = (agv && agv.current_demand_id) || '';
+      const hasJob = !!demandId;
+      if (hasJob && (state === 'NAVIGATING' || state === 'PROCESSING')) {{
+        return demandId.startsWith('manual_') ? '#e67e22' : '#2980b9';
+      }}
+      if (state === 'WAITING_RESERVATION') return '#f39c12';
+      if (state === 'NAVIGATING') return lightenHex(base, 0.3);
+      return base;
+    }}
+    window.__agvDisplayColor = agvDisplayColor;
     function immediateGoalNodeId(agv) {{
       if (agv.immediate_goal) return agv.immediate_goal;
       if (agv.goal_node) return agv.goal_node;
@@ -2993,7 +3093,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           }}).join('')}}
           ${{fadedDisplay.map(item=>{{
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
-            const color = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const baseColor = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const color = agvDisplayColor(agv, baseColor);
             const inner=item.anchored?agvShapeMarkup(0,0,color,true,true):agvArrowMarkup(0,0,color,agv.heading,true);
             return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{inner}}</g>`;
           }}).join('')}}
@@ -3001,7 +3102,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
             const labelX=cx+item.labelOx, labelY=cy+item.labelOy;
             const labelText=item.bucketCount>1?agvCaption(agv,true):agvCaption(agv,false);
-            const color = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const baseColor = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const color = agvDisplayColor(agv, baseColor);
             const inner=item.anchored?agvShapeMarkup(0,0,color,true,false):agvArrowMarkup(0,0,color,agv.heading,false);
             return `
               <g class="agv-hit" data-agv-id="${{agv.agv_id}}" style="cursor:pointer;" transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">

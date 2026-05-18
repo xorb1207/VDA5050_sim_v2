@@ -814,6 +814,146 @@ def apply_edits(imported: ImportedMap, edits) -> ImportedMap:
 
 
 # ────────────────────────────────────────────────────────────────────
+# MapGraph → OpenRMF building.yaml 포맷 export
+# ────────────────────────────────────────────────────────────────────
+# OpenRMF building.yaml typed-param 코드:
+#   1 = string, 2 = int, 3 = float/double, 4 = bool
+_RMF_TC_STR = 1
+_RMF_TC_INT = 2
+_RMF_TC_FLOAT = 3
+_RMF_TC_BOOL = 4
+
+
+def export_to_rmf_yaml(
+    graph: MapGraph,
+    map_name: str = "exported_map",
+    level_name: str = "L1",
+) -> dict:
+    """MapGraph → OpenRMF building.yaml 포맷 dict 반환.
+
+    포맷 (osrf/rmf_demos office.building.yaml 기준):
+      name: <map_name>
+      lifts: {{}}
+      levels:
+        <level_name>:
+          elevation: 0
+          flattened_x_offset: 0
+          flattened_y_offset: 0
+          layers: {{}}
+          vertices: [[x, y, 0, "name", {{is_charger:[4,true], ...}}], ...]
+          lanes: [[src_idx, dst_idx, {{bidirectional:[4,true], graph_idx:[2,0], ...}}], ...]
+          walls: [], floors: [], measurements: [], models: [], doors: []
+
+    매핑 규칙:
+      - Node → vertex `[x, y, 0, name, {{typed_params}}]`
+          * is_charger / is_holding_point / is_parking_spot 는 True 일 때만 추가
+          * role 은 rmf_role(string) 으로 보존
+      - Edge → lane `[src_idx, dst_idx, {{bidirectional, graph_idx, orientation}}]`
+          * MapGraph 가 양방향 엣지를 `<eid>` + `<eid>_rev` 두 entry 로 저장하므로,
+            export 시엔 reverse entry 를 dedupe 하고 단일 lane 에 `bidirectional:[4,true]` 부여
+    """
+    nodes = list(graph.nodes.values())
+    id_to_idx: dict[str, int] = {n.node_id: i for i, n in enumerate(nodes)}
+
+    vertices: list = []
+    for n in nodes:
+        params: dict = {}
+        if n.is_charger:
+            params["is_charger"] = [_RMF_TC_BOOL, True]
+        if n.is_holding_point:
+            params["is_holding_point"] = [_RMF_TC_BOOL, True]
+        if n.is_parking_spot:
+            params["is_parking_spot"] = [_RMF_TC_BOOL, True]
+        # role 값 보존 (RMF spec 외 확장 — importer 가 rmf_role 로 읽어들임)
+        role_value = n.role.value if hasattr(n.role, "value") else str(n.role)
+        if role_value and role_value != "standard":
+            params["rmf_role"] = [_RMF_TC_STR, role_value]
+        vertices.append([
+            float(n.x),
+            float(n.y),
+            0,
+            n.node_id or "",
+            params,
+        ])
+
+    # Edge dedupe: `<eid>_rev` 가 있는 경우 원본만 남기고 bidirectional 마킹.
+    # 같은 (src,dst) 쌍이 양쪽 다 존재하면 (rev 가 별도 eid 아닌 경우) 둘 다 single
+    # bidirectional lane 으로 합친다.
+    emitted_pairs: set[tuple[int, int]] = set()
+    lanes: list = []
+    for e in graph.edges.values():
+        if e.start_node_id not in id_to_idx or e.end_node_id not in id_to_idx:
+            continue
+        src = id_to_idx[e.start_node_id]
+        dst = id_to_idx[e.end_node_id]
+        pair = (src, dst)
+        rev_pair = (dst, src)
+        # 이미 이 방향 or 역방향 lane 이 발행됐다면 skip
+        if pair in emitted_pairs or rev_pair in emitted_pairs:
+            continue
+
+        # bidirectional 판정: Edge.bidirectional 플래그 또는 reverse entry 존재
+        is_bidir = bool(getattr(e, "bidirectional", False))
+        if not is_bidir:
+            # `<eid>_rev` 가 graph 에 있으면 양방향으로 간주
+            if f"{e.edge_id}_rev" in graph.edges:
+                is_bidir = True
+            else:
+                # reverse 방향 별도 edge_id 로 존재하는지 확인 (양쪽 단방향 페어)
+                for other in graph.edges.values():
+                    if (other.start_node_id == e.end_node_id
+                            and other.end_node_id == e.start_node_id):
+                        is_bidir = True
+                        break
+
+        params: dict = {
+            "bidirectional": [_RMF_TC_BOOL, bool(is_bidir)],
+            "graph_idx": [_RMF_TC_INT, int(getattr(e, "graph_idx", 0) or 0)],
+            "orientation": [_RMF_TC_STR, ""],
+            "demo_mock_floor_name": [_RMF_TC_STR, ""],
+            "demo_mock_lift_name": [_RMF_TC_STR, ""],
+        }
+        # 선택 필드: importer 가 인식하는 추가 메타.
+        if getattr(e, "v_max", None) is not None:
+            params["v_max"] = [_RMF_TC_FLOAT, float(e.v_max)]
+        speed_limit = float(getattr(e, "max_speed", 0.0) or 0.0)
+        if speed_limit > 0:
+            params["speed_limit"] = [_RMF_TC_FLOAT, speed_limit]
+        width_m = float(getattr(e, "width_m", 0.0) or 0.0)
+        if width_m > 0:
+            params["width_m"] = [_RMF_TC_FLOAT, width_m]
+        corridor = str(getattr(e, "corridor", "") or "")
+        if corridor:
+            params["corridor"] = [_RMF_TC_STR, corridor]
+        access_type = str(getattr(e, "access_type", "") or "")
+        if access_type:
+            params["access_type"] = [_RMF_TC_STR, access_type]
+
+        lanes.append([src, dst, params])
+        emitted_pairs.add(pair)
+
+    return {
+        "name": map_name,
+        "lifts": {},
+        "levels": {
+            level_name: {
+                "elevation": 0,
+                "flattened_x_offset": 0,
+                "flattened_y_offset": 0,
+                "layers": {},
+                "vertices": vertices,
+                "lanes": lanes,
+                "walls": [],
+                "floors": [],
+                "measurements": [],
+                "models": [],
+                "doors": [],
+            }
+        },
+    }
+
+
+# ────────────────────────────────────────────────────────────────────
 # ImportedMap → MapGraph 빌드 (simulation 에 넘길 때 사용)
 # ────────────────────────────────────────────────────────────────────
 def build_map_graph(imported: ImportedMap) -> MapGraph:

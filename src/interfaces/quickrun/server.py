@@ -29,12 +29,12 @@ from typing import Optional
 
 import yaml
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.analytics.playback_trace import build_live_html
-from src.domain.map.external_importer import apply_edits, build_map_graph, import_map, import_map_json, import_map_yaml
+from src.domain.map.external_importer import apply_edits, build_map_graph, export_to_rmf_yaml, import_map, import_map_json, import_map_yaml
 from src.interfaces.map_editor import build_editor_html
 from src.interfaces.quickrun.runner import RealRunner
 
@@ -368,6 +368,49 @@ async def update_map(map_id: str, req: UpdateMapRequest):
         "stations": imp_after.report.inferred_stations,
     }
     return {"ok": True, "stats": entry["stats"]}
+
+
+@app.get("/export-map")
+async def export_map(map_id: str | None = None):
+    """현재 로드된 맵을 OpenRMF building.yaml 포맷으로 다운로드.
+
+    Query:
+      - map_id: 임포트된 맵 ID. 없으면 가장 최근 업로드 맵, 그것도 없으면 활성
+        runner 의 graph 사용.
+    Content-Type: application/x-yaml
+    """
+    graph = None
+    name = "exported_map"
+    if map_id:
+        entry = _imported_maps.get(map_id)
+        if entry is None:
+            raise HTTPException(404, f"unknown map id: {map_id}")
+        graph = entry["graph"]
+        name = entry["name"]
+    elif _imported_maps:
+        # 가장 최근 업로드된 맵 (dict 삽입 순서 마지막)
+        last_id = next(reversed(_imported_maps))
+        graph = _imported_maps[last_id]["graph"]
+        name = _imported_maps[last_id]["name"]
+    elif _active_runner is not None and _active_runner.real_runner is not None:
+        graph = _active_runner.real_runner._graph
+        name = "active_sim"
+    if graph is None:
+        raise HTTPException(404, "no map loaded — upload a map or start a sim first")
+
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in (name or "map"))
+    try:
+        data = export_to_rmf_yaml(graph, map_name=safe_name)
+        body = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    except Exception as exc:
+        raise HTTPException(500, f"export failed: {exc}")
+    return Response(
+        content=body,
+        media_type="application/x-yaml",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}.building.yaml"',
+        },
+    )
 
 
 @app.post("/init")
