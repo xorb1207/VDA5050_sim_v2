@@ -37,6 +37,8 @@ class TaskGenerationDiagnostics:
     no_routeable_current_pair: int = 0
     no_path_to_pickup: int = 0
     no_path_pickup_to_dropoff: int = 0
+    # F1a: required_capability 매칭 AGV 가 없어서 보류된 demand 누적
+    unmatched_demand_count: int = 0
     path_failures: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -54,6 +56,7 @@ class TaskGenerationDiagnostics:
             "no_routeable_current_pair": self.no_routeable_current_pair,
             "no_path_to_pickup": self.no_path_to_pickup,
             "no_path_pickup_to_dropoff": self.no_path_pickup_to_dropoff,
+            "unmatched_demand_count": self.unmatched_demand_count,
             "path_failures": dict(sorted(self.path_failures.items())),
         }
 
@@ -91,6 +94,9 @@ class TaskGenerator:
         self._backlogged_demand: TaskDemand | None = None
         self._started: bool = False
         self._completed_demand_ids: set[str] = set()
+        # F1a: capability 매칭 가능 fleet 가 없어 보류된 demand 의 task_id 집합.
+        # retry 시 중복 카운트 방지용 (diagnostics.unmatched_demand_count 와 동기).
+        self._unmatched_demand_ids: set[str] = set()
         self._mode = mode
 
         # 작업 가능 노드 추출:
@@ -293,8 +299,14 @@ class TaskGenerator:
                 sim_time,
             )
             if not dispatched:
-                return
-            self._backlogged_demand = None
+                # F1a: capability 매칭 가능 fleet 자체가 없으면 영구 실패 →
+                # backlog 비우고 다음 demand 진행 (queue 점령 방지).
+                if self._backlogged_demand.task_id in self._unmatched_demand_ids:
+                    self._backlogged_demand = None
+                else:
+                    return
+            else:
+                self._backlogged_demand = None
 
         while self._demand_index < len(self._demand_set.demands):
             demand = self._demand_set.demands[self._demand_index]
@@ -313,6 +325,9 @@ class TaskGenerator:
 
             dispatched = await self._dispatch_demand(demand, agvs, sim_time)
             if not dispatched:
+                # F1a: 매칭 fleet 없는 경우 backlog 안 두고 skip (다음 demand 처리 계속).
+                if demand.task_id in self._unmatched_demand_ids:
+                    continue
                 self._backlogged_demand = demand
                 return
 
@@ -322,23 +337,46 @@ class TaskGenerator:
         agvs: dict[str, AGV],
         sim_time: float,
     ) -> bool:
+        from src.domain.fleet import get_eligible_agvs
+
+        # F1a: capability 매칭 → fleet.graph_idx 내 path 가능한 AGV 만
+        idle = [agv for agv in agvs.values() if agv.is_available_for_dispatch()]
+        eligible = get_eligible_agvs(idle, demand.required_capability)
         idle_agvs = [
-            agv for agv in agvs.values()
-            if agv.is_available_for_dispatch()
-            and self._graph.get_path(agv.current_node_id, demand.pickup_node_id)
+            agv for agv in eligible
+            if self._graph.get_path(
+                agv.current_node_id, demand.pickup_node_id, fleet=agv.fleet
+            )
+            and self._graph.get_path(
+                demand.pickup_node_id, demand.dropoff_node_id, fleet=agv.fleet
+            )
         ]
         if not idle_agvs:
-            self._diagnostics.no_idle_agv += 1
+            # capability 매칭이 0 이면 이 demand 는 어느 fleet 도 처리 불가 →
+            # unmatched 로 마킹 (per-demand 1회 카운트, retry 중복 방지).
+            # capability 매칭은 있지만 idle/path 가 없을 뿐이면 no_idle_agv 로만
+            # 기록하고 다음 tick 재시도.
+            if demand.required_capability and not eligible:
+                if demand.task_id not in self._unmatched_demand_ids:
+                    self._unmatched_demand_ids.add(demand.task_id)
+                    self._diagnostics.unmatched_demand_count += 1
+            else:
+                self._diagnostics.no_idle_agv += 1
             return False
 
         agv = min(
             idle_agvs,
-            key=lambda a: len(self._graph.get_path(a.current_node_id, demand.pickup_node_id)),
+            key=lambda a: len(
+                self._graph.get_path(a.current_node_id, demand.pickup_node_id, fleet=a.fleet)
+            ),
         )
-        path_to_pickup = self._graph.get_path(agv.current_node_id, demand.pickup_node_id)
+        path_to_pickup = self._graph.get_path(
+            agv.current_node_id, demand.pickup_node_id, fleet=agv.fleet
+        )
         path_to_dropoff = self._graph.get_path(
             demand.pickup_node_id,
             demand.dropoff_node_id,
+            fleet=agv.fleet,
         )
         if not path_to_pickup:
             self._diagnostics.no_path_to_pickup += 1

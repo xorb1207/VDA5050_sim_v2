@@ -377,6 +377,16 @@ def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[I
         if (f, t) not in by_pair:
             by_pair[(f, t)] = raw
 
+    def _gidx(raw: dict) -> Optional[int]:
+        # F1a: link 의 graph_idx 인식. _truth_graph_idx (synthetic 데이터) 도 fallback.
+        for key in ("graph_idx", "_truth_graph_idx"):
+            if key in raw:
+                try:
+                    return int(raw[key])
+                except (TypeError, ValueError):
+                    return None
+        return None
+
     edges: list[ImportedEdge] = []
     consumed: set[tuple[str, str]] = set()
     for (f, t), raw in by_pair.items():
@@ -391,6 +401,7 @@ def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[I
                 inferred_bidirectional=True,
                 raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
                 merged_from=[str(raw.get("id", "")), str(rev_raw.get("id", ""))],
+                graph_idx=_gidx(raw),
             ))
             consumed.add((f, t))
             consumed.add(reverse)
@@ -401,6 +412,7 @@ def _detect_bidirectional(raw_links: list[dict], cfg: InferenceConfig) -> list[I
                 inferred_bidirectional=False,
                 raw_link_type_cd=str(raw.get("link_type_cd", "") or ""),
                 merged_from=[str(raw.get("id", ""))],
+                graph_idx=_gidx(raw),
             ))
             consumed.add((f, t))
     return edges

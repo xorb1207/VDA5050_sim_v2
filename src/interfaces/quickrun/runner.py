@@ -24,7 +24,7 @@ from src.application.engine.simulation_engine import SimulationEngine
 from src.application.scenario.task_generator import TaskGenerator
 from src.domain.agv.agv import AGV
 from src.domain.agv.fsm import AGVState
-from src.domain.fleet import Fleet
+from src.domain.fleet import Fleet, get_eligible_agvs
 from src.domain.map.graph import MapGraph, NodeRole
 from src.domain.map.topology_generator import MapTopologyGenerator
 from src.domain.reservation.scheduler import TimeWindowScheduler
@@ -566,12 +566,22 @@ class RealRunner:
         kpi = dict(overall_kpi)
         kpi["by_fleet"] = by_fleet
 
+        # F1a: unmatched_demand_count = capability 매칭 fleet 가 없어 보류된 demand
+        # 합. 자동 demand_set(누적) + 수동 manual(현재 pending 길이).
+        auto_unmatched = 0
+        if self._task_gen is not None and hasattr(self._task_gen, "_diagnostics"):
+            auto_unmatched = getattr(
+                self._task_gen._diagnostics, "unmatched_demand_count", 0
+            )
+        unmatched_demand_count = auto_unmatched + len(self._pending_manual_demands)
+
         await self.broadcast({
             "type": "tick",
             "snapshot": snapshot,
             "new_events": new_events,
             "kpi": kpi,
             "edge_density": edge_density,
+            "unmatched_demand_count": unmatched_demand_count,
         })
 
     def _compute_by_fleet_kpi(self, rec_events: list) -> dict:
@@ -656,17 +666,18 @@ class RealRunner:
 
         # capability 매칭 + idle 필터
         idle = [a for a in self._agvs if a.is_available_for_dispatch()]
-        if required_capability:
-            idle = [
-                a for a in idle
-                if a.fleet and required_capability in (a.fleet.capabilities or [])
-            ]
-        # path 가능 한 AGV 만
-        idle = [
-            a for a in idle
-            if self._graph.get_path(a.current_node_id, pickup_node_id)
+        eligible = get_eligible_agvs(idle, required_capability)
+        # F1a: fleet.graph_idx 분리 — 각 AGV 의 fleet 그래프에서만 path 검사
+        eligible = [
+            a for a in eligible
+            if self._graph.get_path(
+                a.current_node_id, pickup_node_id, fleet=a.fleet
+            )
+            and self._graph.get_path(
+                pickup_node_id, dropoff_node_id, fleet=a.fleet
+            )
         ]
-        if not idle:
+        if not eligible:
             # 매칭 idle AGV 없음 — pending 상태로 보고 (자동 retry 안 함, UI 가 인지)
             self._manual_counter += 1
             demand_id = f"manual_{self._manual_counter:05d}"
@@ -682,13 +693,19 @@ class RealRunner:
             return {"ok": True, "demand_id": demand_id, "agv_id": None,
                     "status": "pending", "reason": reason}
 
-        # 가장 가까운 AGV (hop count 기준)
+        # 가장 가까운 AGV (hop count 기준, 각자 fleet 그래프 안에서)
         agv = min(
-            idle,
-            key=lambda a: len(self._graph.get_path(a.current_node_id, pickup_node_id)),
+            eligible,
+            key=lambda a: len(
+                self._graph.get_path(a.current_node_id, pickup_node_id, fleet=a.fleet)
+            ),
         )
-        path_to_pickup = self._graph.get_path(agv.current_node_id, pickup_node_id)
-        path_to_dropoff = self._graph.get_path(pickup_node_id, dropoff_node_id)
+        path_to_pickup = self._graph.get_path(
+            agv.current_node_id, pickup_node_id, fleet=agv.fleet
+        )
+        path_to_dropoff = self._graph.get_path(
+            pickup_node_id, dropoff_node_id, fleet=agv.fleet
+        )
         if not path_to_pickup:
             return {"ok": False, "demand_id": None, "agv_id": agv.agv_id,
                     "status": "rejected", "reason": "no path agv→pickup"}

@@ -1,0 +1,72 @@
+{
+  "_meta": {
+    "source": "F1a capability dispatch fixture",
+    "note": "3 fleet × 3 isolated lane (graph_idx 0/1/2). lift/cleanroom capability + general fleet."
+  },
+  "nodes": [
+    {"id": "HP_A",   "node_type_cd": "HP", "name": "HP_A",   "position": {"x":  0.0, "y": 100.0, "z": 0}},
+    {"id": "CH_A",   "node_type_cd": "CH", "name": "CH_A",   "position": {"x": 50.0, "y": 100.0, "z": 0}},
+    {"id": "WP_A_0", "node_type_cd": "",   "name": "WP_A_0", "position": {"x":100.0, "y": 100.0, "z": 0}},
+    {"id": "ST_A_1", "node_type_cd": "ST", "name": "ST_A_1", "position": {"x":150.0, "y": 100.0, "z": 0}},
+    {"id": "WP_A_1", "node_type_cd": "",   "name": "WP_A_1", "position": {"x":200.0, "y": 100.0, "z": 0}},
+    {"id": "ST_A_2", "node_type_cd": "ST", "name": "ST_A_2", "position": {"x":250.0, "y": 100.0, "z": 0}},
+
+    {"id": "HP_B",   "node_type_cd": "HP", "name": "HP_B",   "position": {"x":  0.0, "y": 200.0, "z": 0}},
+    {"id": "CH_B",   "node_type_cd": "CH", "name": "CH_B",   "position": {"x": 50.0, "y": 200.0, "z": 0}},
+    {"id": "WP_B_0", "node_type_cd": "",   "name": "WP_B_0", "position": {"x":100.0, "y": 200.0, "z": 0}},
+    {"id": "ST_B_1", "node_type_cd": "ST", "name": "ST_B_1", "position": {"x":150.0, "y": 200.0, "z": 0}},
+    {"id": "WP_B_1", "node_type_cd": "",   "name": "WP_B_1", "position": {"x":200.0, "y": 200.0, "z": 0}},
+    {"id": "ST_B_2", "node_type_cd": "ST", "name": "ST_B_2", "position": {"x":250.0, "y": 200.0, "z": 0}},
+
+    {"id": "HP_C",   "node_type_cd": "HP", "name": "HP_C",   "position": {"x":  0.0, "y": 300.0, "z": 0}},
+    {"id": "CH_C",   "node_type_cd": "CH", "name": "CH_C",   "position": {"x": 50.0, "y": 300.0, "z": 0}},
+    {"id": "WP_C_0", "node_type_cd": "",   "name": "WP_C_0", "position": {"x":100.0, "y": 300.0, "z": 0}},
+    {"id": "ST_C_1", "node_type_cd": "ST", "name": "ST_C_1", "position": {"x":150.0, "y": 300.0, "z": 0}},
+    {"id": "WP_C_1", "node_type_cd": "",   "name": "WP_C_1", "position": {"x":200.0, "y": 300.0, "z": 0}},
+    {"id": "ST_C_2", "node_type_cd": "ST", "name": "ST_C_2", "position": {"x":250.0, "y": 300.0, "z": 0}}
+  ],
+  "links": [
+    {"id": "lA_00", "connected": {"from": "HP_A",   "to": "CH_A"},   "graph_idx": 0},
+    {"id": "lA_01", "connected": {"from": "CH_A",   "to": "HP_A"},   "graph_idx": 0},
+    {"id": "lA_02", "connected": {"from": "CH_A",   "to": "WP_A_0"}, "graph_idx": 0},
+    {"id": "lA_03", "connected": {"from": "WP_A_0", "to": "CH_A"},   "graph_idx": 0},
+    {"id": "lA_04", "connected": {"from": "WP_A_0", "to": "ST_A_1"}, "graph_idx": 0},
+    {"id": "lA_05", "connected": {"from": "ST_A_1", "to": "WP_A_0"}, "graph_idx": 0},
+    {"id": "lA_06", "connected": {"from": "ST_A_1", "to": "WP_A_1"}, "graph_idx": 0},
+    {"id": "lA_07", "connected": {"from": "WP_A_1", "to": "ST_A_1"}, "graph_idx": 0},
+    {"id": "lA_08", "connected": {"from": "WP_A_1", "to": "ST_A_2"}, "graph_idx": 0},
+    {"id": "lA_09", "connected": {"from": "ST_A_2", "to": "WP_A_1"}, "graph_idx": 0},
+
+    {"id": "lB_00", "connected": {"from": "HP_B",   "to": "CH_B"},   "graph_idx": 1},
+    {"id": "lB_01", "connected": {"from": "CH_B",   "to": "HP_B"},   "graph_idx": 1},
+    {"id": "lB_02", "connected": {"from": "CH_B",   "to": "WP_B_0"}, "graph_idx": 1},
+    {"id": "lB_03", "connected": {"from": "WP_B_0", "to": "CH_B"},   "graph_idx": 1},
+    {"id": "lB_04", "connected": {"from": "WP_B_0", "to": "ST_B_1"}, "graph_idx": 1},
+    {"id": "lB_05", "connected": {"from": "ST_B_1", "to": "WP_B_0"}, "graph_idx": 1},
+    {"id": "lB_06", "connected": {"from": "ST_B_1", "to": "WP_B_1"}, "graph_idx": 1},
+    {"id": "lB_07", "connected": {"from": "WP_B_1", "to": "ST_B_1"}, "graph_idx": 1},
+    {"id": "lB_08", "connected": {"from": "WP_B_1", "to": "ST_B_2"}, "graph_idx": 1},
+    {"id": "lB_09", "connected": {"from": "ST_B_2", "to": "WP_B_1"}, "graph_idx": 1},
+
+    {"id": "lC_00", "connected": {"from": "HP_C",   "to": "CH_C"},   "graph_idx": 2},
+    {"id": "lC_01", "connected": {"from": "CH_C",   "to": "HP_C"},   "graph_idx": 2},
+    {"id": "lC_02", "connected": {"from": "CH_C",   "to": "WP_C_0"}, "graph_idx": 2},
+    {"id": "lC_03", "connected": {"from": "WP_C_0", "to": "CH_C"},   "graph_idx": 2},
+    {"id": "lC_04", "connected": {"from": "WP_C_0", "to": "ST_C_1"}, "graph_idx": 2},
+    {"id": "lC_05", "connected": {"from": "ST_C_1", "to": "WP_C_0"}, "graph_idx": 2},
+    {"id": "lC_06", "connected": {"from": "ST_C_1", "to": "WP_C_1"}, "graph_idx": 2},
+    {"id": "lC_07", "connected": {"from": "WP_C_1", "to": "ST_C_1"}, "graph_idx": 2},
+    {"id": "lC_08", "connected": {"from": "WP_C_1", "to": "ST_C_2"}, "graph_idx": 2},
+    {"id": "lC_09", "connected": {"from": "ST_C_2", "to": "WP_C_1"}, "graph_idx": 2}
+  ],
+  "fleets": [
+    {"id": "FLEET_A", "graph_idx": 0, "color": "#0f9d58", "capabilities": ["lift"],      "count": 3, "max_speed_mps": 1.5, "priority": 1},
+    {"id": "FLEET_B", "graph_idx": 1, "color": "#2563eb", "capabilities": ["cleanroom"], "count": 3, "max_speed_mps": 1.2, "priority": 2},
+    {"id": "FLEET_C", "graph_idx": 2, "color": "#e0a000", "capabilities": [],            "count": 2, "max_speed_mps": 1.5, "priority": 3}
+  ],
+  "demands": [
+    {"pickup": "ST_A_1", "dropoff": "ST_A_2", "required_capability": "lift",      "count": 4, "priority": 1},
+    {"pickup": "ST_B_1", "dropoff": "ST_B_2", "required_capability": "cleanroom", "count": 4, "priority": 2},
+    {"pickup": "ST_C_1", "dropoff": "ST_C_2", "required_capability": null,        "count": 4, "priority": 3}
+  ]
+}
