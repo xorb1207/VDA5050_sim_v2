@@ -295,6 +295,39 @@ _TEMPLATE = r"""<!doctype html>
     }
     /* 선택된 노드 강조 */
     .node-selected { stroke: var(--accent); stroke-width: 3; opacity: 0.9; }
+    /* F1b-ux+: Speed 모드에서 선택된 edge 의 highlight halo */
+    .edge-selected-halo {
+      stroke: var(--accent);
+      stroke-opacity: 0.55;
+      fill: none;
+      pointer-events: none;
+    }
+
+    /* F1b-ux+: Speed Control 패널 */
+    .speed-ctrl-row { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+    .speed-ctrl-row input[type="number"] {
+      width:62px; padding:4px 6px; font-family:var(--font-mono); font-size:12px;
+      text-align:center; border:1px solid var(--border-strong); border-radius:4px;
+    }
+    .speed-ctrl-row input[type="range"] { flex:1; cursor:pointer; }
+    .speed-ctrl-status {
+      font-size:11.5px; color:var(--muted); margin-bottom:8px;
+      padding:6px 8px; background:var(--surface-3); border-radius:5px;
+      line-height:1.4;
+    }
+    .speed-ctrl-status strong { color:var(--ink); font-family:var(--font-mono); }
+    .speed-ctrl-buttons { display:flex; gap:6px; }
+    .speed-ctrl-buttons button {
+      flex:1; height:30px; padding:0 8px; font-size:11.5px; font-weight:500;
+      border:1px solid var(--border); background:var(--surface);
+      border-radius:5px; cursor:pointer; color:var(--ink);
+    }
+    .speed-ctrl-buttons button.primary {
+      background:var(--accent); border-color:var(--accent); color:#fff;
+    }
+    .speed-ctrl-buttons button.primary:hover:not(:disabled) { background:#1e4fcf; }
+    .speed-ctrl-buttons button:hover:not(:disabled) { background:var(--surface-3); }
+    .speed-ctrl-buttons button:disabled { opacity:0.45; cursor:not-allowed; }
     /* Add Edge 진행 중 첫 노드 */
     .node-edge-start { stroke: var(--warn); stroke-width: 3; opacity: 0.9; }
     /* Add Edge preview line (커서 따라가는 가이드) */
@@ -462,12 +495,35 @@ _TEMPLATE = r"""<!doctype html>
         <div id="speed-options" style="display:none; margin-top:12px; font-size:11.5px; color:var(--muted); line-height:1.6;">
           <strong style="color:var(--warn)">v_max 편집 모드</strong>
           <ul style="margin:6px 0 0 0; padding-left:18px;">
-            <li>Edge 위 <strong>휠 스크롤</strong> → v_max ±0.1 m/s (즉시 적용)</li>
-            <li>Edge 좌클릭 → 인스펙터 <strong>고정</strong> (마우스 떠도 +/-/입력 유지)</li>
-            <li>빈 공간 스크롤 → 평소 zoom</li>
-            <li>모든 edge 에 현재 v_max 값 표시</li>
+            <li>Edge 좌클릭 → 단일 선택 (Shift+클릭 = 추가/제거)</li>
+            <li>Shift+드래그 → 박스 안 edge 일괄 선택</li>
+            <li>단일 선택 시 <strong>Shift+휠</strong> → ±0.1 m/s 미세 조정</li>
+            <li>다중 선택 후 <strong>Apply</strong> → 일괄 적용</li>
+            <li>빈 공간 클릭 → 선택 해제</li>
             <li>Esc → Paint 모드로 복귀</li>
           </ul>
+        </div>
+      </div>
+
+      <!-- F1b-ux+: Speed Control 패널 (Speed 모드에서만 표시) -->
+      <div class="panel" id="speed-control-panel" style="display:none;">
+        <h2>Speed Control</h2>
+        <div id="speed-ctrl-status" class="speed-ctrl-status">
+          엣지를 선택하세요
+        </div>
+        <div class="speed-ctrl-row">
+          <input type="number" id="speed-bulk-input"
+                 min="0.1" max="5.0" step="0.1" value="1.0" placeholder="—" />
+          <span style="color:var(--muted); font-size:11px;">m/s</span>
+          <input type="range" id="speed-bulk-slider"
+                 min="0.1" max="5.0" step="0.1" value="1.0" />
+        </div>
+        <div class="speed-ctrl-buttons">
+          <button id="speed-apply-btn" class="primary" disabled>Apply to selected</button>
+          <button id="speed-unset-btn" disabled title="선택 엣지 v_max 미설정으로">Unset</button>
+        </div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:8px; line-height:1.5;">
+          범위 0.1 ~ 5.0 m/s · 기본 1.0 · 스텝 0.1
         </div>
       </div>
 
@@ -634,6 +690,8 @@ _TEMPLATE = r"""<!doctype html>
     // 다중 선택 상태
     let selectionBox = null;     // {x1,y1,x2,y2} (SVG 좌표) — Shift+드래그 중일 때만
     let selectedNodeIds = new Set();   // 박스로 선택된 노드들 (Stamp 일괄 적용용)
+    // F1b-ux+: Speed 모드에서 선택된 edge 들 — 일괄 v_max 적용 대상
+    let selectedEdgeIds = new Set();
 
     // 배경 이미지 상태
     let backgroundImage = {
@@ -674,6 +732,7 @@ _TEMPLATE = r"""<!doctype html>
       nodeById.clear();
       for (const n of nodes) nodeById.set(n.id, n);
       selectedNodeIds.clear();
+      selectedEdgeIds.clear();
       edgeStartNodeId = "";
       render();
     }
@@ -846,6 +905,7 @@ _TEMPLATE = r"""<!doctype html>
       edgeStartNodeId = "";
       edgePreviewClient = null;
       selectedNodeIds.clear();
+      selectedEdgeIds.clear();
       selectionBox = null;
       renderActiveGraphPanel();
       render();
@@ -987,14 +1047,21 @@ _TEMPLATE = r"""<!doctype html>
       document.getElementById("build-options").style.display = (newMode === "build") ? "" : "none";
       const speedOpts = document.getElementById("speed-options");
       if (speedOpts) speedOpts.style.display = (newMode === "speed") ? "" : "none";
-      // Speed 모드 떠나면 pin 해제
-      if (newMode !== "speed") pinnedEdgeId = "";
+      // F1b-ux+: Speed Control 패널은 Speed 모드 전용
+      const speedCtrl = document.getElementById("speed-control-panel");
+      if (speedCtrl) speedCtrl.style.display = (newMode === "speed") ? "" : "none";
+      // Speed 모드 떠나면 pin/선택 해제
+      if (newMode !== "speed") {
+        pinnedEdgeId = "";
+        selectedEdgeIds.clear();
+      }
       // 모드 전환 시 진행 중 인터랙션 모두 cancel
       paintTrajectory = null;
       edgeStartNodeId = "";
       edgePreviewClient = null;
       selectedNodeIds.clear();
       selectionBox = null;
+      updateSpeedControlPanel();
       render();
     }
     document.getElementById("mode-toggle").addEventListener("click", (e) => {
@@ -1118,6 +1185,7 @@ _TEMPLATE = r"""<!doctype html>
         const hasVMax = (e.v_max !== null && e.v_max !== undefined);
         const isActive = (e.id === hoveredEdgeId);
         const isPinned = (e.id === pinnedEdgeId);
+        const isSelectedEdge = selectedEdgeIds.has(e.id);
         let stroke;
         let strokeOpacity = 1;
         if (MULTI_FLEET_ACTIVE && !isActiveGraph) {
@@ -1134,8 +1202,8 @@ _TEMPLATE = r"""<!doctype html>
         } else {
           stroke = "var(--edge-unidir)";
         }
-        // 활성/hover/pinned 시 두께 증가
-        const width = (isPinned ? 5 : (isActive ? 4 : 2));
+        // 활성/hover/pinned/selected 시 두께 증가
+        const width = (isPinned || isSelectedEdge ? 5 : (isActive ? 4 : 2));
         const dx = x2-x1, dy = y2-y1;
         const len = Math.hypot(dx, dy) || 1;
         const angle = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -1164,8 +1232,14 @@ _TEMPLATE = r"""<!doctype html>
         const hitW = 9 / zoomScale;
         // F1a: 비활성 graph 의 lane 은 클릭/hover 차단 (Paint/Build 도 막힘)
         const grpEvents = (MULTI_FLEET_ACTIVE && !isActiveGraph) ? "none" : "auto";
+        // F1b-ux+: 선택된 edge 는 underlying halo 표시
+        const haloSvg = isSelectedEdge
+          ? `<line class="edge-selected-halo" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                   stroke-width="${(width + 6) / zoomScale}" vector-effect="non-scaling-stroke" />`
+          : "";
         return `<g data-edge-id="${e.id}" data-graph-idx="${eGraphIdx}"
                   opacity="${strokeOpacity}" pointer-events="${grpEvents}">
+          ${haloSvg}
           <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
                 stroke="transparent" stroke-width="${hitW}"
                 pointer-events="stroke" stroke-linecap="round" />
@@ -1287,7 +1361,7 @@ _TEMPLATE = r"""<!doctype html>
             const my = (sy(a.y) + sy(b.y)) / 2;
             const label = (he.v_max !== null && he.v_max !== undefined)
               ? `v_max ${Number(he.v_max).toFixed(2)} m/s`
-              : "v_max — (Shift+scroll)";
+              : "v_max — (Shift+휠 / 패널)";
             // labelScale = 1/zoomScale → 폰트는 항상 12px 보여짐
             vmaxTipSvg = `
               <g transform="translate(${mx} ${my - 14}) scale(${labelScale})">
@@ -1442,7 +1516,7 @@ _TEMPLATE = r"""<!doctype html>
                   style="width:24px; height:22px; padding:0; border:1px solid var(--border-strong);
                          background:var(--surface-2); border-radius:4px; cursor:pointer;">−</button>
           <input type="number" data-vmax-input id="vmax-input"
-                 value="${curVal}" placeholder="—" min="0.1" max="1.5" step="0.1"
+                 value="${curVal}" placeholder="—" min="0.1" max="5.0" step="0.1"
                  style="width:64px; padding:2px 4px; font-family:var(--font-mono); font-size:11px;
                         text-align:center; border:1px solid var(--border-strong); border-radius:4px;" />
           <button data-vmax-act="inc" title="+0.1"
@@ -1454,7 +1528,7 @@ _TEMPLATE = r"""<!doctype html>
                          background:transparent; color:var(--muted); border-radius:4px; cursor:pointer;">×</button>
         </div>
         <div style="font-size:10.5px; color:var(--muted); margin-top:4px;">
-          범위 0.1 ~ 1.5 m/s · Shift+scroll 도 가능
+          범위 0.1 ~ 5.0 m/s · Shift+휠 도 가능 (단일 선택 시)
         </div>`;
       document.getElementById("inspector").innerHTML = `
         <div class="inspector-row"><span class="k">type</span><span class="v">↔ EDGE</span></div>
@@ -1481,13 +1555,14 @@ _TEMPLATE = r"""<!doctype html>
             pushHistoryAndApply(edge, null);
           } else {
             const dir = (act === "inc") ? +1 : -1;
-            const cur = (edge.v_max == null) ? 1.0 : Number(edge.v_max);
+            const cur = (edge.v_max == null) ? VMAX_DEFAULT : Number(edge.v_max);
             const next = clampToStep(cur + dir * VMAX_STEP, VMAX_MIN, VMAX_MAX);
             if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
               pushHistoryAndApply(edge, next);
             }
           }
           showInspectorEdge(findEdge());
+          if (typeof updateSpeedControlPanel === "function") updateSpeedControlPanel();
         });
       });
       const inputEl = inspector.querySelector("[data-vmax-input]");
@@ -1508,6 +1583,7 @@ _TEMPLATE = r"""<!doctype html>
             }
           }
           showInspectorEdge(findEdge());
+          if (typeof updateSpeedControlPanel === "function") updateSpeedControlPanel();
         });
       }
     }
@@ -1519,7 +1595,8 @@ _TEMPLATE = r"""<!doctype html>
     //     · 0.6 ↔ 0.7 경계 없음 — 전 범위 자유 이동
     //     · 미설정(null)이면 1.0 부터 시작
     const VMAX_STEP = 0.1;
-    const VMAX_MIN = 0.1, VMAX_MAX = 1.5;
+    const VMAX_MIN = 0.1, VMAX_MAX = 5.0;
+    const VMAX_DEFAULT = 1.0;
     function pushHistoryAndApply(edge, newVMax) {
       history.past.push(snapshot());
       history.future = [];
@@ -1530,6 +1607,131 @@ _TEMPLATE = r"""<!doctype html>
       const stepped = Math.round(v / VMAX_STEP) * VMAX_STEP;
       return Math.min(hi, Math.max(lo, Number(stepped.toFixed(2))));
     }
+
+    // ── F1b-ux+: Speed Control 패널 (일괄 v_max 적용) ───────────
+    // selectedEdgeIds 의 현재 v_max 분포 → input/slider/status 갱신.
+    // - 0 선택: 비활성화
+    // - 1 선택: input 에 현재 값 표시 (없으면 VMAX_DEFAULT)
+    // - 다중 선택 & 동일 값: input 에 그 값 표시
+    // - 다중 선택 & 다른 값: input value 비우고 placeholder "(mixed)"
+    function updateSpeedControlPanel() {
+      const panel = document.getElementById("speed-control-panel");
+      if (!panel || panel.style.display === "none") return;
+      const statusEl = document.getElementById("speed-ctrl-status");
+      const inputEl = document.getElementById("speed-bulk-input");
+      const sliderEl = document.getElementById("speed-bulk-slider");
+      const applyBtn = document.getElementById("speed-apply-btn");
+      const unsetBtn = document.getElementById("speed-unset-btn");
+      if (!statusEl || !inputEl || !sliderEl) return;
+
+      const count = selectedEdgeIds.size;
+      if (count === 0) {
+        statusEl.innerHTML = "엣지를 선택하세요 <span style=\"color:var(--muted-2);\">(클릭 / Shift+드래그)</span>";
+        inputEl.placeholder = "—";
+        applyBtn.disabled = true;
+        unsetBtn.disabled = true;
+        return;
+      }
+      // 선택 엣지들의 v_max 분포
+      const values = [];
+      let hasUnset = false;
+      for (const eid of selectedEdgeIds) {
+        const ed = edges.find(x => x.id === eid);
+        if (!ed) continue;
+        if (ed.v_max == null) hasUnset = true;
+        else values.push(Number(ed.v_max));
+      }
+      const allUnset = (values.length === 0);
+      const uniqVals = [...new Set(values.map(v => v.toFixed(2)))];
+      const allSame = (values.length === selectedEdgeIds.size && uniqVals.length === 1);
+
+      let statusHtml;
+      if (count === 1) {
+        statusHtml = `<strong>1</strong> edge 선택됨` +
+          (allUnset ? ` · v_max 미설정` : ` · 현재 <strong>${uniqVals[0]} m/s</strong>`);
+      } else if (allSame) {
+        statusHtml = `<strong>${count}</strong> edges 선택됨 · 모두 <strong>${uniqVals[0]} m/s</strong>`;
+      } else if (allUnset) {
+        statusHtml = `<strong>${count}</strong> edges 선택됨 · 모두 미설정`;
+      } else {
+        const setN = values.length;
+        const mixed = `${uniqVals.length}가지 값`;
+        const unsetStr = hasUnset ? ` + ${count - setN} unset` : "";
+        statusHtml = `<strong>${count}</strong> edges 선택됨 · <strong>(mixed)</strong> <span style="color:var(--muted-2);">${mixed}${unsetStr}</span>`;
+      }
+      statusEl.innerHTML = statusHtml;
+
+      // input/slider 값
+      if (allSame || (count === 1 && !allUnset)) {
+        const v = Number(uniqVals[0]);
+        inputEl.value = v.toFixed(2);
+        sliderEl.value = v.toFixed(2);
+        inputEl.placeholder = "—";
+      } else if (allUnset) {
+        // 미설정만 있으면 기본값 1.0 으로 prefill (apply 시 모두 1.0)
+        inputEl.value = VMAX_DEFAULT.toFixed(2);
+        sliderEl.value = VMAX_DEFAULT.toFixed(2);
+        inputEl.placeholder = "—";
+      } else {
+        // mixed
+        inputEl.value = "";
+        inputEl.placeholder = "(mixed)";
+      }
+      applyBtn.disabled = false;
+      unsetBtn.disabled = false;
+    }
+
+    function applyBulkSpeed() {
+      if (selectedEdgeIds.size === 0) return;
+      const inputEl = document.getElementById("speed-bulk-input");
+      const raw = parseFloat(inputEl.value);
+      if (!Number.isFinite(raw)) {
+        showToast("유효한 m/s 값을 입력하세요");
+        return;
+      }
+      const v = clampToStep(raw, VMAX_MIN, VMAX_MAX);
+      history.past.push(snapshot());
+      history.future = [];
+      let changed = 0;
+      for (const eid of selectedEdgeIds) {
+        const ed = edges.find(x => x.id === eid);
+        if (!ed) continue;
+        const cur = (ed.v_max == null) ? null : Number(ed.v_max);
+        if (cur === null || Math.abs(cur - v) > 1e-9) {
+          ed.v_max = v;
+          changed++;
+        }
+      }
+      showToast(`${changed} edges → v_max ${v.toFixed(2)} m/s`);
+      updateSpeedControlPanel();
+      if (selectedEdgeIds.size === 1) {
+        const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+        if (ed) showInspectorEdge(ed);
+      }
+      render();
+    }
+
+    function unsetBulkSpeed() {
+      if (selectedEdgeIds.size === 0) return;
+      history.past.push(snapshot());
+      history.future = [];
+      let changed = 0;
+      for (const eid of selectedEdgeIds) {
+        const ed = edges.find(x => x.id === eid);
+        if (!ed) continue;
+        if (ed.v_max != null) {
+          ed.v_max = null;
+          changed++;
+        }
+      }
+      showToast(`${changed} edges → v_max 미설정`);
+      updateSpeedControlPanel();
+      if (selectedEdgeIds.size === 1) {
+        const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+        if (ed) showInspectorEdge(ed);
+      }
+      render();
+    }
     // Wheel 누적기 — 마우스(deltaMode=0 pixel ~100/click, mode=1 line ~3/click) 와
     // trackpad(mode=0 작은 값 ~±1~10 다발) 양쪽 모두 자연스럽게 1 tick씩 처리.
     //   1. deltaMode 정규화 (line/page → pixel)
@@ -1539,10 +1741,15 @@ _TEMPLATE = r"""<!doctype html>
     let _wheelResetTimer = null;
     const WHEEL_ACCUM_THRESHOLD = 80;  // 마우스 한 click(~100px)에 1 tick, trackpad 짧은 swipe는 누적 후
     document.getElementById("map").addEventListener("wheel", (e) => {
-      // Speed 모드 + edge hover → v_max 편집. modifier 의존 없음.
-      // (Shift+scroll 방식은 키 release timing 문제로 폐기됨)
-      if (mode === "speed" && hoveredEdgeId) {
-        const edge = edges.find(x => x.id === hoveredEdgeId);
+      // F1b-ux+ (rev): Speed 모드에서는 Shift+휠 = 단일 edge 미세조정 (±0.1 m/s).
+      //   - 다중 선택 (size > 1) 시에는 wheel 로 변경 불가 (panel 의 Apply 사용)
+      //   - 단일 선택 또는 hover 한 edge 가 있을 때만 동작
+      //   - 평소 휠 (modifier 없음) = zoom (모드 무관)
+      if (mode === "speed" && e.shiftKey && selectedEdgeIds.size <= 1) {
+        const targetEid = (selectedEdgeIds.size === 1)
+          ? [...selectedEdgeIds][0]
+          : hoveredEdgeId;
+        const edge = targetEid ? edges.find(x => x.id === targetEid) : null;
         if (edge) {
           e.preventDefault();
           // deltaMode 정규화
@@ -1559,11 +1766,12 @@ _TEMPLATE = r"""<!doctype html>
             _wheelAccum -= s * WHEEL_ACCUM_THRESHOLD;
           }
           if (ticks === 0) return;
-          const cur = (edge.v_max == null) ? 1.0 : Number(edge.v_max);
+          const cur = (edge.v_max == null) ? VMAX_DEFAULT : Number(edge.v_max);
           const next = clampToStep(cur + ticks * VMAX_STEP, VMAX_MIN, VMAX_MAX);
           if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
             pushHistoryAndApply(edge, next);
             showInspectorEdge(edge);
+            updateSpeedControlPanel();
           }
           return;
         }
@@ -1626,10 +1834,13 @@ _TEMPLATE = r"""<!doctype html>
         return;
       }
 
-      // Shift + 좌클릭 = 다중 선택 박스 (Stamp / Build 모드에서)
-      if (e.shiftKey && e.button === 0 && (mode === "stamp" || mode === "build")) {
+      // Shift + 좌클릭 = 다중 선택 박스 (Stamp / Build / Speed 모드에서)
+      if (e.shiftKey && e.button === 0 && (mode === "stamp" || mode === "build" || mode === "speed")) {
         selectionBox = {x1: localX, y1: localY, x2: localX, y2: localY};
-        selectedNodeIds.clear();
+        // Speed 모드에서는 기존 edge 선택을 유지 (Shift = additive)
+        if (mode !== "speed") {
+          selectedNodeIds.clear();
+        }
         e.preventDefault();
         return;
       }
@@ -1641,19 +1852,40 @@ _TEMPLATE = r"""<!doctype html>
         return;
       }
 
-      // Speed 모드: edge 좌클릭 → 인스펙터 pin (마우스 떠도 +/- 사용 유지)
+      // Speed 모드: edge 좌클릭 → 선택 (Shift = 추가/제거 토글)
+      // selectedEdgeIds 가 1개면 인스펙터에 그 edge 표시 (pin 역할 흡수).
       if (mode === "speed") {
         if (onEdge && e.button === 0) {
           const eid = e.target.closest("[data-edge-id]").dataset.edgeId;
-          pinnedEdgeId = (pinnedEdgeId === eid) ? "" : eid;  // 같은 edge 재클릭 → unpin
-          const ed = edges.find(x => x.id === eid);
-          if (ed) showInspectorEdge(ed);
+          if (e.shiftKey) {
+            // 토글
+            if (selectedEdgeIds.has(eid)) selectedEdgeIds.delete(eid);
+            else selectedEdgeIds.add(eid);
+          } else {
+            // 단일 선택으로 replace (이미 선택만 1개+동일이면 해제)
+            const onlyMe = (selectedEdgeIds.size === 1 && selectedEdgeIds.has(eid));
+            selectedEdgeIds.clear();
+            if (!onlyMe) selectedEdgeIds.add(eid);
+          }
+          pinnedEdgeId = (selectedEdgeIds.size === 1) ? [...selectedEdgeIds][0] : "";
+          updateSpeedControlPanel();
+          if (selectedEdgeIds.size === 1) {
+            const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+            if (ed) showInspectorEdge(ed);
+          } else if (selectedEdgeIds.size > 1) {
+            _emptyInspectorNow();
+          }
           render();
           return;
         }
-        // 빈 공간 좌클릭 → pin 해제 + 평소 pan
+        // 빈 공간 좌클릭 → 선택 해제 + 평소 pan
         if (!onEdge && !onNode && e.button === 0) {
-          if (pinnedEdgeId) { pinnedEdgeId = ""; render(); }
+          if (selectedEdgeIds.size > 0 || pinnedEdgeId) {
+            selectedEdgeIds.clear();
+            pinnedEdgeId = "";
+            updateSpeedControlPanel();
+            render();
+          }
           isPanning = true;
           panStart = {x: e.clientX, y: e.clientY, panX, panY};
           document.querySelector(".map-shell").classList.add("dragging");
@@ -1749,16 +1981,36 @@ _TEMPLATE = r"""<!doctype html>
       if (selectionBox) {
         selectionBox.x2 = localX;
         selectionBox.y2 = localY;
-        // 실시간으로 박스 안 노드 마킹 (시각 피드백)
-        selectedNodeIds.clear();
         const xLo = Math.min(selectionBox.x1, selectionBox.x2);
         const xHi = Math.max(selectionBox.x1, selectionBox.x2);
         const yLo = Math.min(selectionBox.y1, selectionBox.y2);
         const yHi = Math.max(selectionBox.y1, selectionBox.y2);
-        for (const n of nodes) {
-          const cx = sx(n.x), cy = sy(n.y);
-          if (cx >= xLo && cx <= xHi && cy >= yLo && cy <= yHi) {
-            selectedNodeIds.add(n.id);
+        if (mode === "speed") {
+          // F1b-ux+: Speed 모드 — edge 미드포인트가 박스 안에 들어오면 선택.
+          //   ※ active graph 만 (multi-fleet 환경에서 비활성 graph 잠금)
+          // 드래그 시작 시 selectedEdgeIds 를 비우지 않았기에 이번 박스 범위만 새로
+          // 마킹하려면 한번 비우고 다시 채움.
+          selectedEdgeIds.clear();
+          for (const e of edges) {
+            const eGraphIdx = (e.graph_idx == null) ? 0 : e.graph_idx;
+            if (MULTI_FLEET_ACTIVE && eGraphIdx !== activeGraphIdx) continue;
+            const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+            if (!a || !b) continue;
+            const mx = (sx(a.x) + sx(b.x)) / 2;
+            const my = (sy(a.y) + sy(b.y)) / 2;
+            if (mx >= xLo && mx <= xHi && my >= yLo && my <= yHi) {
+              selectedEdgeIds.add(e.id);
+            }
+          }
+          updateSpeedControlPanel();
+        } else {
+          // Stamp/Build: 박스 안 노드 마킹 (실시간 시각 피드백)
+          selectedNodeIds.clear();
+          for (const n of nodes) {
+            const cx = sx(n.x), cy = sy(n.y);
+            if (cx >= xLo && cx <= xHi && cy >= yLo && cy <= yHi) {
+              selectedNodeIds.add(n.id);
+            }
           }
         }
         render();
@@ -1789,7 +2041,17 @@ _TEMPLATE = r"""<!doctype html>
       // 다중 선택 박스 종료 → 현재 모드/도구에 맞춰 일괄 적용
       if (selectionBox) {
         selectionBox = null;
-        if (selectedNodeIds.size > 0) {
+        if (mode === "speed") {
+          // F1b-ux+: Speed 모드 — 박스 선택 결과만 유지, Apply 버튼으로 실제 변경
+          pinnedEdgeId = (selectedEdgeIds.size === 1) ? [...selectedEdgeIds][0] : "";
+          updateSpeedControlPanel();
+          if (selectedEdgeIds.size === 1) {
+            const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+            if (ed) showInspectorEdge(ed);
+          } else if (selectedEdgeIds.size > 1) {
+            _emptyInspectorNow();
+          }
+        } else if (selectedNodeIds.size > 0) {
           // Stamp 모드: 현재 stamp 도구로 일괄
           if (mode === "stamp" && stampTool !== "inspect") {
             stampSelected(stampTool);
@@ -2306,8 +2568,38 @@ _TEMPLATE = r"""<!doctype html>
       showToast("Background image cleared");
     });
 
+    // ── F1b-ux+: Speed Control 패널 이벤트 바인딩 ───────────────
+    (function bindSpeedControlPanel() {
+      const inputEl = document.getElementById("speed-bulk-input");
+      const sliderEl = document.getElementById("speed-bulk-slider");
+      const applyBtn = document.getElementById("speed-apply-btn");
+      const unsetBtn = document.getElementById("speed-unset-btn");
+      if (!inputEl || !sliderEl || !applyBtn || !unsetBtn) return;
+      // slider 움직이면 input 동기화
+      sliderEl.addEventListener("input", () => {
+        inputEl.value = Number(sliderEl.value).toFixed(2);
+      });
+      // input 바뀌면 slider 동기화 (범위 안에서)
+      inputEl.addEventListener("input", () => {
+        const v = parseFloat(inputEl.value);
+        if (Number.isFinite(v) && v >= VMAX_MIN && v <= VMAX_MAX) {
+          sliderEl.value = v.toFixed(2);
+        }
+      });
+      // Enter 키로 Apply
+      inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          applyBulkSpeed();
+        }
+      });
+      applyBtn.addEventListener("click", applyBulkSpeed);
+      unsetBtn.addEventListener("click", unsetBulkSpeed);
+    })();
+
     // 초기 UI 상태 설정
     updateBackgroundImageUI();
+    updateSpeedControlPanel();
     // F1a: Active Graph / Fleet Info 패널 초기 렌더 (multi-fleet 환경에서만 노출)
     renderActiveGraphPanel();
 
