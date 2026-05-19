@@ -2273,15 +2273,18 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <span class="meta">AGV</span>
             <select id="agv-focus"><option value="">전체</option></select>
             <button id="zoom-reset-btn" type="button">줌 초기화</button>
-            <button id="heatmap-toggle" type="button" title="히트맵 토글">🔥 히트맵</button>
-            <button id="traffic-toggle" type="button" title="엣지별 AGV 통과 횟수 트래픽 히트맵 (사고 히트맵과 동시 활성 불가)">🚦 트래픽</button>
-            <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커">⚠ 충돌</button>
-            <button id="block-toggle" type="button" title="엣지 클릭 차단/해제 — 영향 AGV 가 즉시 reroute">⛔ 차단</button>
+            <button id="heatmap-toggle" type="button" title="엣지별 사고 누적 (head-on / section_conflict / follow-on 차단 만 가산. reroute · deadlock_resolved 제외)">🔥 히트맵</button>
+            <button id="traffic-toggle" type="button" title="엣지별 AGV 통과 횟수 (edge_enter 누적). 사고 히트맵과 동시 활성 불가">🚦 트래픽</button>
+            <button id="collision-toggle" type="button" title="실시간 충돌 의심 마커 (노드 동시 점유 / 엣지 head-on 의심)">⚠ 충돌</button>
+            <button id="block-toggle" type="button" title="엣지 클릭 → 차단 / 해제. 차단 시 path 에 포함된 AGV 는 즉시 reroute (이미 진입 중인 AGV 는 끝까지 진행 후 다음 hop 부터 우회)">⛔ 차단</button>
             <button id="manual-job-toggle" type="button" title="노드 두 개 클릭(pickup → dropoff)으로 수동 demand 발행. ESC 로 취소">📋 수동 Job</button>
           </div>
         </div>
         <div class="hint">
           맵: 휠 확대/축소, 드래그 이동, 더블클릭 줌 초기화. AGV 클릭 시 포커스. 우측 사고 묶음 클릭 시 해당 시점으로 점프.
+          <span class="meta" style="margin-left:10px;">
+            빨강 엣지 = 다른 AGV 에 막혀 대기 중인 AGV 의 진입 시도 엣지 (단순 통과·예약 중인 엣지는 색 없음)
+          </span>
           <span id="block-mode-hint" style="display:none; color:var(--danger); font-weight:600; margin-left:6px;">
             ⛔ 차단 모드: 엣지 클릭 → 차단/해제
           </span>
@@ -2291,12 +2294,12 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             <span class="mj-hint">ESC 취소</span>
           </span>
           <span class="heatmap-legend" id="heatmap-legend">
-            누적 사고 강도
+            누적 사고 강도 (head-on/section/follow-on)
             <span class="gradient"></span>
             <span id="heatmap-max-label">최대 —</span>
           </span>
           <span class="traffic-legend" id="traffic-legend">
-            통과 횟수
+            통과 횟수 (edge_enter 누적)
             <span class="gradient"></span>
             <span id="traffic-max-label">최대 —</span>
           </span>
