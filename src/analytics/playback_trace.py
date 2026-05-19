@@ -2042,6 +2042,16 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     #manual-job-panel .mj-hint {{ color:var(--muted); font-weight:400; margin-left:4px; }}
     .mj-mode svg .node-hit {{ cursor:crosshair; }}
     .mj-mode svg .node-hit:hover {{ fill:rgba(5,150,105,0.18); }}
+    /* 수동 Job 모드: IDLE AGV 강조 ring (할당 가능 후보). */
+    .agv-idle-mj-ring {{ fill:none; stroke:#059669; stroke-width:2.5; stroke-dasharray:4 3; }}
+    /* 방금 수동 Job 할당된 AGV 강조 — 노란 펄스 ring. */
+    .agv-just-assigned-ring {{ fill:none; stroke:#f59e0b; stroke-width:3; }}
+    /* 최근 할당 패널 — toast 가 사라진 후에도 누가 받았는지 추적용 */
+    #mj-last-assigned {{ display:none; align-items:center; gap:6px; padding:4px 10px;
+      background:#fef3c7; color:#92400e; border:1px solid #fcd34d;
+      border-radius:var(--radius-sm); font-size:12px; margin-left:6px; cursor:pointer; }}
+    #mj-last-assigned.active {{ display:inline-flex; }}
+    #mj-last-assigned:hover {{ background:#fde68a; }}
     svg .node-hit {{ fill:transparent; pointer-events:auto; }}
     svg .node-pickup-ring {{ fill:none; stroke:#059669; stroke-width:2.5;
       vector-effect:non-scaling-stroke; opacity:0.9; }}
@@ -2311,7 +2321,12 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           <span id="manual-job-panel">
             📋 수동 Job — <span id="mj-state-label">pickup 노드 선택</span>
             <span id="mj-pickup-badge" style="display:none;"></span>
+            <span id="mj-idle-count" class="mj-hint"></span>
             <span class="mj-hint">ESC 취소</span>
+          </span>
+          <span id="mj-last-assigned" title="클릭하면 해당 AGV 포커스 / 다시 클릭 해제">
+            📍 방금 할당: <strong id="mj-last-assigned-agv">—</strong>
+            <span id="mj-last-assigned-route" style="font-family:var(--font-mono); font-size:11px; color:#78350f;"></span>
           </span>
           <span class="heatmap-legend" id="heatmap-legend">
             누적 사고 강도
@@ -2738,6 +2753,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
         if (msg.kpi) updateLiveKpi(msg.kpi);
         // 데드락 필드: KPI chip + 사이클 강조 + alert 배너
         updateDeadlock(msg);
+        // 수동 Job 모드 IDLE AGV 카운트 갱신
+        if (manualJobMode) updateManualJobPanel(snap);
         // AGV 목록이 생기면 드롭다운 채우기
         if (snap.agvs && snap.agvs.length && agvIds.length === 0) {{
           agvIds = snap.agvs.map(a => a.agv_id).sort();
@@ -3237,6 +3254,32 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
               </g>`;
             }}).join('');
           }})()}}
+          ${{(()=>{{
+            // 📋 수동 Job 모드: IDLE AGV 둘레 초록 dashed ring (할당 후보)
+            if (!manualJobMode) return '';
+            return (snapshot.agvs||[]).filter(a=>a.state==='IDLE').map(a => {{
+              const cx=sx(a.x), cy=sy(a.y);
+              return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">
+                <circle r="13" class="agv-idle-mj-ring">
+                  <animate attributeName="r" values="11;15;11" dur="1.6s" repeatCount="indefinite" />
+                </circle>
+              </g>`;
+            }}).join('');
+          }})()}}
+          ${{(()=>{{
+            // 📍 방금 할당된 AGV — 노란 펄스 ring (focus 와 별개 시각 강조)
+            const a = window.__mjJustAssigned;
+            if (!a || Date.now() >= a.until_ms) return '';
+            const agv = (snapshot.agvs||[]).find(x=>x.agv_id===a.agv_id);
+            if (!agv) return '';
+            const cx=sx(agv.x), cy=sy(agv.y);
+            return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">
+              <circle r="18" class="agv-just-assigned-ring">
+                <animate attributeName="r" values="16;24;16" dur="1.0s" repeatCount="indefinite" />
+                <animate attributeName="stroke-opacity" values="1;0.4;1" dur="1.0s" repeatCount="indefinite" />
+              </circle>
+            </g>`;
+          }})()}}
         </g>`;
     }}
 
@@ -3697,18 +3740,24 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     // ── GAP-B: 수동 Job UI ───────────────────────────────────────
     let manualJobMode = false;
     window.__mjPickup = null;  // renderMap 가 참조 (전역 노출)
+    // 방금 할당된 AGV 추적 — toast 가 사라진 후에도 식별 가능. render() 가 참조.
+    window.__mjJustAssigned = null;  // {{ agv_id, demand_id, pickup, dropoff, until_ms }}
+    let mjJustAssignedTimer = null;
     const mjToast = document.getElementById('mj-toast');
     let mjToastTimer = null;
     function showToast(msg, kind) {{
       mjToast.textContent = msg;
       mjToast.className = 'mj-toast show' + (kind ? ' ' + kind : '');
       if (mjToastTimer) clearTimeout(mjToastTimer);
-      mjToastTimer = setTimeout(()=>{{ mjToast.className='mj-toast'; }}, 2400);
+      // dispatch 성공 토스트는 좀 더 오래 보여줌
+      const dur = (kind === 'err' || kind === 'warn') ? 2800 : 4500;
+      mjToastTimer = setTimeout(()=>{{ mjToast.className='mj-toast'; }}, dur);
     }}
-    function updateManualJobPanel() {{
+    function updateManualJobPanel(snapshot) {{
       const panel = document.getElementById('manual-job-panel');
       const label = document.getElementById('mj-state-label');
       const badge = document.getElementById('mj-pickup-badge');
+      const idleCnt = document.getElementById('mj-idle-count');
       if (!manualJobMode) {{
         panel.classList.remove('active');
         return;
@@ -3722,6 +3771,28 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
         label.textContent = 'pickup 노드 선택';
         badge.style.display = 'none';
       }}
+      // 사용 가능한 IDLE AGV 수 — 후보가 0개면 미리 알림
+      const snap = snapshot || (snapshots.length ? snapshots[snapshots.length-1] : null);
+      if (snap && idleCnt) {{
+        const idle = (snap.agvs||[]).filter(a => a.state === 'IDLE').length;
+        idleCnt.textContent = `· IDLE AGV ${{idle}}대`;
+        idleCnt.style.color = idle === 0 ? '#b91c1c' : 'var(--muted)';
+      }} else if (idleCnt) {{
+        idleCnt.textContent = '';
+      }}
+    }}
+    function updateLastAssignedPanel() {{
+      const el = document.getElementById('mj-last-assigned');
+      const a = window.__mjJustAssigned;
+      const agvEl = document.getElementById('mj-last-assigned-agv');
+      const rtEl = document.getElementById('mj-last-assigned-route');
+      if (!a) {{
+        el.classList.remove('active');
+        return;
+      }}
+      el.classList.add('active');
+      agvEl.textContent = a.agv_id;
+      rtEl.textContent = a.pickup && a.dropoff ? ` · ${{a.pickup}} → ${{a.dropoff}}` : '';
     }}
     function resetManualPickup() {{
       window.__mjPickup = null;
@@ -3734,7 +3805,14 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       document.body.classList.toggle('mj-mode', manualJobMode);
       const btn = document.getElementById('manual-job-toggle');
       btn.classList.toggle('active', manualJobMode);
-      updateManualJobPanel();
+      const lastSnap = snapshots.length ? snapshots[snapshots.length-1] : null;
+      updateManualJobPanel(lastSnap);
+      if (manualJobMode && lastSnap) {{
+        const idle = (lastSnap.agvs||[]).filter(a => a.state === 'IDLE').length;
+        if (idle === 0) {{
+          showToast('현재 IDLE AGV 없음 — 시뮬 진행 후 다시 시도', 'warn');
+        }}
+      }}
       render();
     }}
     async function handleManualJobNodeClick(nodeId) {{
@@ -3769,17 +3847,51 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
         if (!resp.ok) {{
           showToast('발행 실패: ' + (data.detail || resp.status), 'err');
         }} else if (data.status === 'dispatched') {{
-          showToast(`📋 Demand ${{data.demand_id}} → ${{data.agv_id}} (${{pickup}} → ${{dropoff}})`);
+          showToast(`📋 ${{data.agv_id}} 에게 ${{pickup}} → ${{dropoff}} 할당 (demand ${{data.demand_id}})`);
+          // 자동 포커스 — 우측 상세 패널에 그 AGV 표시. 사용자가 명시적으로 다른
+          // AGV 클릭하기 전까지 유지됨.
+          focusedAgvId = data.agv_id;
+          // agv-focus dropdown 동기화
+          const focusSel = document.getElementById('agv-focus');
+          if (focusSel) focusSel.value = data.agv_id;
+          // 노란 ring 강조 8초 — render 함수가 window.__mjJustAssigned 참조해 그림
+          window.__mjJustAssigned = {{
+            agv_id: data.agv_id,
+            demand_id: data.demand_id,
+            pickup, dropoff,
+            until_ms: Date.now() + 8000,
+          }};
+          updateLastAssignedPanel();
+          if (mjJustAssignedTimer) clearTimeout(mjJustAssignedTimer);
+          mjJustAssignedTimer = setTimeout(() => {{
+            window.__mjJustAssigned = null;
+            updateLastAssignedPanel();
+            render();
+          }}, 8000);
+          render();
         }} else if (data.status === 'pending') {{
           showToast(`📋 ${{data.demand_id}} pending — ${{data.reason || ''}}`, 'warn');
         }} else {{
-          showToast('거부: ' + (data.reason || data.status || 'unknown'), 'err');
+          // dispatched=false: 흔히 IDLE AGV 없거나 capability 미일치
+          const why = data.reason || data.status || 'unknown';
+          const hint = (why.includes('no_idle_agv') || why.includes('agv_not_idle'))
+            ? ' (배정 가능한 IDLE AGV 없음 — 시뮬 잠시 진행 후 재시도)' : '';
+          showToast('거부: ' + why + hint, 'err');
         }}
       }} catch (err) {{
         showToast('네트워크 오류: ' + err.message, 'err');
       }}
       resetManualPickup();
     }}
+    // 최근 할당 패널 클릭 — 포커스 토글
+    document.getElementById('mj-last-assigned').addEventListener('click', () => {{
+      const a = window.__mjJustAssigned;
+      if (!a) return;
+      focusedAgvId = (focusedAgvId === a.agv_id) ? '' : a.agv_id;
+      const focusSel = document.getElementById('agv-focus');
+      if (focusSel) focusSel.value = focusedAgvId;
+      render();
+    }});
     document.getElementById('manual-job-toggle').addEventListener('click', ()=>{{
       setManualJobMode(!manualJobMode);
     }});
