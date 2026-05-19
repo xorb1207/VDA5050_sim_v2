@@ -1,0 +1,3151 @@
+<!DOCTYPE html>
+<!-- saved from url=(0039)http://127.0.0.1:8987/editor_smoke.html -->
+<html lang="ko"><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/content/location/location.js" id="eppiocemhmnlbhjplcgkofciiegomcon"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/extend-native-history-api.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/requests.js"></script><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><script bis_use="true" type="text/javascript" charset="utf-8" data-bis-config="{&quot;blacklistIframeSrc&quot;:[&quot;facebook.com/&quot;,&quot;twitter.com/&quot;,&quot;youtube-nocookie.com/embed/&quot;,&quot;//vk.com/&quot;,&quot;//www.vk.com/&quot;,&quot;linkedin.com/&quot;,&quot;//www.linkedin.com/&quot;,&quot;//instagram.com/&quot;,&quot;//www.instagram.com/&quot;,&quot;//www.google.com/recaptcha/api2/&quot;,&quot;//www.google.com/recaptcha/enterprise/anchor&quot;,&quot;//hangouts.google.com/webchat/&quot;,&quot;//www.google.com/calendar/&quot;,&quot;//www.google.com/maps/embed&quot;,&quot;spotify.com/&quot;,&quot;soundcloud.com/&quot;,&quot;//player.vimeo.com/&quot;,&quot;//disqus.com/&quot;,&quot;//tgwidget.com/&quot;,&quot;//js.driftt.com/&quot;,&quot;friends2follow.com&quot;,&quot;/widget&quot;,&quot;login&quot;,&quot;//video.bigmir.net/&quot;,&quot;blogger.com&quot;,&quot;//smartlock.google.com/&quot;,&quot;//keep.google.com/&quot;,&quot;/web.tolstoycomments.com/&quot;,&quot;moz-extension://&quot;,&quot;chrome-extension://&quot;,&quot;/auth/&quot;,&quot;//analytics.google.com/&quot;,&quot;adclarity.com&quot;,&quot;paddle.com/checkout&quot;,&quot;hcaptcha.com&quot;,&quot;recaptcha.net&quot;,&quot;2captcha.com&quot;,&quot;accounts.google.com&quot;,&quot;www.google.com/shopping/customerreviews&quot;,&quot;buy.tinypass.com&quot;,&quot;gstatic.com&quot;,&quot;secureir.ebaystatic.com&quot;,&quot;docs.google.com&quot;,&quot;contacts.google.com&quot;,&quot;github.com&quot;,&quot;mail.google.com&quot;,&quot;chat.google.com&quot;,&quot;audio.xpleer.com&quot;,&quot;keepa.com&quot;,&quot;static.xx.fbcdn.net&quot;,&quot;sas.selleramp.com&quot;,&quot;1plus1.video&quot;,&quot;console.googletagservices.com&quot;,&quot;//lnkd.demdex.net/&quot;,&quot;//radar.cedexis.com/&quot;,&quot;//li.protechts.net/&quot;,&quot;challenges.cloudflare.com/&quot;,&quot;ogs.google.com&quot;,&quot;//www.ukrnafta.com/data/map/&quot;,&quot;//maps.google.com/maps&quot;,&quot;//www.openstreetmap.org/export/embed.html&quot;,&quot;//www.google.com/maps/d/u/3/embed&quot;,&quot;//itm.ebaydesc.com/itmdesc&quot;,&quot;//books.google.com/books&quot;,&quot;//embed.podcasts.apple.com&quot;,&quot;//www.paypal.com/smartchat&quot;,&quot;//www.centurylink.com/assets/includes/common/sfChatiFrame.html&quot;,&quot;//macmillan-prod-gen.ada.support/embed&quot;,&quot;//macmillan-prod-gen.ada.support/chat&quot;,&quot;//ctl-consumer.my.site.com/&quot;],&quot;whitelistDomainsForPostBody&quot;:[&quot;youtube.com&quot;]}" data-dynamic-id="19331649-968e-49ea-b3b5-dd5d366f2b2d" src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/executors/200.js"></script>
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Map Editor</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f9; --surface: #ffffff; --surface-2: #fafbfd; --surface-3: #f1f4f8;
+      --ink: #0f172a; --muted: #64748b; --muted-2: #94a3b8;
+      --border: #e3e8ef; --border-strong: #cbd3df;
+      --edge: #c6d0db; --edge-bidir: #2459d1; --edge-unidir: #0f9d58;
+      --accent: #2563eb; --accent-soft: #e6efff;
+      --success: #0f9d58; --warn: #c77700; --danger: #c0392b;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Apple SD Gothic Neo", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+      --shadow-sm: 0 1px 2px rgba(15,23,42,0.05);
+      --radius-sm: 6px; --radius: 10px;
+      /* 노드 역할 색 (도장 도구와 일치) */
+      --role-standard: #8b98a8;
+      --role-station: #0f9d58;
+      --role-charger: #1f6feb;
+      --role-holding: #94a3b8;
+      --role-siding: #e0a000;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:var(--font-sans); font-size:13px;
+      background:var(--bg); color:var(--ink); height:100vh; overflow:hidden;
+      -webkit-font-smoothing:antialiased; }
+    h1, h2, h3 { margin:0; letter-spacing:-0.015em; }
+    button { font-family:inherit; cursor:pointer; }
+    button:disabled { cursor:not-allowed; opacity:0.4; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      height: 100vh;
+    }
+    .map-area { display:flex; flex-direction:column; min-width:0; }
+    .map-toolbar {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px;
+      background:var(--surface);
+      border-bottom:1px solid var(--border);
+    }
+    .map-toolbar h1 { font-size:14px; font-weight:700; }
+    .map-toolbar .stat-chip {
+      display:inline-flex; gap:4px; align-items:baseline;
+      padding:3px 9px; border-radius:999px;
+      background:var(--surface-3); font-size:11px; color:var(--muted);
+    }
+    .map-toolbar .stat-chip strong {
+      color:var(--ink); font-family:var(--font-mono); font-weight:600;
+    }
+    .map-toolbar .spacer { flex:1; }
+    .map-toolbar button {
+      height:28px; padding:0 12px; border:1px solid var(--border);
+      background:var(--surface); border-radius:var(--radius-sm);
+      color:var(--ink); font-size:12px; font-weight:500;
+    }
+    .map-toolbar button:hover { background:var(--surface-3); border-color:var(--border-strong); }
+    .map-toolbar button.primary {
+      background:var(--ink); color:#fff; border-color:var(--ink);
+    }
+    .map-toolbar button.primary:hover { background:#1a253b; }
+
+    .map-shell {
+      flex:1; min-height:0;
+      background:linear-gradient(180deg, #fcfdff 0%, #f7f9fc 100%);
+      position:relative; overflow:hidden;
+    }
+    svg#map { width:100%; height:100%; display:block; }
+
+    .side {
+      border-left:1px solid var(--border);
+      background:var(--surface);
+      display:flex; flex-direction:column;
+      overflow:auto;
+    }
+    .panel { padding:14px 16px; border-bottom:1px solid var(--border); }
+    .panel h2 {
+      font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;
+      color:var(--muted); margin-bottom:10px;
+    }
+
+    /* 모드 토글 */
+    .mode-toggle { display:flex; gap:4px; padding:3px; background:var(--surface-3); border-radius:8px; }
+    .mode-toggle button {
+      flex:1; height:30px; border:0; background:transparent; color:var(--muted);
+      font-size:12px; font-weight:600; border-radius:5px;
+    }
+    .mode-toggle button.active { background:var(--surface); color:var(--ink); box-shadow:var(--shadow-sm); }
+
+    .hint-key {
+      display:inline-block; padding:1px 6px; font-family:var(--font-mono); font-size:10px;
+      background:var(--surface-3); border-radius:3px; color:var(--muted-2);
+      vertical-align:middle; margin-left:6px;
+    }
+
+    /* Stamp 도구 그리드 */
+    .stamp-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; }
+    .stamp-btn {
+      display:flex; flex-direction:column; align-items:center; gap:3px;
+      padding:9px 6px; border:1px solid var(--border);
+      background:var(--surface); border-radius:var(--radius-sm);
+      font-size:11px; color:var(--ink); cursor:pointer;
+    }
+    .stamp-btn:hover { border-color:var(--border-strong); background:var(--surface-3); }
+    .stamp-btn.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft) inset;
+    }
+    .stamp-btn .icon { font-size:16px; line-height:1; }
+    .stamp-btn .key {
+      font-family: var(--font-mono); font-size:9.5px; color:var(--muted-2);
+    }
+
+    /* Info / 검증 패널 */
+    .stat-row {
+      display:flex; justify-content:space-between; padding:4px 0;
+      font-size:12px; border-bottom:1px dashed var(--border);
+    }
+    .stat-row:last-of-type { border-bottom:0; }
+    .stat-row .k { color:var(--muted); }
+    .stat-row .v { font-family:var(--font-mono); font-weight:600; }
+    .warn-item {
+      padding:6px 8px; margin-bottom:4px; border-radius:5px;
+      border-left:3px solid var(--muted); background:var(--surface-2);
+      font-size:11.5px;
+    }
+    .warn-item.error { border-left-color:var(--danger); background:#fde8e7; }
+    .warn-item.warn { border-left-color:var(--warn); background:#fff3df; }
+    .warn-item.info { border-left-color:var(--accent); background:var(--accent-soft); }
+
+    /* Inspector */
+    .inspector-empty {
+      padding:14px 16px; color:var(--muted); font-size:12px; font-style:italic;
+    }
+    .inspector-row {
+      display:flex; justify-content:space-between; gap:8px;
+      padding:5px 0; font-size:12px;
+    }
+    .inspector-row .k { color:var(--muted); }
+    .inspector-row .v { font-family:var(--font-mono); }
+
+    /* Build 도구 패널 */
+    .build-tools { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .build-tools button {
+      height: 36px; border: 1px solid var(--border);
+      background: var(--surface); border-radius: var(--radius-sm);
+      font-size: 12px; font-weight: 500; color: var(--ink); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .build-tools button:hover { background: var(--surface-3); border-color: var(--border-strong); }
+    .build-tools button.active {
+      background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+    }
+    /* 선택 박스 */
+    .select-box {
+      fill: rgba(37,99,235,0.10);
+      stroke: var(--accent);
+      stroke-width: 1.5;
+      stroke-dasharray: 4 3;
+      pointer-events: none;
+    }
+    /* 선택된 노드 강조 */
+    .node-selected { stroke: var(--accent); stroke-width: 3; opacity: 0.9; }
+    /* F1b-ux+: Speed 모드에서 선택된 edge 의 highlight halo */
+    .edge-selected-halo {
+      stroke: var(--accent);
+      stroke-opacity: 0.55;
+      fill: none;
+      pointer-events: none;
+    }
+
+    /* F1b-ux+: Speed Control 패널 */
+    .speed-ctrl-row { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+    .speed-ctrl-row input[type="number"] {
+      width:62px; padding:4px 6px; font-family:var(--font-mono); font-size:12px;
+      text-align:center; border:1px solid var(--border-strong); border-radius:4px;
+    }
+    .speed-ctrl-row input[type="range"] { flex:1; cursor:pointer; }
+    .speed-ctrl-status {
+      font-size:11.5px; color:var(--muted); margin-bottom:8px;
+      padding:6px 8px; background:var(--surface-3); border-radius:5px;
+      line-height:1.4;
+    }
+    .speed-ctrl-status strong { color:var(--ink); font-family:var(--font-mono); }
+    .speed-ctrl-buttons { display:flex; gap:6px; }
+    .speed-ctrl-buttons button {
+      flex:1; height:30px; padding:0 8px; font-size:11.5px; font-weight:500;
+      border:1px solid var(--border); background:var(--surface);
+      border-radius:5px; cursor:pointer; color:var(--ink);
+    }
+    .speed-ctrl-buttons button.primary {
+      background:var(--accent); border-color:var(--accent); color:#fff;
+    }
+    .speed-ctrl-buttons button.primary:hover:not(:disabled) { background:#1e4fcf; }
+    .speed-ctrl-buttons button:hover:not(:disabled) { background:var(--surface-3); }
+    .speed-ctrl-buttons button:disabled { opacity:0.45; cursor:not-allowed; }
+    /* Add Edge 진행 중 첫 노드 */
+    .node-edge-start { stroke: var(--warn); stroke-width: 3; opacity: 0.9; }
+    /* Add Edge preview line (커서 따라가는 가이드) */
+    .edge-preview {
+      stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4;
+      opacity: 0.6; pointer-events: none;
+    }
+
+    /* Paint trajectory preview (드래그 중 시각 피드백) */
+    .traj-preview {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 3;
+      stroke-dasharray: 6 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    /* Pan 모드 (Space 키) 시 커서 */
+    .map-shell.pan-mode { cursor: grab; }
+    .map-shell.pan-mode.dragging { cursor: grabbing; }
+    /* 노드 hover 강조 */
+    .node-hover { stroke: var(--accent); stroke-width: 2; opacity: 0.5; }
+
+    /* F1a: Active Graph 라디오 */
+    .graph-row {
+      display:flex; align-items:center; gap:8px;
+      padding:6px 8px; border-radius:5px;
+      border:1px solid var(--border); background:var(--surface);
+      cursor:pointer; font-size:12px;
+    }
+    .graph-row:hover { background:var(--surface-3); }
+    .graph-row.active {
+      border-color:var(--accent); background:var(--accent-soft); color:var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft) inset;
+    }
+    .graph-row input[type="radio"] { margin:0; }
+    .graph-row .fleet-dot {
+      display:inline-block; width:10px; height:10px; border-radius:50%;
+      flex-shrink:0;
+    }
+    .graph-row .fleet-name { font-weight:600; }
+    .graph-row .fleet-count { color:var(--muted); margin-left:auto; font-size:11px; }
+    .fleet-info-row { padding:3px 0; font-size:12px; }
+    .fleet-info-row .k {
+      color:var(--muted); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.04em; font-weight:600; margin-bottom:3px;
+    }
+    .fleet-tag {
+      display:inline-block; padding:1px 7px; margin:2px 4px 2px 0;
+      background:var(--surface-3); border-radius:10px; font-size:11px;
+      font-family:var(--font-mono); color:var(--ink);
+    }
+    .station-pill {
+      display:inline-block; padding:1px 6px; margin:2px 3px 2px 0;
+      background:var(--surface-2); border:1px solid var(--border); border-radius:4px;
+      font-size:11px; font-family:var(--font-mono); color:var(--muted);
+    }
+    .station-pill.has-cap { color:var(--role-station); border-color:var(--role-station); }
+    /* 토스트 (Phase 4 저장 알림 등) */
+    .toast {
+      position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+      padding:10px 18px; background:var(--ink); color:#fff;
+      border-radius:999px; font-size:12.5px; font-weight:500;
+      opacity:0; transition:opacity 0.2s; z-index:2000;
+    }
+    .toast.show { opacity:1; }
+  </style>
+<script bis_use="true" type="text/javascript" charset="utf-8" nonce="" data-dynamic-id="19331649-968e-49ea-b3b5-dd5d366f2b2d" src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/executors/101.js"></script><style id="claude-agent-animation-styles">
+      @keyframes claude-pulse {
+        0% {
+          box-shadow: 
+            inset 0 0 10px rgba(217, 119, 87, 0.5),
+            inset 0 0 20px rgba(217, 119, 87, 0.3),
+            inset 0 0 30px rgba(217, 119, 87, 0.1);
+        }
+        50% {
+          box-shadow: 
+            inset 0 0 15px rgba(217, 119, 87, 0.7),
+            inset 0 0 25px rgba(217, 119, 87, 0.5),
+            inset 0 0 35px rgba(217, 119, 87, 0.2);
+        }
+        100% {
+          box-shadow: 
+            inset 0 0 10px rgba(217, 119, 87, 0.5),
+            inset 0 0 20px rgba(217, 119, 87, 0.3),
+            inset 0 0 30px rgba(217, 119, 87, 0.1);
+        }
+      }
+    </style></head>
+<body bis_register="W3sibWFzdGVyIjp0cnVlLCJleHRlbnNpb25JZCI6ImVwcGlvY2VtaG1ubGJoanBsY2drb2ZjaWllZ29tY29uIiwiYWRibG9ja2VyU3RhdHVzIjp7IkRJU1BMQVkiOiJlbmFibGVkIiwiRkFDRUJPT0siOiJlbmFibGVkIiwiVFdJVFRFUiI6ImVuYWJsZWQiLCJSRURESVQiOiJlbmFibGVkIiwiUElOVEVSRVNUIjoiZW5hYmxlZCIsIklOU1RBR1JBTSI6ImVuYWJsZWQiLCJUSUtUT0siOiJkaXNhYmxlZCIsIkxJTktFRElOIjoiZW5hYmxlZCIsIkNPTkZJRyI6ImRpc2FibGVkIn0sInZlcnNpb24iOiIyLjAuNDciLCJzY29yZSI6MjAwNDcwfV0=" __processed_a574eaea-3115-43a8-850e-c2176dde209f__="true">
+  <div class="layout" bis_skin_checked="1">
+    <!-- 좌측: 맵 + 툴바 -->
+    <div class="map-area" bis_skin_checked="1">
+      <div class="map-toolbar" bis_skin_checked="1">
+        <h1>Map Editor</h1>
+        <span class="stat-chip">nodes <strong id="stat-nodes">51</strong></span>
+        <span class="stat-chip">edges <strong id="stat-edges">84 → 53</strong></span>
+        <span class="stat-chip">bidir <strong id="stat-bidir">31</strong></span>
+        <span class="stat-chip" id="chip-components">component <strong id="stat-components">1</strong></span>
+        <span class="spacer"></span>
+        <button id="btn-reset-view" title="줌/팬 초기화">⌂ Reset View</button>
+        <button id="btn-save">💾 Save</button>
+        <button id="btn-save-run" class="primary">▶ Save &amp; Run</button>
+      </div>
+      <div class="map-shell" bis_skin_checked="1">
+        <svg id="map" viewBox="0 0 1000 700"><g transform="translate(-66.29730611387828 -304.28626807636147) scale(1.473727747938086)">
+        <g data-edge-id="L0001" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="108.24984011937752" y1="267.8249129538833" x2="171.7274213032047" y2="266.7789383926668" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="108.24984011937752" y1="267.8249129538833" x2="171.7274213032047" y2="266.7789383926668" stroke="var(--warn)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(127.29311447452568 267.51112058551837) scale(0.6785513819625875) rotate(179.05597372257026)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--warn)" opacity="0.95"></polygon></g><g transform="translate(152.68414694805654 267.09273076103176) scale(0.6785513819625875) rotate(-0.9440262774297483)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--warn)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0003" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="171.7274213032047" y1="266.7789383926668" x2="239.51964755205003" y2="264.4254956299297" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="171.7274213032047" y1="266.7789383926668" x2="239.51964755205003" y2="264.4254956299297" stroke="var(--warn)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(192.06508917785828 266.07290556384567) scale(0.6785513819625875) rotate(178.01174537238)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--warn)" opacity="0.95"></polygon></g><g transform="translate(219.18197967739644 265.13152845875084) scale(0.6785513819625875) rotate(-1.98825462761999)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--warn)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0005" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="239.51964755205003" y1="264.4254956299297" x2="305.6775385489945" y2="267.49804590350317" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="239.51964755205003" y1="264.4254956299297" x2="305.6775385489945" y2="267.49804590350317" stroke="var(--warn)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(259.3670148511334 265.34726071200174) scale(0.6785513819625875) rotate(182.65905929992934)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--warn)" opacity="0.95"></polygon></g><g transform="translate(285.83017124991113 266.5762808214311) scale(0.6785513819625875) rotate(2.659059299929353)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--warn)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0007" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="305.6775385489945" y1="267.49804590350317" x2="368.6321324522134" y2="267.8249129538833" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="305.6775385489945" y1="267.49804590350317" x2="368.6321324522134" y2="267.8249129538833" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(324.56391671996016 267.5961060186172) scale(0.6785513819625875) rotate(180.29748320177472)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(349.74575428124774 267.7268528387693) scale(0.6785513819625875) rotate(0.297483201774717)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0009" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="368.6321324522134" y1="267.8249129538833" x2="432.894194556953" y2="265.3407233709941" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="368.6321324522134" y1="267.8249129538833" x2="432.894194556953" y2="265.3407233709941" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(387.91075108363526 267.07965607901656) scale(0.6785513819625875) rotate(177.78620950763874)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(413.6155759255311 266.08598024586087) scale(0.6785513819625875) rotate(-2.2137904923612517)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0011" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="432.894194556953" y1="265.3407233709941" x2="497.28700348184464" y2="266.9096852128189" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="432.894194556953" y1="265.3407233709941" x2="497.28700348184464" y2="266.9096852128189" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(452.21203723442045 265.8114119235415) scale(0.6785513819625875) rotate(181.3957631308005)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(477.9691608043771 266.43899666027147) scale(0.6785513819625875) rotate(1.3957631308005138)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0013" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="497.28700348184464" y1="266.9096852128189" x2="565.9290840616784" y2="265.07922973069" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="497.28700348184464" y1="266.9096852128189" x2="565.9290840616784" y2="265.07922973069" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(517.8796276557948 266.3605485681802) scale(0.6785513819625875) rotate(178.47247455778705)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(545.3364598877283 265.62836637532865) scale(0.6785513819625875) rotate(-1.5275254422129365)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0015" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="565.9290840616784" y1="265.07922973069" x2="629.0797981951254" y2="264.88310950046196" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="565.9290840616784" y1="265.07922973069" x2="629.0797981951254" y2="264.88310950046196" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(584.8742983017125 265.0203936616216) scale(0.6785513819625875) rotate(179.82206336858968)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(610.1345839550913 264.9419455695304) scale(0.6785513819625875) rotate(-0.17793663141031668)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0017" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="629.0797981951254" y1="264.88310950046196" x2="697.5257585447309" y2="267.8902863639594" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="629.0797981951254" y1="264.88310950046196" x2="697.5257585447309" y2="267.8902863639594" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(649.613586300007 265.7852625595112) scale(0.6785513819625875) rotate(182.51567525511035)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(676.9919704398493 266.98813330491015) scale(0.6785513819625875) rotate(2.5156752551103536)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0019" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="697.5257585447309" y1="267.8902863639594" x2="762.833795210687" y2="264.2947488097776" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="697.5257585447309" y1="267.8902863639594" x2="762.833795210687" y2="264.2947488097776" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(717.1181695445177 266.81162509770485) scale(0.6785513819625875) rotate(176.84875900098857)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(743.2413842109002 265.37341007603214) scale(0.6785513819625875) rotate(-3.151240999011428)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0021" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="762.833795210687" y1="264.2947488097776" x2="825.788389113906" y2="267.171178853123" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="762.833795210687" y1="264.2947488097776" x2="825.788389113906" y2="267.171178853123" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(781.7201733816527 265.15767782278124) scale(0.6785513819625875) rotate(182.61605626242766)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(806.9020109429403 266.3082498401194) scale(0.6785513819625875) rotate(2.616056262427666)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0023" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="825.788389113906" y1="267.171178853123" x2="894.4304696937398" y2="266.19057770198253" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="825.788389113906" y1="267.171178853123" x2="894.4304696937398" y2="266.19057770198253" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(846.3810132878561 266.87699850778085) scale(0.6785513819625875) rotate(179.18154453831139)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(873.8378455197897 266.4847580473247) scale(0.6785513819625875) rotate(-0.8184554616886198)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0025" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="105.37341007603212" y1="463.55290272152354" x2="174.73459816670217" y2="460.93796631848227" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="105.37341007603212" y1="463.55290272152354" x2="174.73459816670217" y2="460.93796631848227" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(140.05400412136714 462.2454345200029) scale(0.6785513819625875) rotate(-2.1590445840483197)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0026" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="174.73459816670217" y1="460.93796631848227" x2="239.91188801250618" y2="460.28423221772186" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="174.73459816670217" y1="460.93796631848227" x2="239.91188801250618" y2="460.28423221772186" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(207.32324308960418 460.61109926810207) scale(0.6785513819625875) rotate(-0.5746625702990164)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0027" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="239.91188801250618" y1="460.28423221772186" x2="303.8470830668656" y2="458.97676401620123" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="239.91188801250618" y1="460.28423221772186" x2="303.8470830668656" y2="458.97676401620123" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(271.8794855396859 459.6304981169616) scale(0.6785513819625875) rotate(-1.1715295402256236)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0028" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="303.8470830668656" y1="458.97676401620123" x2="368.37063881190926" y2="461.19945995878635" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="303.8470830668656" y1="458.97676401620123" x2="368.37063881190926" y2="461.19945995878635" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(336.10886093938745 460.0881119874938) scale(0.6785513819625875) rotate(1.9729346466955962)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0029" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="368.37063881190926" y1="461.19945995878635" x2="436.09749165067853" y2="460.8725929084062" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="368.37063881190926" y1="461.19945995878635" x2="436.09749165067853" y2="460.8725929084062" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(402.2340652312939 461.03602643359625) scale(0.6785513819625875) rotate(-0.2765218854286419)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0030" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="436.09749165067853" y1="460.8725929084062" x2="501.6670219569388" y2="461.0687131386343" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="436.09749165067853" y1="460.8725929084062" x2="501.6670219569388" y2="461.0687131386343" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(468.8822568038087 460.97065302352024) scale(0.6785513819625875) rotate(0.17137270783655922)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0031" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="501.6670219569388" y1="461.0687131386343" x2="566.1905777019824" y2="463.8143963618276" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="501.6670219569388" y1="461.0687131386343" x2="566.1905777019824" y2="463.8143963618276" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(533.9287998294606 462.4415547502309) scale(0.6785513819625875) rotate(2.436648246810126)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0032" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="566.1905777019824" y1="463.8143963618276" x2="629.0797981951254" y2="462.57230157038305" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="566.1905777019824" y1="463.8143963618276" x2="629.0797981951254" y2="462.57230157038305" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(597.635187948554 463.1933489661053) scale(0.6785513819625875) rotate(-1.1314743172186097)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0033" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="629.0797981951254" y1="462.57230157038305" x2="693.668727350245" y2="462.8337952106872" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="629.0797981951254" y1="462.57230157038305" x2="693.668727350245" y2="462.8337952106872" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(661.3742627726851 462.7030483905351) scale(0.6785513819625875) rotate(0.23196545129821422)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0034" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="693.668727350245" y1="462.8337952106872" x2="759.1728842464292" y2="462.63767498045905" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="693.668727350245" y1="462.8337952106872" x2="759.1728842464292" y2="462.63767498045905" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(726.4208057983371 462.7357350955731) scale(0.6785513819625875) rotate(-0.1715437374615785)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0035" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="759.1728842464292" y1="462.63767498045905" x2="827.3573509557307" y2="462.1800611099268" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="759.1728842464292" y1="462.63767498045905" x2="827.3573509557307" y2="462.1800611099268" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(793.26511760108 462.4088680451929) scale(0.6785513819625875) rotate(-0.3845296595845451)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0036" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="827.3573509557307" y1="462.1800611099268" x2="891.3579194201662" y2="462.9645420308392" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="827.3573509557307" y1="462.1800611099268" x2="891.3579194201662" y2="462.9645420308392" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(859.3576351879485 462.572301570383) scale(0.6785513819625875) rotate(0.7022624350098395)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0037" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="828.5994457471753" y1="658.5617849783273" x2="759.7612449371135" y2="655.2931144745256" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="828.5994457471753" y1="658.5617849783273" x2="759.7612449371135" y2="655.2931144745256" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(794.1803453421444 656.9274497264264) scale(0.6785513819625875) rotate(-177.28144460495167)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0038" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="759.7612449371135" y1="655.2931144745256" x2="694.9108221416897" y2="658.8232786186314" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="759.7612449371135" y1="655.2931144745256" x2="694.9108221416897" y2="658.8232786186314" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(727.3360335394016 657.0581965465785) scale(0.6785513819625875) rotate(176.88415174021057)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0039" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="694.9108221416897" y1="658.8232786186314" x2="629.0797981951254" y2="660" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="694.9108221416897" y1="658.8232786186314" x2="629.0797981951254" y2="660" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(661.9953101684075 659.4116393093157) scale(0.6785513819625875) rotate(178.9759541088059)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0040" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="629.0797981951254" y1="660" x2="566.9096852128188" y2="656.1429688055141" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="629.0797981951254" y1="660" x2="566.9096852128188" y2="656.1429688055141" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(597.9947417039721 658.071484402757) scale(0.6785513819625875) rotate(-176.449922281534)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0041" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="566.9096852128188" y1="656.1429688055141" x2="500.098060115114" y2="656.6005826760463" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="566.9096852128188" y1="656.1429688055141" x2="500.098060115114" y2="656.6005826760463" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(533.5038726639664 656.3717757407802) scale(0.6785513819625875) rotate(179.60756929065917)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0042" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="500.098060115114" y1="656.6005826760463" x2="436.94734598166696" y2="656.8620763163505" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="500.098060115114" y1="656.6005826760463" x2="436.94734598166696" y2="656.8620763163505" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(468.52270304839044 656.7313294961984) scale(0.6785513819625875) rotate(179.76275175134668)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0043" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="436.94734598166696" y1="656.8620763163505" x2="367.2592908406167" y2="658.2349179279471" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="436.94734598166696" y1="656.8620763163505" x2="367.2592908406167" y2="658.2349179279471" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(402.1033184111418 657.5484971221488) scale(0.6785513819625875) rotate(178.87142987097695)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0044" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="367.2592908406167" y1="658.2349179279471" x2="301.9512541746607" y2="656.4044624458182" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="367.2592908406167" y1="658.2349179279471" x2="301.9512541746607" y2="656.4044624458182" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(334.6052725076387 657.3196901868827) scale(0.6785513819625875) rotate(-178.3945326004194)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0045" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="301.9512541746607" y1="656.4044624458182" x2="239.0620336815178" y2="656.9928231365025" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="301.9512541746607" y1="656.4044624458182" x2="239.0620336815178" y2="656.9928231365025" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(270.50664392808926 656.6986427911604) scale(0.6785513819625875) rotate(179.4639844367225)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0046" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="239.0620336815178" y1="656.9928231365025" x2="171.6620478931287" y2="655.2931144745256" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="239.0620336815178" y1="656.9928231365025" x2="171.6620478931287" y2="655.2931144745256" stroke="var(--edge-unidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(205.36204078732322 656.1429688055141) scale(0.6785513819625875) rotate(-178.55540776563802)">
+            <polygon points="6,0 -3,-4 -3,4" fill="var(--edge-unidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0047" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="239.51964755205003" y1="264.4254956299297" x2="239.0620336815178" y2="363.9238257656505" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="239.51964755205003" y1="264.4254956299297" x2="239.0620336815178" y2="363.9238257656505" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(239.38236339089036 294.2749946706459) scale(0.6785513819625875) rotate(270.26351355368826)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(239.19931784267746 334.0743267249343) scale(0.6785513819625875) rotate(90.26351355368826)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0049" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="239.0620336815178" y1="363.9238257656505" x2="239.91188801250618" y2="460.28423221772186" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="239.0620336815178" y1="363.9238257656505" x2="239.91188801250618" y2="460.28423221772186" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(239.3169899808143 392.83194770127193) scale(0.6785513819625875) rotate(269.4946907583707)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(239.65693171320967 431.37611028210046) scale(0.6785513819625875) rotate(89.49469075837072)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0051" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="239.0620336815178" y1="363.9238257656505" x2="220.8228522703048" y2="363.5969587152704" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="239.0620336815178" y1="363.9238257656505" x2="220.8228522703048" y2="363.5969587152704" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(233.59027925815388 363.8257656505365) scale(0.6785513819625875) rotate(1.0266961800578258)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(226.2946066936687 363.6950188303844) scale(0.6785513819625875) rotate(-178.97330381994217)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0053" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="432.894194556953" y1="265.3407233709941" x2="433.1556881972571" y2="364.70830668656293" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="432.894194556953" y1="265.3407233709941" x2="433.1556881972571" y2="364.70830668656293" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(432.97264264904425 295.15099836566475) scale(0.6785513819625875) rotate(269.849221980916)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(433.07724010516586 334.8980316918923) scale(0.6785513819625875) rotate(89.84922198091603)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0055" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="433.1556881972571" y1="364.70830668656293" x2="436.09749165067853" y2="460.8725929084062" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="433.1556881972571" y1="364.70830668656293" x2="436.09749165067853" y2="460.8725929084062" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(434.0382292332836 393.5575925531159) scale(0.6785513819625875) rotate(268.2477863781626)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(435.21495061465214 432.02330704185323) scale(0.6785513819625875) rotate(88.24778637816259)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0057" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="433.1556881972571" y1="364.70830668656293" x2="415.1126270162722" y2="364.6429332764869" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="433.1556881972571" y1="364.70830668656293" x2="415.1126270162722" y2="364.6429332764869" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(427.74276984296165 364.6886946635401) scale(0.6785513819625875) rotate(0.20759249564639504)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(420.52554537056767 364.6625452995097) scale(0.6785513819625875) rotate(-179.7924075043536)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0059" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="629.0797981951254" y1="264.88310950046196" x2="630.9756270873302" y2="361.3088893626093" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="629.0797981951254" y1="264.88310950046196" x2="630.9756270873302" y2="361.3088893626093" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(629.6485468627868 293.81084345910614) scale(0.6785513819625875) rotate(268.8736518249812)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(630.4068784196687 332.38115540396507) scale(0.6785513819625875) rotate(88.87365182498122)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0061" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="630.9756270873302" y1="361.3088893626093" x2="629.0797981951254" y2="462.57230157038305" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="630.9756270873302" y1="361.3088893626093" x2="629.0797981951254" y2="462.57230157038305" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(630.4068784196687 391.68791302494145) scale(0.6785513819625875) rotate(271.07255230261336)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(629.6485468627868 432.1932779080509) scale(0.6785513819625875) rotate(91.07255230261337)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0063" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="630.9756270873302" y1="361.3088893626093" x2="610.3830029133802" y2="364.839053506715" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="630.9756270873302" y1="361.3088893626093" x2="610.3830029133802" y2="364.839053506715" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(624.7978398351452 362.367938605841) scale(0.6785513819625875) rotate(350.27242144859844)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(616.5607901655652 363.7800042634833) scale(0.6785513819625875) rotate(170.27242144859844)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0065" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="105.37341007603212" y2="463.55290272152354" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="105.37341007603212" y2="463.55290272152354" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(94.98557521495061 462.0427769487672) scale(0.6785513819625875) rotate(188.27139868797443)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(100.92148084985433 462.9057059617708) scale(0.6785513819625875) rotate(8.271398687974433)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0067" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="40" y2="496.5011013998437" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="40" y2="496.5011013998437" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(75.37355219214098 471.92723655226325) scale(0.6785513819625875) rotate(325.2124464206397)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(55.160093796631855 485.96944503659495) scale(0.6785513819625875) rotate(145.21244642063968)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0069" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="40.13074682015206" y2="460.80721949833014" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="40.13074682015206" y2="460.80721949833014" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(75.41277623818661 461.2190719818092) scale(0.6785513819625875) rotate(0.6687919529687463)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(55.25161657073829 460.98372770553544) scale(0.6785513819625875) rotate(-179.33120804703125)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0071" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="43.6609109642578" y2="429.1664890215306" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="90.53364598877283" y1="461.3955801890145" x2="43.6609109642578" y2="429.1664890215306" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(76.47182548141832 451.72685283876933) scale(0.6785513819625875) rotate(34.511914273814995)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(57.72273147161231 438.83521637177574) scale(0.6785513819625875) rotate(-145.488085726185)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0073" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="171.7274213032047" y1="266.7789383926668" x2="171.6620478931287" y2="655.2931144745256" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="171.7274213032047" y1="266.7789383926668" x2="171.6620478931287" y2="655.2931144745256" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(171.7078092801819 383.33319121722445) scale(0.6785513819625875) rotate(270.00964088490196)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(171.6816599161515 538.7388616499679) scale(0.6785513819625875) rotate(90.00964088490196)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0075" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="894.4304696937398" y1="266.19057770198253" x2="828.5994457471753" y2="658.5617849783273" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="894.4304696937398" y1="266.19057770198253" x2="828.5994457471753" y2="658.5617849783273" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(874.6811625097705 383.90193988488596) scale(0.6785513819625875) rotate(279.52423177577714)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(848.3487529311446 540.8504227954238) scale(0.6785513819625875) rotate(99.52423177577711)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0077" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="894.4304696937398" y1="266.19057770198253" x2="922.4102892062815" y2="265.92908406167845" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="894.4304696937398" y1="266.19057770198253" x2="922.4102892062815" y2="265.92908406167845" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(902.8244155475023 266.1121296098913) scale(0.6785513819625875) rotate(179.46454101443555)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(914.016343352519 266.00753215376966) scale(0.6785513819625875) rotate(-0.5354589855644392)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0079" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="922.4102892062815" y1="265.92908406167845" x2="960" y2="265.2099765508421" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="922.4102892062815" y1="265.92908406167845" x2="960" y2="265.2099765508421" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(933.687202444397 265.71335180842755) scale(0.6785513819625875) rotate(178.90404051105028)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(948.7230867618845 265.425708804093) scale(0.6785513819625875) rotate(-1.0959594889497148)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0081" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="922.4102892062815" y1="265.92908406167845" x2="959.8692531798479" y2="230.7581894407731" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="922.4102892062815" y1="265.92908406167845" x2="959.8692531798479" y2="230.7581894407731" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(933.6479783983514 255.37781567540685) scale(0.6785513819625875) rotate(136.80440078737385)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(948.631563987778 241.3094578270447) scale(0.6785513819625875) rotate(-43.19559921262614)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-edge-id="L0083" data-graph-idx="0" opacity="1" pointer-events="auto">
+          
+          <line x1="922.4102892062815" y1="265.92908406167845" x2="954.8355006039935" y2="198.7905919135934" stroke="transparent" stroke-width="6.106962437663287" pointer-events="stroke" stroke-linecap="round"></line>
+          <line x1="922.4102892062815" y1="265.92908406167845" x2="954.8355006039935" y2="198.7905919135934" stroke="var(--edge-bidir)" stroke-width="1.357102763925175" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"></line>
+          <g transform="translate(932.1378526255951 245.78753641725294) scale(0.6785513819625875) rotate(115.77868789536606)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g><g transform="translate(945.1079371846799 218.93213955801892) scale(0.6785513819625875) rotate(-64.22131210463394)">
+              <polygon points="5,0 -3,-3 -3,3" fill="var(--edge-bidir)" opacity="0.95"></polygon></g>
+        </g><g data-node-id="N0001" style="cursor:default" transform="translate(108.24984011937752 267.8249129538833)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0002" style="cursor:default" transform="translate(171.7274213032047 266.7789383926668)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0003" style="cursor:default" transform="translate(239.51964755205003 264.4254956299297)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0004" style="cursor:default" transform="translate(305.6775385489945 267.49804590350317)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0005" style="cursor:default" transform="translate(368.6321324522134 267.8249129538833)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0006" style="cursor:default" transform="translate(432.894194556953 265.3407233709941)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0007" style="cursor:default" transform="translate(497.28700348184464 266.9096852128189)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0008" style="cursor:default" transform="translate(565.9290840616784 265.07922973069)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0009" style="cursor:default" transform="translate(629.0797981951254 264.88310950046196)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0010" style="cursor:default" transform="translate(697.5257585447309 267.8902863639594)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0011" style="cursor:default" transform="translate(762.833795210687 264.2947488097776)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0012" style="cursor:default" transform="translate(825.788389113906 267.171178853123)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0013" style="cursor:default" transform="translate(894.4304696937398 266.19057770198253)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0014" style="cursor:default" transform="translate(105.37341007603212 463.55290272152354)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0015" style="cursor:default" transform="translate(174.73459816670217 460.93796631848227)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0016" style="cursor:default" transform="translate(239.91188801250618 460.28423221772186)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0017" style="cursor:default" transform="translate(303.8470830668656 458.97676401620123)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0018" style="cursor:default" transform="translate(368.37063881190926 461.19945995878635)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0019" style="cursor:default" transform="translate(436.09749165067853 460.8725929084062)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0020" style="cursor:default" transform="translate(501.6670219569388 461.0687131386343)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0021" style="cursor:default" transform="translate(566.1905777019824 463.8143963618276)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0022" style="cursor:default" transform="translate(629.0797981951254 462.57230157038305)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0023" style="cursor:default" transform="translate(693.668727350245 462.8337952106872)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0024" style="cursor:default" transform="translate(759.1728842464292 462.63767498045905)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0025" style="cursor:default" transform="translate(827.3573509557307 462.1800611099268)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0026" style="cursor:default" transform="translate(891.3579194201662 462.9645420308392)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="4" fill="#fff" stroke="var(--role-holding)" stroke-width="2"></circle>
+          </g>
+        </g><g data-node-id="N0027" style="cursor:default" transform="translate(171.6620478931287 655.2931144745256)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0028" style="cursor:default" transform="translate(239.0620336815178 656.9928231365025)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0029" style="cursor:default" transform="translate(301.9512541746607 656.4044624458182)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0030" style="cursor:default" transform="translate(367.2592908406167 658.2349179279471)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0031" style="cursor:default" transform="translate(436.94734598166696 656.8620763163505)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0032" style="cursor:default" transform="translate(500.098060115114 656.6005826760463)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0033" style="cursor:default" transform="translate(566.9096852128188 656.1429688055141)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0034" style="cursor:default" transform="translate(629.0797981951254 660)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0035" style="cursor:default" transform="translate(694.9108221416897 658.8232786186314)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0036" style="cursor:default" transform="translate(759.7612449371135 655.2931144745256)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0037" style="cursor:default" transform="translate(828.5994457471753 658.5617849783273)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0038" style="cursor:default" transform="translate(239.0620336815178 363.9238257656505)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0039" style="cursor:default" transform="translate(220.8228522703048 363.5969587152704)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0040" style="cursor:default" transform="translate(433.1556881972571 364.70830668656293)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0041" style="cursor:default" transform="translate(415.1126270162722 364.6429332764869)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0042" style="cursor:default" transform="translate(630.9756270873302 361.3088893626093)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0043" style="cursor:default" transform="translate(610.3830029133802 364.839053506715)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0044" style="cursor:default" transform="translate(90.53364598877283 461.3955801890145)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0045" style="cursor:default" transform="translate(40 496.5011013998437)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0046" style="cursor:default" transform="translate(40.13074682015206 460.80721949833014)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0047" style="cursor:default" transform="translate(43.6609109642578 429.1664890215306)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0048" style="cursor:default" transform="translate(922.4102892062815 265.92908406167845)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0049" style="cursor:default" transform="translate(960 265.2099765508421)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0050" style="cursor:default" transform="translate(959.8692531798479 230.7581894407731)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g><g data-node-id="N0051" style="cursor:default" transform="translate(954.8355006039935 198.7905919135934)">
+          <circle r="18.99943869495245" fill="transparent"></circle>
+          <g transform="scale(0.6785513819625875)">
+            
+            <circle r="3" fill="var(--role-standard)" opacity="0.7"></circle>
+          </g>
+        </g>
+      </g></svg>
+      </div>
+    </div>
+
+    <!-- 우측 패널: 도구 / 인스펙터 -->
+    <aside class="side">
+      <!-- F1a: Active Graph (multi-fleet 환경에서만 표시) -->
+      <div class="panel" id="active-graph-panel" style="display:none;" bis_skin_checked="1">
+        <h2>Active Graph</h2>
+        <div id="active-graph-list" style="display:flex; flex-direction:column; gap:4px;" bis_skin_checked="1"></div>
+        <label style="display:flex; gap:6px; align-items:center; margin-top:10px; font-size:11.5px;">
+          <input type="checkbox" id="show-inactive-toggle" checked="">
+          <span>Show inactive graphs (faded)</span>
+        </label>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:6px;" bis_skin_checked="1">
+          <kbd class="hint-key">Tab</kbd> 또는 <kbd class="hint-key">G</kbd> 키로 순환
+        </div>
+      </div>
+
+      <!-- F1a: Fleet Info (활성 fleet 정보) -->
+      <div class="panel" id="fleet-info-panel" style="display:none;" bis_skin_checked="1">
+        <h2 id="fleet-info-title">Fleet 정보</h2>
+        <div id="fleet-info-body" bis_skin_checked="1"></div>
+      </div>
+
+      <!-- 모드 토글 -->
+      <div class="panel" bis_skin_checked="1">
+        <h2>Edit Mode</h2>
+        <div class="mode-toggle" id="mode-toggle" bis_skin_checked="1">
+          <button data-mode="paint" class="">Paint <span class="hint-key">P</span></button>
+          <button data-mode="stamp" class="active">Stamp <span class="hint-key">S</span></button>
+          <button data-mode="build">Build <span class="hint-key">B</span></button>
+          <button data-mode="speed" class="">Speed <span class="hint-key">V</span></button>
+        </div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:6px;" bis_skin_checked="1">
+          숫자키 2~5 = Stamp 자동 전환 · Ctrl/Cmd+Z = Undo · Shift+드래그 = 다중 선택
+        </div>
+
+        <!-- Build 모드 옵션 -->
+        <div id="build-options" style="display:none; margin-top:12px;" bis_skin_checked="1">
+          <div class="build-tools" bis_skin_checked="1">
+            <button data-build="node" class="active">➕ Node <span class="hint-key">N</span></button>
+            <button data-build="edge">↔ Edge <span class="hint-key">E</span></button>
+            <button data-build="delete">🗑 Delete <span class="hint-key">D</span></button>
+          </div>
+          <!-- F1e: Stamp 배치 정렬 옵션 -->
+          <div style="margin-top:10px; padding:8px; background:var(--surface-3); border-radius:6px;" bis_skin_checked="1">
+            <label style="display:flex; gap:6px; align-items:center; font-size:11.5px;">
+              <input type="checkbox" id="grid-snap-toggle">
+              <span>Grid snap</span>
+              <input type="number" id="grid-size-input" value="10" min="0.5" step="0.5" style="width:54px; margin-left:auto; padding:2px 4px;">
+              <span style="color:var(--muted); font-size:10.5px;">units</span>
+            </label>
+            <div style="font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.5;" bis_skin_checked="1">
+              · <strong>Shift + 클릭</strong>: 직전 노드의 X 또는 Y 축에 고정 (가까운 축)
+            </div>
+          </div>
+          <div style="font-size:10.5px; color:var(--muted); margin-top:8px; line-height:1.5;" bis_skin_checked="1">
+            · <strong>Node</strong>: 빈 공간 클릭 → 새 노드<br>
+            · <strong>Edge</strong>: 노드 A → 노드 B 순차 클릭 (좌=단방향, 우=양방향)<br>
+            · <strong>Edge</strong>: edge 위 좌클릭 → 단↔양 토글<br>
+            · <strong>Delete</strong>: 노드/엣지 클릭 → 삭제 (Shift+박스 = 일괄 삭제)
+          </div>
+        </div>
+
+        <!-- Paint 모드 옵션 — 마우스 버튼으로 방향 결정 (토글 UI 불필요) -->
+        <div id="paint-options" style="margin-top: 12px; font-size: 11.5px; color: var(--muted); line-height: 1.6; display: none;" bis_skin_checked="1">
+          드래그로 화살표 쫙 → 가까운 엣지 일괄 방향
+          <ul style="margin:6px 0 0 0; padding-left:18px;">
+            <li><strong style="color:var(--edge-unidir)">좌클릭 드래그</strong> → 단방향 (→)</li>
+            <li><strong style="color:var(--edge-bidir)">우클릭 드래그</strong> → 양방향 (↔)</li>
+            <li><strong>Alt + 드래그</strong> → 단방향 역방향 강제 (←)</li>
+            <li><strong>Space + 드래그</strong> → 일시 pan</li>
+          </ul>
+        </div>
+
+        <!-- Speed 모드 옵션 -->
+        <div id="speed-options" style="margin-top: 12px; font-size: 11.5px; color: var(--muted); line-height: 1.6; display: none;" bis_skin_checked="1">
+          <strong style="color:var(--warn)">v_max 편집 모드</strong>
+          <ul style="margin:6px 0 0 0; padding-left:18px;">
+            <li>Edge 좌클릭 → 단일 선택 (Shift+클릭 = 추가/제거)</li>
+            <li>Shift+드래그 → 박스 안 edge 일괄 선택</li>
+            <li>단일 선택 시 <strong>Shift+휠</strong> → ±0.1 m/s 미세 조정</li>
+            <li>다중 선택 후 <strong>Apply</strong> → 일괄 적용</li>
+            <li>빈 공간 클릭 → 선택 해제</li>
+            <li>Esc → Paint 모드로 복귀</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- F1b-ux+: Speed Control 패널 (Speed 모드에서만 표시) -->
+      <div class="panel" id="speed-control-panel" style="display: none;" bis_skin_checked="1">
+        <h2>Speed Control</h2>
+        <div id="speed-ctrl-status" class="speed-ctrl-status" bis_skin_checked="1">엣지를 선택하세요 <span style="color:var(--muted-2);">(클릭 / Shift+드래그)</span></div>
+        <div class="speed-ctrl-row" bis_skin_checked="1">
+          <input type="number" id="speed-bulk-input" min="0.1" max="5.0" step="0.1" value="1.0" placeholder="—">
+          <span style="color:var(--muted); font-size:11px;">m/s</span>
+          <input type="range" id="speed-bulk-slider" min="0.1" max="5.0" step="0.1" value="1.0">
+        </div>
+        <div class="speed-ctrl-buttons" bis_skin_checked="1">
+          <button id="speed-apply-btn" class="primary" disabled="">Apply to selected</button>
+          <button id="speed-unset-btn" title="선택 엣지 v_max 미설정으로" disabled="">Unset</button>
+        </div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:8px; line-height:1.5;" bis_skin_checked="1">
+          범위 0.1 ~ 5.0 m/s · 기본 1.0 · 스텝 0.1
+        </div>
+      </div>
+
+      <!-- Stamp 도구 -->
+      <div class="panel" bis_skin_checked="1">
+        <h2>Node Role Stamp</h2>
+        <div class="stamp-grid" id="stamp-grid" bis_skin_checked="1">
+          <button class="stamp-btn active" data-stamp="inspect">
+            <span class="icon">👁</span><span>Inspect</span><span class="key">1</span>
+          </button>
+          <button class="stamp-btn" data-stamp="station">
+            <span class="icon" style="color:var(--role-station)">●</span><span>Station</span><span class="key">2</span>
+          </button>
+          <button class="stamp-btn" data-stamp="charger">
+            <span class="icon" style="color:var(--role-charger)">■</span><span>Charger</span><span class="key">3</span>
+          </button>
+          <button class="stamp-btn" data-stamp="holding">
+            <span class="icon">○</span><span>Holding</span><span class="key">4</span>
+          </button>
+          <button class="stamp-btn" data-stamp="siding">
+            <span class="icon" style="color:var(--role-siding)">◆</span><span>Siding</span><span class="key">5</span>
+          </button>
+          <button class="stamp-btn" data-stamp="reset">
+            <span class="icon">↺</span><span>Reset</span><span class="key">0</span>
+          </button>
+        </div>
+        <div class="hint" style="font-size:11px; color:var(--muted); margin-top:8px;" bis_skin_checked="1">
+          숫자키로 빠른 전환 · Shift+드래그로 영역 선택 일괄 적용
+        </div>
+      </div>
+
+      <!-- Inspector / 선택 정보 -->
+      <div class="panel" bis_skin_checked="1">
+        <h2>Inspector</h2>
+        <div id="inspector" class="inspector-empty" bis_skin_checked="1"><div class="inspector-empty" bis_skin_checked="1">노드 또는 엣지 위에 마우스를 올리면 정보 표시</div></div>
+      </div>
+
+      <!-- 배경 이미지 -->
+      <div class="panel" bis_skin_checked="1">
+        <h2>Background Image</h2>
+        <div style="display:flex; flex-direction:column; gap:10px; font-size:11.5px;" bis_skin_checked="1">
+          <div bis_skin_checked="1">
+            <input type="file" id="bg-image-upload" accept="image/png,image/jpeg,image/jpg" style="display:block; width:100%; padding:6px 4px; border:1px solid var(--border); border-radius:4px;">
+            <div style="font-size:10px; color:var(--muted); margin-top:4px;" bis_skin_checked="1">PNG/JPG 업로드</div>
+          </div>
+
+          <div id="bg-controls" style="display:none; gap:10px; flex-direction:column;" bis_skin_checked="1">
+            <div bis_skin_checked="1">
+              <label style="display:block; margin-bottom:4px;">
+                Opacity <span id="bg-opacity-value">100</span>%
+              </label>
+              <input type="range" id="bg-opacity-slider" min="0" max="100" value="100" style="width:100%; cursor:pointer;">
+            </div>
+
+            <div bis_skin_checked="1">
+              <label style="display:block; margin-bottom:4px;">
+                X Offset
+              </label>
+              <input type="number" id="bg-x-offset" value="0" step="1" style="width:100%; padding:4px; border:1px solid var(--border); border-radius:3px;">
+            </div>
+
+            <div bis_skin_checked="1">
+              <label style="display:block; margin-bottom:4px;">
+                Y Offset
+              </label>
+              <input type="number" id="bg-y-offset" value="0" step="1" style="width:100%; padding:4px; border:1px solid var(--border); border-radius:3px;">
+            </div>
+
+            <div bis_skin_checked="1">
+              <label style="display:block; margin-bottom:4px;">
+                Scale <span id="bg-scale-value">100</span>%
+              </label>
+              <input type="range" id="bg-scale-slider" min="10" max="200" value="100" style="width:100%; cursor:pointer;">
+            </div>
+
+            <button id="bg-clear" style="padding:6px; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:4px; cursor:pointer; font-size:11px;">
+              Clear Background
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 검증 리포트 -->
+      <div class="panel" bis_skin_checked="1">
+        <h2>Validation</h2>
+        <div id="validation-list" bis_skin_checked="1"><div class="warn-item warn" bis_skin_checked="1"><strong>[warn]</strong> 1 개 dead-end (들어오기만 가능): N0026</div><div class="warn-item warn" bis_skin_checked="1"><strong>[warn]</strong> Charger 미지정 (배터리 모드 사용 시 필요). Stamp [3] 으로 지정</div><div class="warn-item info" style="font-size:11px; color:var(--success);" bis_skin_checked="1">✓ 1 holding</div></div>
+        <div style="margin-top:10px;" bis_skin_checked="1">
+          <div class="stat-row" bis_skin_checked="1"><span class="k">Connected components</span><span class="v" id="vstat-cc">1</span></div>
+          <div class="stat-row" bis_skin_checked="1"><span class="k">Isolated nodes</span><span class="v" id="vstat-iso">0</span></div>
+          <div class="stat-row" bis_skin_checked="1"><span class="k">Dead-end nodes</span><span class="v" id="vstat-de">1</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast" bis_skin_checked="1">3 edges → v_max 0.10 m/s</div>
+
+  <script>
+    // ── 데이터 로드 ─────────────────────────────────────────────
+    const PAYLOAD = {"title": "Map Editor", "source_name": "synthetic_plant", "server_map_id": null, "nodes": [{"id": "N0001", "x": 0.11, "y": 79.62, "name": "N_north_x0", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0002", "x": 9.82, "y": 79.78, "name": "N_north_x10", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0003", "x": 20.19, "y": 80.14, "name": "N_north_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0004", "x": 30.31, "y": 79.67, "name": "N_north_x30", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0005", "x": 39.94, "y": 79.62, "name": "N_north_x40", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0006", "x": 49.77, "y": 80.0, "name": "N_north_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0007", "x": 59.62, "y": 79.76, "name": "N_north_x60", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0008", "x": 70.12, "y": 80.04, "name": "N_north_x70", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0009", "x": 79.78, "y": 80.07, "name": "N_north_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0010", "x": 90.25, "y": 79.61, "name": "N_north_x90", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0011", "x": 100.24, "y": 80.16, "name": "N_north_x100", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0012", "x": 109.87, "y": 79.72, "name": "N_north_x110", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0013", "x": 120.37, "y": 79.87, "name": "N_north_x120", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0014", "x": -0.33, "y": 49.68, "name": "N_center_x0", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 2, "capability": null}, {"id": "N0015", "x": 10.28, "y": 50.08, "name": "N_center_x10", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0016", "x": 20.25, "y": 50.18, "name": "N_center_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0017", "x": 30.03, "y": 50.38, "name": "N_center_x30", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0018", "x": 39.9, "y": 50.04, "name": "N_center_x40", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0019", "x": 50.26, "y": 50.09, "name": "N_center_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0020", "x": 60.29, "y": 50.06, "name": "N_center_x60", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0021", "x": 70.16, "y": 49.64, "name": "N_center_x70", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0022", "x": 79.78, "y": 49.83, "name": "N_center_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 2, "capability": null}, {"id": "N0023", "x": 89.66, "y": 49.79, "name": "N_center_x90", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0024", "x": 99.68, "y": 49.82, "name": "N_center_x100", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0025", "x": 110.11, "y": 49.89, "name": "N_center_x110", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0026", "x": 119.9, "y": 49.77, "name": "N_center_x120", "role": "holding_candidate", "is_charger": false, "is_holding": true, "degree_in": 1, "degree_out": 0, "capability": null}, {"id": "N0027", "x": 9.81, "y": 20.35, "name": "N_south_x10", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 2, "degree_out": 1, "capability": null}, {"id": "N0028", "x": 20.12, "y": 20.09, "name": "N_south_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0029", "x": 29.74, "y": 20.18, "name": "N_south_x30", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0030", "x": 39.73, "y": 19.9, "name": "N_south_x40", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0031", "x": 50.39, "y": 20.11, "name": "N_south_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0032", "x": 60.05, "y": 20.15, "name": "N_south_x60", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0033", "x": 70.27, "y": 20.22, "name": "N_south_x70", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0034", "x": 79.78, "y": 19.63, "name": "N_south_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0035", "x": 89.85, "y": 19.81, "name": "N_south_x90", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0036", "x": 99.77, "y": 20.35, "name": "N_south_x100", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0037", "x": 110.3, "y": 19.85, "name": "N_south_x110", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 2, "capability": null}, {"id": "N0038", "x": 20.12, "y": 64.92, "name": "N_bay_x20_mid", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0039", "x": 17.33, "y": 64.97, "name": "N_station_x20", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0040", "x": 49.81, "y": 64.8, "name": "N_bay_x50_mid", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0041", "x": 47.05, "y": 64.81, "name": "N_station_x50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0042", "x": 80.07, "y": 65.32, "name": "N_bay_x80_mid", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 3, "degree_out": 3, "capability": null}, {"id": "N0043", "x": 76.92, "y": 64.78, "name": "N_station_x80", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0044", "x": -2.6, "y": 50.01, "name": "N_charger_access", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 4, "degree_out": 4, "capability": null}, {"id": "N0045", "x": -10.33, "y": 44.64, "name": "N_charger_y45", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0046", "x": -10.31, "y": 50.1, "name": "N_charger_y50", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0047", "x": -9.77, "y": 54.94, "name": "N_charger_y55", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0048", "x": 124.65, "y": 79.91, "name": "N_holding_access", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 4, "degree_out": 4, "capability": null}, {"id": "N0049", "x": 130.4, "y": 80.02, "name": "N_holding_0", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0050", "x": 130.38, "y": 85.29, "name": "N_holding_1", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}, {"id": "N0051", "x": 129.61, "y": 90.18, "name": "N_holding_2", "role": "standard", "is_charger": false, "is_holding": false, "degree_in": 1, "degree_out": 1, "capability": null}], "edges": [{"id": "L0001", "src": "N0001", "dst": "N0002", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0003", "src": "N0002", "dst": "N0003", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0005", "src": "N0003", "dst": "N0004", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0007", "src": "N0004", "dst": "N0005", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0009", "src": "N0005", "dst": "N0006", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0011", "src": "N0006", "dst": "N0007", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0013", "src": "N0007", "dst": "N0008", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0015", "src": "N0008", "dst": "N0009", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0017", "src": "N0009", "dst": "N0010", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0019", "src": "N0010", "dst": "N0011", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0021", "src": "N0011", "dst": "N0012", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0023", "src": "N0012", "dst": "N0013", "bidir": true, "corridor": "north", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0025", "src": "N0014", "dst": "N0015", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0026", "src": "N0015", "dst": "N0016", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0027", "src": "N0016", "dst": "N0017", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0028", "src": "N0017", "dst": "N0018", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0029", "src": "N0018", "dst": "N0019", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0030", "src": "N0019", "dst": "N0020", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0031", "src": "N0020", "dst": "N0021", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0032", "src": "N0021", "dst": "N0022", "bidir": false, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0033", "src": "N0022", "dst": "N0023", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0034", "src": "N0023", "dst": "N0024", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0035", "src": "N0024", "dst": "N0025", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0036", "src": "N0025", "dst": "N0026", "bidir": false, "corridor": "center", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0037", "src": "N0037", "dst": "N0036", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0038", "src": "N0036", "dst": "N0035", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0039", "src": "N0035", "dst": "N0034", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0040", "src": "N0034", "dst": "N0033", "bidir": false, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0041", "src": "N0033", "dst": "N0032", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0042", "src": "N0032", "dst": "N0031", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0043", "src": "N0031", "dst": "N0030", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0044", "src": "N0030", "dst": "N0029", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0045", "src": "N0029", "dst": "N0028", "bidir": false, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0046", "src": "N0028", "dst": "N0027", "bidir": false, "corridor": "south", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0047", "src": "N0003", "dst": "N0038", "bidir": true, "corridor": "bay", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0049", "src": "N0038", "dst": "N0016", "bidir": true, "corridor": "bay", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0051", "src": "N0038", "dst": "N0039", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0053", "src": "N0006", "dst": "N0040", "bidir": true, "corridor": "bay", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0055", "src": "N0040", "dst": "N0019", "bidir": true, "corridor": "bay", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0057", "src": "N0040", "dst": "N0041", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0059", "src": "N0009", "dst": "N0042", "bidir": true, "corridor": "bay", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0061", "src": "N0042", "dst": "N0022", "bidir": true, "corridor": "bay", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0063", "src": "N0042", "dst": "N0043", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0065", "src": "N0044", "dst": "N0014", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0067", "src": "N0044", "dst": "N0045", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0069", "src": "N0044", "dst": "N0046", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0071", "src": "N0044", "dst": "N0047", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0073", "src": "N0002", "dst": "N0027", "bidir": true, "corridor": "misc", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0075", "src": "N0013", "dst": "N0037", "bidir": true, "corridor": "misc", "access": "", "v_max": null, "graph_idx": 0}, {"id": "L0077", "src": "N0013", "dst": "N0048", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0079", "src": "N0048", "dst": "N0049", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0081", "src": "N0048", "dst": "N0050", "bidir": true, "corridor": "", "access": "access", "v_max": null, "graph_idx": 0}, {"id": "L0083", "src": "N0048", "dst": "N0051", "bidir": true, "corridor": "misc", "access": "", "v_max": null, "graph_idx": 0}], "report": {"node_count": 51, "edge_count_raw": 84, "edge_count_after_merge": 53, "bidirectional_count": 31, "inferred_chargers": 0, "inferred_stations": 0, "inferred_holding": 1, "connected_components": 1, "isolated_nodes": [], "dead_end_nodes": ["N0026"], "corridor_stats": {"north": 11, "(none)": 14, "center": 11, "south": 8, "bay": 6, "misc": 3}, "warnings": [{"severity": "warn", "code": "dead_end_nodes", "message": "1 개 노드가 dead-end (들어오기만 가능)"}, {"severity": "error", "code": "no_chargers", "message": "charger 로 추론된 노드가 없음. 검토 UI 에서 charger 지정 필요"}, {"severity": "info", "code": "unlabeled_corridor", "message": "17 개 엣지 corridor 추론 실패 (access/짧은 엣지일 수 있음)"}]}, "fleets": []};
+    const SOURCE_NAME = PAYLOAD.source_name || "imported_map";
+    const SERVER_MAP_ID = PAYLOAD.server_map_id || null;
+    const nodes = PAYLOAD.nodes;            // 편집 대상 (mutable)
+    const edges = PAYLOAD.edges;            // 편집 대상 (mutable)
+    const report = PAYLOAD.report;
+    const nodeById = new Map(nodes.map(n => [n.id, n]));
+    // F1a: fleets 정의 (PAYLOAD.fleets 비어 있으면 multi-graph UI 비활성)
+    const FLEETS = Array.isArray(PAYLOAD.fleets) ? PAYLOAD.fleets : [];
+    // 사용 가능한 graph_idx 목록 (fleets 가 있으면 그 graph_idx 들, 없으면 edges 의 graph_idx 들)
+    const GRAPH_INDICES = (() => {
+      const seen = new Set();
+      for (const f of FLEETS) seen.add(f.graph_idx);
+      if (seen.size === 0) {
+        for (const e of edges) seen.add(e.graph_idx ?? 0);
+      }
+      return [...seen].sort((a, b) => a - b);
+    })();
+    const FLEET_BY_GRAPH = new Map(FLEETS.map(f => [f.graph_idx, f]));
+    // multi-fleet 활성 조건: fleets 가 정의되어 있고 graph 가 2개 이상이거나 fleets 가 있음
+    const MULTI_FLEET_ACTIVE = FLEETS.length > 0;
+    // 기본 fleet 색 (graph_idx 가 fleet 매핑 없을 때)
+    const DEFAULT_GRAPH_COLORS = ["#0f9d58", "#2563eb", "#e0a000", "#c0392b", "#7c3aed"];
+    function colorForGraphIdx(idx) {
+      const f = FLEET_BY_GRAPH.get(idx);
+      if (f && f.color) return f.color;
+      return DEFAULT_GRAPH_COLORS[idx % DEFAULT_GRAPH_COLORS.length];
+    }
+    function fleetNameForGraphIdx(idx) {
+      const f = FLEET_BY_GRAPH.get(idx);
+      return f ? f.id : `Graph ${idx}`;
+    }
+    // 원본 상태 보존 (Save 시 diff 계산용)
+    const ORIGINAL_NODES = new Map(PAYLOAD.nodes.map(n => [n.id, JSON.parse(JSON.stringify(n))]));
+    const ORIGINAL_EDGES = new Map(PAYLOAD.edges.map(e => [e.id, JSON.parse(JSON.stringify(e))]));
+
+    // ── 편집 상태 ───────────────────────────────────────────────
+    // F1a: 현재 편집 중인 graph (multi-fleet 환경). fleets 가 정의되어 있을 때만 의미 있음.
+    //   - activeGraphIdx: 활성 graph 의 idx (Paint/Build 액션 대상 + 색 강조 기준)
+    //   - showInactiveGraphs: 비활성 graph 의 lane 도 회색으로 보일지 여부 (기본 on)
+    let activeGraphIdx = (GRAPH_INDICES.length > 0 ? GRAPH_INDICES[0] : 0);
+    let showInactiveGraphs = true;
+    let mode = "paint";              // paint / stamp / build / speed
+    let pinnedEdgeId = "";           // Speed 모드: 클릭으로 고정된 edge (인스펙터 유지)
+    let stampTool = "inspect";       // inspect / station / charger / holding / siding / reset
+    let buildTool = "node";          // node / edge / delete
+    let paintTrajectoryButton = -1;  // 진행 중 trajectory 의 마우스 버튼 (0=좌, 2=우)
+
+    // Add Edge 진행 중: 첫 번째로 클릭된 노드 (두 번째 클릭 시 엣지 확정)
+    let edgeStartNodeId = "";
+    let edgeStartButton = 0;     // 첫 클릭 시 마우스 버튼 (좌/우)
+    // F1e: Stamp 배치 정렬 상태
+    let gridSnapEnabled = false;
+    let gridSize = 10;           // data 좌표 단위
+    let lastPlacedDataXY = null; // 마지막 추가된 노드 위치 (data 좌표)
+    let edgePreviewClient = null;  // 커서 위치 (preview line 그리기용)
+
+    // 다중 선택 상태
+    let selectionBox = null;     // {x1,y1,x2,y2} (SVG 좌표) — Shift+드래그 중일 때만
+    let selectedNodeIds = new Set();   // 박스로 선택된 노드들 (Stamp 일괄 적용용)
+    // F1b-ux+: Speed 모드에서 선택된 edge 들 — 일괄 v_max 적용 대상
+    let selectedEdgeIds = new Set();
+
+    // 배경 이미지 상태
+    let backgroundImage = {
+      url: PAYLOAD.background_image?.url || null,
+      opacity: PAYLOAD.background_image?.opacity !== undefined ? PAYLOAD.background_image.opacity : 100,
+      x_offset: PAYLOAD.background_image?.x_offset || 0,
+      y_offset: PAYLOAD.background_image?.y_offset || 0,
+      scale: PAYLOAD.background_image?.scale !== undefined ? PAYLOAD.background_image.scale : 100,
+    };
+
+    // ID 자동 생성 (새 노드용)
+    let newNodeCounter = 9000;
+    function nextNodeId() {
+      // 기존 ID 와 충돌 안 하게
+      while (nodeById.has(`N${++newNodeCounter}`)) {}
+      return `N${newNodeCounter}`;
+    }
+    let newEdgeCounter = 9000;
+    function nextEdgeId() {
+      const existing = new Set(edges.map(e => e.id));
+      while (existing.has(`L${++newEdgeCounter}`)) {}
+      return `L${newEdgeCounter}`;
+    }
+
+    // ── Undo / Redo history stack ───────────────────────────────
+    const history = { past: [], future: [], capacity: 50 };
+    function snapshot() {
+      return {
+        nodes: nodes.map(n => ({...n})),
+        edges: edges.map(e => ({...e})),
+      };
+    }
+    function applySnapshot(s) {
+      nodes.length = 0;
+      for (const n of s.nodes) nodes.push({...n});
+      edges.length = 0;
+      for (const e of s.edges) edges.push({...e});
+      nodeById.clear();
+      for (const n of nodes) nodeById.set(n.id, n);
+      selectedNodeIds.clear();
+      selectedEdgeIds.clear();
+      edgeStartNodeId = "";
+      render();
+    }
+    function pushHistory() {
+      history.past.push(snapshot());
+      if (history.past.length > history.capacity) history.past.shift();
+      history.future.length = 0;
+    }
+    function undo() {
+      if (history.past.length === 0) { showToast("Nothing to undo"); return; }
+      history.future.push(snapshot());
+      applySnapshot(history.past.pop());
+      showToast("Undo");
+    }
+    function redo() {
+      if (history.future.length === 0) { showToast("Nothing to redo"); return; }
+      history.past.push(snapshot());
+      applySnapshot(history.future.pop());
+      showToast("Redo");
+    }
+    let zoomScale = 1, panX = 0, panY = 0;
+    let isPanning = false, panStart = null;
+    let hoveredNodeId = "", hoveredEdgeId = "";
+
+    // Paint 모드 상태
+    let paintTrajectory = null;   // [{x,y}, ...] in SVG coords (drag 중)
+    let spaceKeyDown = false;     // Space 누르고 있는 동안 pan 모드 override
+
+    // ── 좌표 fit ────────────────────────────────────────────────
+    // 노드 좌표 분포를 SVG viewport (1000 × 700) 에 맞춤
+    const PAD = 40;
+    const VW = 1000, VH = 700;
+    const xs = nodes.map(n => n.x);
+    const ys = nodes.map(n => n.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const rangeX = Math.max(maxX - minX, 1), rangeY = Math.max(maxY - minY, 1);
+    const scaleFit = Math.min((VW - 2*PAD) / rangeX, (VH - 2*PAD) / rangeY);
+    // 좌측 상단 원점 SVG vs y-up 데이터 좌표 변환
+    function sx(x) { return PAD + (x - minX) * scaleFit; }
+    function sy(y) { return VH - PAD - (y - minY) * scaleFit; }
+
+    // ── 통계 칩 채우기 ──────────────────────────────────────────
+    document.getElementById("stat-nodes").textContent = report.node_count;
+    document.getElementById("stat-edges").textContent =
+      `${report.edge_count_raw} → ${report.edge_count_after_merge}`;
+    document.getElementById("stat-bidir").textContent = report.bidirectional_count;
+    document.getElementById("stat-components").textContent = report.connected_components;
+    if (report.connected_components > 1) {
+      document.getElementById("chip-components").style.background = "#fde8e7";
+      document.getElementById("chip-components").style.color = "var(--danger)";
+    }
+
+    // ── 검증 패널 (실시간 재계산) ───────────────────────────────
+    // 정적 import report 가 아니라 매번 nodes/edges 현재 상태로 다시 계산.
+    // 사용자가 charger 마킹하거나 방향 바꾸면 즉시 반영됨.
+    function recomputeValidation() {
+      // 1) degree 재계산 (방향 변경 반영)
+      for (const n of nodes) { n.degree_in = 0; n.degree_out = 0; }
+      for (const e of edges) {
+        const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+        if (!a || !b) continue;
+        a.degree_out += 1;
+        b.degree_in += 1;
+        if (e.bidir) {
+          a.degree_in += 1;
+          b.degree_out += 1;
+        }
+      }
+      // 2) connected components (weakly)
+      const parent = new Map(nodes.map(n => [n.id, n.id]));
+      const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+      const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+      for (const e of edges) {
+        if (parent.has(e.src) && parent.has(e.dst)) union(e.src, e.dst);
+      }
+      const cc = new Set(nodes.map(n => find(n.id))).size;
+      // 3) isolated / dead-end
+      const isolated = nodes.filter(n => n.degree_in === 0 && n.degree_out === 0);
+      const deadEnds = nodes.filter(n =>
+        n.degree_in > 0 && n.degree_out === 0 && !n.is_charger && n.role !== "holding"
+      );
+      // 4) chargers / stations count
+      const chargerCount = nodes.filter(n => n.is_charger || n.role === "charger").length;
+      const stationCount = nodes.filter(n => n.role === "station" || n.role === "work").length;
+      const holdingCount = nodes.filter(n => n.is_holding || n.role === "holding" || n.role === "holding_candidate").length;
+
+      // ── 패널 업데이트 ──
+      document.getElementById("vstat-cc").textContent = cc;
+      document.getElementById("vstat-iso").textContent = isolated.length;
+      document.getElementById("vstat-de").textContent = deadEnds.length;
+
+      const warnings = [];
+      // error: 시뮬 불가능 수준
+      if (isolated.length > 0) {
+        warnings.push({sev: "error", msg: `${isolated.length} 개 노드가 어떤 링크에도 연결 안 됨`});
+      }
+      if (cc > 1) {
+        warnings.push({sev: "error", msg: `그래프가 ${cc} 개 단편으로 나뉨 (AGV 도달 불가 구간)`});
+      }
+      // warn: 시뮬은 가능하지만 문제 잠재
+      if (deadEnds.length > 0) {
+        const sample = deadEnds.slice(0, 3).map(n => n.id).join(", ");
+        warnings.push({sev: "warn", msg: `${deadEnds.length} 개 dead-end (들어오기만 가능): ${sample}${deadEnds.length > 3 ? ' …' : ''}`});
+      }
+      if (chargerCount === 0) {
+        warnings.push({sev: "warn", msg: `Charger 미지정 (배터리 모드 사용 시 필요). Stamp [3] 으로 지정`});
+      }
+      // 통계 정보 (warning 아닌 좋은 상태도 표시)
+      const okMsg = [];
+      if (chargerCount > 0) okMsg.push(`✓ ${chargerCount} chargers`);
+      if (stationCount > 0) okMsg.push(`✓ ${stationCount} stations`);
+      if (holdingCount > 0) okMsg.push(`✓ ${holdingCount} holding`);
+
+      const vlist = document.getElementById("validation-list");
+      let html = "";
+      if (warnings.length === 0 && okMsg.length === 0) {
+        html = `<div class="warn-item info">✓ 검증 통과 (아직 노드 역할 미지정)</div>`;
+      } else {
+        html = warnings.map(w => `<div class="warn-item ${w.sev}"><strong>[${w.sev}]</strong> ${w.msg}</div>`).join("");
+        if (okMsg.length > 0) {
+          html += `<div class="warn-item info" style="font-size:11px; color:var(--success);">${okMsg.join(' · ')}</div>`;
+        }
+      }
+      document.getElementById("validation-list").innerHTML = html;
+    }
+
+    // ── F1a: Active Graph 패널 + Fleet Info 패널 ────────────────
+    function renderActiveGraphPanel() {
+      const panel = document.getElementById("active-graph-panel");
+      const infoPanel = document.getElementById("fleet-info-panel");
+      if (!MULTI_FLEET_ACTIVE) {
+        panel.style.display = "none";
+        infoPanel.style.display = "none";
+        return;
+      }
+      panel.style.display = "";
+      const list = document.getElementById("active-graph-list");
+      // 최대 3 graph 까지 (spec)
+      const displayIndices = GRAPH_INDICES.slice(0, 3);
+      list.innerHTML = displayIndices.map(idx => {
+        const f = FLEET_BY_GRAPH.get(idx);
+        const color = colorForGraphIdx(idx);
+        const name = fleetNameForGraphIdx(idx);
+        const count = f ? f.count : 0;
+        const active = (idx === activeGraphIdx) ? "active" : "";
+        return `<label class="graph-row ${active}" data-graph-idx="${idx}">
+          <input type="radio" name="active-graph" value="${idx}" ${idx === activeGraphIdx ? "checked" : ""} />
+          <span class="fleet-dot" style="background:${color};"></span>
+          <span class="fleet-name">Graph ${idx}</span>
+          <span style="color:var(--muted); font-size:11px;">${name}</span>
+          <span class="fleet-count">${count} AGVs</span>
+        </label>`;
+      }).join("");
+      // 라디오 이벤트 위임
+      list.querySelectorAll(".graph-row").forEach(row => {
+        row.addEventListener("click", () => {
+          const idx = parseInt(row.dataset.graphIdx, 10);
+          if (Number.isFinite(idx)) setActiveGraph(idx);
+        });
+      });
+      renderFleetInfoPanel();
+    }
+
+    function setActiveGraph(idx) {
+      if (idx === activeGraphIdx) return;
+      activeGraphIdx = idx;
+      // 진행 중 인터랙션 cancel
+      paintTrajectory = null;
+      edgeStartNodeId = "";
+      edgePreviewClient = null;
+      selectedNodeIds.clear();
+      selectedEdgeIds.clear();
+      selectionBox = null;
+      renderActiveGraphPanel();
+      render();
+    }
+
+    function cycleActiveGraph() {
+      if (!MULTI_FLEET_ACTIVE || GRAPH_INDICES.length === 0) return;
+      const display = GRAPH_INDICES.slice(0, 3);
+      const pos = display.indexOf(activeGraphIdx);
+      const next = display[(pos + 1) % display.length];
+      setActiveGraph(next);
+    }
+
+    function renderFleetInfoPanel() {
+      const infoPanel = document.getElementById("fleet-info-panel");
+      if (!MULTI_FLEET_ACTIVE) {
+        infoPanel.style.display = "none";
+        return;
+      }
+      infoPanel.style.display = "";
+      const f = FLEET_BY_GRAPH.get(activeGraphIdx);
+      const title = document.getElementById("fleet-info-title");
+      const body = document.getElementById("fleet-info-body");
+      const fleetName = f ? f.id : `Graph ${activeGraphIdx}`;
+      const fleetColor = colorForGraphIdx(activeGraphIdx);
+      title.innerHTML =
+        `<span class="fleet-dot" style="display:inline-block; width:9px; height:9px; border-radius:50%; background:${fleetColor}; margin-right:6px; vertical-align:middle;"></span>` +
+        `${fleetName} 정보`;
+      const caps = f ? f.capabilities : [];
+      const count = f ? f.count : 0;
+      // 활성 graph 에서 도달 가능한 station / charger 분석 (BFS)
+      const reachable = computeReachableNodes(activeGraphIdx);
+      const stations = nodes.filter(n =>
+        reachable.has(n.id) &&
+        (n.role === "station" || n.role === "work")
+      );
+      const chargers = nodes.filter(n =>
+        reachable.has(n.id) &&
+        (n.is_charger || n.role === "charger")
+      );
+      let capsHtml = "—";
+      if (caps && caps.length > 0) {
+        capsHtml = caps.map(c => `<span class="fleet-tag">${escapeHtml(c)}</span>`).join("");
+      }
+      let stationsHtml = `<span style="color:var(--muted); font-size:11px;">없음</span>`;
+      if (stations.length > 0) {
+        const max = 20;
+        const shown = stations.slice(0, max);
+        stationsHtml = shown.map(n => {
+          const hasCap = n.capability != null && n.capability !== "";
+          const capLabel = hasCap ? ` (${escapeHtml(n.capability)})` : "";
+          return `<span class="station-pill ${hasCap ? 'has-cap' : ''}" title="${n.id}${capLabel}">${escapeHtml(n.id)}${capLabel}</span>`;
+        }).join("");
+        if (stations.length > max) {
+          stationsHtml += `<span style="color:var(--muted); font-size:11px;"> … +${stations.length - max}</span>`;
+        }
+      }
+      let chargersHtml = `<span style="color:var(--muted); font-size:11px;">없음</span>`;
+      if (chargers.length > 0) {
+        chargersHtml = chargers.slice(0, 20).map(n =>
+          `<span class="station-pill" style="border-color:var(--role-charger); color:var(--role-charger);">${escapeHtml(n.id)}</span>`
+        ).join("");
+      }
+      body.innerHTML = `
+        <div class="fleet-info-row">
+          <div class="k">Fleet ID</div>
+          <div class="v" style="font-family:var(--font-mono);">${escapeHtml(fleetName)}</div>
+        </div>
+        <div class="fleet-info-row">
+          <div class="k">AGV count</div>
+          <div class="v" style="font-family:var(--font-mono);">${count}</div>
+        </div>
+        <div class="fleet-info-row">
+          <div class="k">Capabilities</div>
+          <div class="v">${capsHtml}</div>
+        </div>
+        <div class="fleet-info-row" style="border-top:1px dashed var(--border); margin-top:6px; padding-top:8px;">
+          <div class="k">도달 가능 stations (${stations.length})</div>
+          <div class="v">${stationsHtml}</div>
+        </div>
+        <div class="fleet-info-row">
+          <div class="k">도달 가능 chargers (${chargers.length})</div>
+          <div class="v">${chargersHtml}</div>
+        </div>
+      `;
+    }
+
+    // BFS — 활성 graph 의 lane 만 사용하여 도달 가능한 노드 집합 산출
+    function computeReachableNodes(gIdx) {
+      const adj = new Map(nodes.map(n => [n.id, []]));
+      for (const e of edges) {
+        const eg = (e.graph_idx == null) ? 0 : e.graph_idx;
+        if (eg !== gIdx) continue;
+        if (!adj.has(e.src) || !adj.has(e.dst)) continue;
+        adj.get(e.src).push(e.dst);
+        if (e.bidir) adj.get(e.dst).push(e.src);
+      }
+      const visited = new Set();
+      for (const n of nodes) {
+        if (visited.has(n.id)) continue;
+        // 컴포넌트별로 모두 포함 (시작점 무관 — 어디든 graph 에 연결되어 있으면 도달 가능 노드)
+        // 단, 고립 노드(어떤 lane 에도 안 닿음)는 제외
+        const inAdj = adj.get(n.id);
+        const hasOut = inAdj && inAdj.length > 0;
+        const hasIn = [...adj.values()].some(list => list.includes(n.id));
+        if (!hasOut && !hasIn) continue;
+        // BFS
+        const stack = [n.id];
+        while (stack.length) {
+          const cur = stack.pop();
+          if (visited.has(cur)) continue;
+          visited.add(cur);
+          for (const nb of (adj.get(cur) || [])) {
+            if (!visited.has(nb)) stack.push(nb);
+          }
+        }
+      }
+      return visited;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
+    }
+
+    // Show inactive toggle 핸들러
+    document.getElementById("show-inactive-toggle").addEventListener("change", (e) => {
+      showInactiveGraphs = !!e.target.checked;
+      render();
+    });
+
+    // ── 모드 토글 ───────────────────────────────────────────────
+    function setMode(newMode) {
+      mode = newMode;
+      document.querySelectorAll("#mode-toggle button").forEach(b =>
+        b.classList.toggle("active", b.dataset.mode === newMode));
+      document.getElementById("paint-options").style.display = (newMode === "paint") ? "" : "none";
+      document.getElementById("build-options").style.display = (newMode === "build") ? "" : "none";
+      const speedOpts = document.getElementById("speed-options");
+      if (speedOpts) speedOpts.style.display = (newMode === "speed") ? "" : "none";
+      // F1b-ux+: Speed Control 패널은 Speed 모드 전용
+      const speedCtrl = document.getElementById("speed-control-panel");
+      if (speedCtrl) speedCtrl.style.display = (newMode === "speed") ? "" : "none";
+      // Speed 모드 떠나면 pin/선택 해제
+      if (newMode !== "speed") {
+        pinnedEdgeId = "";
+        selectedEdgeIds.clear();
+      }
+      // 모드 전환 시 진행 중 인터랙션 모두 cancel
+      paintTrajectory = null;
+      edgeStartNodeId = "";
+      edgePreviewClient = null;
+      selectedNodeIds.clear();
+      selectionBox = null;
+      updateSpeedControlPanel();
+      render();
+    }
+    document.getElementById("mode-toggle").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-mode]");
+      if (!btn) return;
+      setMode(btn.dataset.mode);
+    });
+
+    // ── Stamp 도구 선택 ─────────────────────────────────────────
+    function selectStamp(tool) {
+      stampTool = tool;
+      document.querySelectorAll(".stamp-btn").forEach(b =>
+        b.classList.toggle("active", b.dataset.stamp === tool)
+      );
+    }
+    document.getElementById("stamp-grid").addEventListener("click", (e) => {
+      const btn = e.target.closest(".stamp-btn");
+      if (!btn) return;
+      selectStamp(btn.dataset.stamp);
+    });
+
+    // F1e: Grid snap UI 바인딩
+    document.getElementById("grid-snap-toggle").addEventListener("change", (e) => {
+      gridSnapEnabled = !!e.target.checked;
+      showToast(`Grid snap ${gridSnapEnabled ? 'ON' : 'OFF'}`);
+    });
+    document.getElementById("grid-size-input").addEventListener("change", (e) => {
+      const v = parseFloat(e.target.value);
+      if (Number.isFinite(v) && v > 0) gridSize = v;
+      else e.target.value = gridSize;
+    });
+
+    // 키보드 단축키:
+    //   숫자키 1~5 / 0 → Stamp 도구 선택 + Stamp 모드 자동 전환
+    //   P/S/N 키     → Paint / Stamp / Single 모드 직접 전환
+    //   Space        → 누르고 있는 동안 pan 모드 (어느 모드든)
+    //   Shift / Alt  → Paint drag 시 임시 override (handler 안에서 e.shiftKey/altKey 체크)
+    //   Escape       → Inspect 도구 + Paint 모드 (안전 상태로)
+    function selectBuildTool(tool) {
+      buildTool = tool;
+      document.querySelectorAll(".build-tools button").forEach(b =>
+        b.classList.toggle("active", b.dataset.build === tool));
+      edgeStartNodeId = ""; // 도구 바꾸면 진행 중 Add Edge cancel
+      render();
+    }
+    document.addEventListener("click", (e) => {
+      const buildBtn = e.target.closest(".build-tools button[data-build]");
+      if (buildBtn) selectBuildTool(buildBtn.dataset.build);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      // ── Undo / Redo: Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z / Ctrl+Y ──
+      if ((e.metaKey || e.ctrlKey) && (e.key === "z" || e.key === "Z")) {
+        if (e.shiftKey) redo(); else undo();
+        e.preventDefault();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "y" || e.key === "Y")) {
+        redo(); e.preventDefault(); return;
+      }
+      // ── 숫자키: Stamp 자동 전환 ─────────────────────────────
+      const stampMap = {"1":"inspect","2":"station","3":"charger","4":"holding","5":"siding","0":"reset"};
+      if (stampMap[e.key]) {
+        selectStamp(stampMap[e.key]);
+        setMode("stamp");
+        e.preventDefault();
+        return;
+      }
+      // ── 모드 단축키 ──────────────────────────────────────────
+      if (e.key === "p" || e.key === "P") { setMode("paint"); e.preventDefault(); return; }
+      if (e.key === "s" || e.key === "S") { setMode("stamp"); e.preventDefault(); return; }
+      if (e.key === "b" || e.key === "B") { setMode("build"); e.preventDefault(); return; }
+      if (e.key === "v" || e.key === "V") { setMode("speed"); e.preventDefault(); return; }
+      // ── Build 도구 단축키 (Build 모드일 때만) ──────────────
+      if (mode === "build") {
+        if (e.key === "n" || e.key === "N") { selectBuildTool("node"); e.preventDefault(); return; }
+        if (e.key === "e" || e.key === "E") { selectBuildTool("edge"); e.preventDefault(); return; }
+        if (e.key === "d" || e.key === "D") { selectBuildTool("delete"); e.preventDefault(); return; }
+      }
+      if (e.key === "Escape") {
+        selectStamp("inspect");
+        setMode("paint");
+        return;
+      }
+      // ── F1a: Tab / G → 활성 graph 순환 (multi-fleet 환경에서만) ──
+      if (MULTI_FLEET_ACTIVE && (e.key === "Tab" || e.key === "g" || e.key === "G")) {
+        cycleActiveGraph();
+        e.preventDefault();
+        return;
+      }
+      if (e.code === "Space" && !spaceKeyDown) {
+        spaceKeyDown = true;
+        document.querySelector(".map-shell").classList.add("pan-mode");
+        e.preventDefault();
+      }
+    });
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "Space") {
+        spaceKeyDown = false;
+        document.querySelector(".map-shell").classList.remove("pan-mode");
+      }
+    });
+
+    // ── 맵 렌더링 ───────────────────────────────────────────────
+    // Phase 1: 정적 렌더링 (편집 결과를 즉시 반영하지만 인터랙션은 stub)
+    function render() {
+      const svg = document.getElementById("map");
+      svg.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+      const labelScale = 1 / Math.max(zoomScale, 0.001);
+
+      const edgesSvg = edges.map(e => {
+        const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+        if (!a || !b) return "";
+        // F1a: multi-fleet 환경 — 비활성 graph 의 lane 은 보이지 않거나 회색으로
+        const eGraphIdx = (e.graph_idx == null) ? 0 : e.graph_idx;
+        const isActiveGraph = (!MULTI_FLEET_ACTIVE) || (eGraphIdx === activeGraphIdx);
+        if (MULTI_FLEET_ACTIVE && !isActiveGraph && !showInactiveGraphs) return "";
+        const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
+        // F1b-ux: v_max 설정된 edge 는 amber, 일반 edge 는 기존 색
+        const hasVMax = (e.v_max !== null && e.v_max !== undefined);
+        const isActive = (e.id === hoveredEdgeId);
+        const isPinned = (e.id === pinnedEdgeId);
+        const isSelectedEdge = selectedEdgeIds.has(e.id);
+        let stroke;
+        let strokeOpacity = 1;
+        if (MULTI_FLEET_ACTIVE && !isActiveGraph) {
+          // 비활성 graph: 회색 + 흐리게
+          stroke = "#9aa5b1";
+          strokeOpacity = 0.3;
+        } else if (hasVMax) {
+          stroke = "var(--warn)";                          // 속도 제한 표시색 (amber)
+        } else if (MULTI_FLEET_ACTIVE) {
+          // 활성 graph: fleet 색깔 (양방향/단방향 구분은 화살촉으로 명확하므로 fleet 색 우선)
+          stroke = colorForGraphIdx(eGraphIdx);
+        } else if (e.bidir) {
+          stroke = "var(--edge-bidir)";
+        } else {
+          stroke = "var(--edge-unidir)";
+        }
+        // 활성/hover/pinned/selected 시 두께 증가
+        const width = (isPinned || isSelectedEdge ? 5 : (isActive ? 4 : 2));
+        const dx = x2-x1, dy = y2-y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        // 화살촉:
+        //  · 단방향 → 가운데 한 개 (forward)
+        //  · 양방향 → 양 끝 가까이 두 개 (각각 안쪽을 보는 chevron, 색깔이 같아도 양방향임이 한눈에)
+        let arrow = "";
+        if (e.bidir) {
+          // 양 끝 30% / 70% 지점에 화살촉. node 와 겹치지 않게.
+          const p1x = x1 + dx*0.3, p1y = y1 + dy*0.3;
+          const p2x = x1 + dx*0.7, p2y = y1 + dy*0.7;
+          // p1 의 화살촉은 src(x1,y1) 방향 (=뒤쪽), p2 는 dst(x2,y2) 방향 (=앞쪽)
+          arrow =
+            `<g transform="translate(${p1x} ${p1y}) scale(${labelScale}) rotate(${angle + 180})">
+              <polygon points="5,0 -3,-3 -3,3" fill="${stroke}" opacity="0.95" /></g>` +
+            `<g transform="translate(${p2x} ${p2y}) scale(${labelScale}) rotate(${angle})">
+              <polygon points="5,0 -3,-3 -3,3" fill="${stroke}" opacity="0.95" /></g>`;
+        } else {
+          const mx = (x1+x2)/2, my = (y1+y2)/2;
+          arrow = `<g transform="translate(${mx} ${my}) scale(${labelScale}) rotate(${angle})">
+            <polygon points="6,0 -3,-4 -3,4" fill="${stroke}" opacity="0.95" /></g>`;
+        }
+        // F1c+ : invisible 두꺼운 hit line (화면 ~9px) — 줌인 상태에서도 edge hover 쉬움.
+        // 실 visual line(2px) 위에 더 두꺼운 transparent stroke 을 깔고 pointer-events="stroke" 로
+        // 클릭/호버 잡음. 시각 두께는 그대로 유지.
+        const hitW = 9 / zoomScale;
+        // F1a: 비활성 graph 의 lane 은 클릭/hover 차단 (Paint/Build 도 막힘)
+        const grpEvents = (MULTI_FLEET_ACTIVE && !isActiveGraph) ? "none" : "auto";
+        // F1b-ux+: 선택된 edge 는 underlying halo 표시
+        const haloSvg = isSelectedEdge
+          ? `<line class="edge-selected-halo" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                   stroke-width="${(width + 6) / zoomScale}" vector-effect="non-scaling-stroke" />`
+          : "";
+        return `<g data-edge-id="${e.id}" data-graph-idx="${eGraphIdx}"
+                  opacity="${strokeOpacity}" pointer-events="${grpEvents}">
+          ${haloSvg}
+          <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                stroke="transparent" stroke-width="${hitW}"
+                pointer-events="stroke" stroke-linecap="round" />
+          <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                stroke="${stroke}" stroke-width="${width/zoomScale}"
+                stroke-linecap="round" vector-effect="non-scaling-stroke"
+                pointer-events="none" />
+          ${arrow}
+        </g>`;
+      }).join("");
+
+      // Speed 모드: 모든 edge 에 현재 v_max 값 라벨 표시 (전체 상태 한눈에)
+      let vmaxLabelsSvg = "";
+      if (mode === "speed") {
+        vmaxLabelsSvg = edges.map(e => {
+          const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+          if (!a || !b) return "";
+          const mx = (sx(a.x) + sx(b.x)) / 2;
+          const my = (sy(a.y) + sy(b.y)) / 2;
+          const hasV = (e.v_max !== null && e.v_max !== undefined);
+          const txt = hasV ? Number(e.v_max).toFixed(2) : "—";
+          const fill = hasV ? "var(--warn)" : "var(--muted-2)";
+          return `<g transform="translate(${mx} ${my}) scale(${labelScale})" style="pointer-events:none">
+            <rect x="-14" y="-7" width="28" height="14" rx="3" fill="rgba(255,255,255,0.92)" stroke="${fill}" stroke-width="0.8" />
+            <text x="0" y="3" text-anchor="middle" fill="${fill}" font-family="var(--font-mono)" font-size="9">${txt}</text>
+          </g>`;
+        }).join("");
+      }
+
+      // F1c: hit-test 반경을 world 좌표 기반으로 변환 + 화면 픽셀 범위 클램프.
+      //   기본 22 world units(노드 간 fit scale 평균에 대응), 화면 픽셀로 6~28 사이 clamp.
+      //   저줌 → 화면에서 hit area 작아짐 (정밀 선택), 고줌 → 화면 cap 28px (이웃 노드 충돌 방지).
+      const HIT_RADIUS_WORLD = 22;
+      const HIT_RADIUS_PX_MIN = 6;
+      const HIT_RADIUS_PX_MAX = 28;
+      const _wantPx = HIT_RADIUS_WORLD * zoomScale;
+      const _pxClamped = Math.max(HIT_RADIUS_PX_MIN, Math.min(HIT_RADIUS_PX_MAX, _wantPx));
+      const hitR = _pxClamped / zoomScale;  // viewBox 단위
+
+      const nodesSvg = nodes.map(n => {
+        const cx = sx(n.x), cy = sy(n.y);
+        const color = roleColor(n.role, n.is_charger, n.is_holding);
+        const shape = roleShape(n.role, n.is_charger, n.is_holding, color);
+        const rings = [];
+        if (n.id === hoveredNodeId) rings.push(`<circle class="node-hover" r="11" fill="none" />`);
+        if (selectedNodeIds.has(n.id)) rings.push(`<circle class="node-selected" r="13" fill="none" />`);
+        if (n.id === edgeStartNodeId) rings.push(`<circle class="node-edge-start" r="14" fill="none" />`);
+        // outer g: translate only (hit circle = world unit). inner g: labelScale (visual = pixel constant).
+        return `<g data-node-id="${n.id}" style="cursor:${stampTool === 'inspect' && mode !== 'build' ? 'default' : 'pointer'}"
+                   transform="translate(${cx} ${cy})">
+          <circle r="${hitR}" fill="transparent" />
+          <g transform="scale(${labelScale})">
+            ${rings.join('')}
+            ${shape}
+          </g>
+        </g>`;
+      }).join("");
+
+      // Paint trajectory preview
+      const trajSvg = (paintTrajectory && paintTrajectory.length >= 2)
+        ? `<polyline class="traj-preview" points="${paintTrajectory.map(p => `${p.x},${p.y}`).join(' ')}" />`
+        : "";
+
+      // Selection box (Shift+드래그)
+      let boxSvg = "";
+      if (selectionBox) {
+        const xLo = Math.min(selectionBox.x1, selectionBox.x2);
+        const yLo = Math.min(selectionBox.y1, selectionBox.y2);
+        const w = Math.abs(selectionBox.x2 - selectionBox.x1);
+        const h = Math.abs(selectionBox.y2 - selectionBox.y1);
+        boxSvg = `<rect class="select-box" x="${xLo}" y="${yLo}" width="${w}" height="${h}" />`;
+      }
+
+      // Add Edge preview line (첫 노드 ~ 커서) + F1d: 방향 화살촉 미리보기
+      // edgeStartButton 으로 단방향(좌=0) / 양방향(우=2) 시각 분기. 사용자가 손가락 떼기
+      // 전에 어느 방향/유형으로 생성될지 즉시 보임.
+      let edgePrevSvg = "";
+      if (mode === "build" && buildTool === "edge" && edgeStartNodeId && edgePreviewClient) {
+        const src = nodeById.get(edgeStartNodeId);
+        if (src) {
+          const x1 = sx(src.x), y1 = sy(src.y);
+          const x2 = edgePreviewClient.x, y2 = edgePreviewClient.y;
+          const pdx = x2 - x1, pdy = y2 - y1;
+          const plen = Math.hypot(pdx, pdy) || 1;
+          const pang = Math.atan2(pdy, pdx) * 180 / Math.PI;
+          const isBidirPreview = (edgeStartButton === 2);
+          let prevArrow = "";
+          if (plen > 12) {  // 너무 짧으면 화살촉 생략 (잡음 방지)
+            if (isBidirPreview) {
+              const p1x = x1 + pdx*0.3, p1y = y1 + pdy*0.3;
+              const p2x = x1 + pdx*0.7, p2y = y1 + pdy*0.7;
+              prevArrow =
+                `<g transform="translate(${p1x} ${p1y}) scale(${labelScale}) rotate(${pang + 180})">
+                  <polygon points="5,0 -3,-3 -3,3" fill="var(--accent)" opacity="0.85" /></g>` +
+                `<g transform="translate(${p2x} ${p2y}) scale(${labelScale}) rotate(${pang})">
+                  <polygon points="5,0 -3,-3 -3,3" fill="var(--accent)" opacity="0.85" /></g>`;
+            } else {
+              // 단방향: 끝점 가까이 (src→cursor)
+              const tx = x1 + pdx*0.85, ty = y1 + pdy*0.85;
+              prevArrow =
+                `<g transform="translate(${tx} ${ty}) scale(${labelScale}) rotate(${pang})">
+                  <polygon points="6,0 -3,-4 -3,4" fill="var(--accent)" opacity="0.9" /></g>`;
+            }
+          }
+          edgePrevSvg = `<line class="edge-preview" x1="${x1}" y1="${y1}"
+            x2="${x2}" y2="${y2}"
+            vector-effect="non-scaling-stroke" />${prevArrow}`;
+        }
+      }
+
+      // F1b-ux: hover 시 v_max 툴팁 (hover edge 의 중간점에 텍스트)
+      let vmaxTipSvg = "";
+      if (hoveredEdgeId) {
+        const he = edges.find(x => x.id === hoveredEdgeId);
+        if (he) {
+          const a = nodeById.get(he.src), b = nodeById.get(he.dst);
+          if (a && b) {
+            const mx = (sx(a.x) + sx(b.x)) / 2;
+            const my = (sy(a.y) + sy(b.y)) / 2;
+            const label = (he.v_max !== null && he.v_max !== undefined)
+              ? `v_max ${Number(he.v_max).toFixed(2)} m/s`
+              : "v_max — (Shift+휠 / 패널)";
+            // labelScale = 1/zoomScale → 폰트는 항상 12px 보여짐
+            vmaxTipSvg = `
+              <g transform="translate(${mx} ${my - 14}) scale(${labelScale})">
+                <rect x="-58" y="-10" width="116" height="18" rx="4"
+                      fill="rgba(15,23,42,0.92)" />
+                <text x="0" y="3" text-anchor="middle" fill="#fff"
+                      font-family="var(--font-mono)" font-size="11"
+                      style="pointer-events:none">${label}</text>
+              </g>`;
+          }
+        }
+      }
+
+      // 배경 이미지 레이어 (가장 먼저 렌더링 = 가장 낮은 z-index)
+      let bgSvg = "";
+      if (backgroundImage.url) {
+        const bgOpacity = backgroundImage.opacity / 100;
+        const bgScale = backgroundImage.scale / 100;
+        const bgW = 1000 * bgScale;
+        const bgH = 700 * bgScale;
+        bgSvg = `<image x="${backgroundImage.x_offset}" y="${backgroundImage.y_offset}"
+                         width="${bgW}" height="${bgH}"
+                         href="${backgroundImage.url}"
+                         opacity="${bgOpacity}"
+                         style="pointer-events:none;" />`;
+      }
+
+      svg.innerHTML = bgSvg + `<g transform="translate(${panX} ${panY}) scale(${zoomScale})">
+        ${edgesSvg}${vmaxLabelsSvg}${nodesSvg}${edgePrevSvg}${trajSvg}${boxSvg}${vmaxTipSvg}
+      </g>`;
+      // 사용자 액션 마다 validation 자동 재계산
+      recomputeValidation();
+    }
+
+    function roleColor(role, isCharger, isHolding) {
+      if (isCharger || role === "charger") return "var(--role-charger)";
+      if (role === "station" || role === "work") return "var(--role-station)";
+      if (isHolding || role === "holding" || role === "holding_candidate") return "var(--role-holding)";
+      if (role === "siding") return "var(--role-siding)";
+      return "var(--role-standard)";
+    }
+    function roleShape(role, isCharger, isHolding, color) {
+      if (isCharger || role === "charger")
+        return `<rect x="-5" y="-5" width="10" height="10" rx="1" fill="${color}" />`;
+      if (role === "station" || role === "work")
+        return `<circle r="5" fill="${color}" />`;
+      if (isHolding || role === "holding" || role === "holding_candidate")
+        return `<circle r="4" fill="#fff" stroke="${color}" stroke-width="2" />`;
+      if (role === "siding")
+        return `<polygon points="0,-5 5,0 0,5 -5,0" fill="${color}" />`;
+      return `<circle r="3" fill="${color}" opacity="0.7" />`;
+    }
+
+    // ── Hover (인스펙터 + 노드/엣지 하이라이트) ──────────────────
+    // 인스펙터 grace: edge/노드에서 벗어나도 즉시 비우지 않고 400ms 유예. 그 사이
+    // 사용자가 인스펙터 영역(우측 패널)으로 마우스를 옮기면 mouseenter 에서 pin → 유지.
+    let _inspectorMouseOver = false;
+    let _inspectorClearTimer = null;
+    function _emptyInspectorNow() {
+      document.getElementById("inspector").innerHTML =
+        '<div class="inspector-empty">노드 또는 엣지 위에 마우스를 올리면 정보 표시</div>';
+    }
+    function scheduleInspectorClear() {
+      if (_inspectorClearTimer) clearTimeout(_inspectorClearTimer);
+      _inspectorClearTimer = setTimeout(() => {
+        _inspectorClearTimer = null;
+        if (!hoveredEdgeId && !hoveredNodeId && !_inspectorMouseOver) _emptyInspectorNow();
+      }, 400);
+    }
+    function cancelInspectorClear() {
+      if (_inspectorClearTimer) { clearTimeout(_inspectorClearTimer); _inspectorClearTimer = null; }
+    }
+    document.getElementById("inspector").addEventListener("mouseenter", () => {
+      _inspectorMouseOver = true;
+      cancelInspectorClear();
+    });
+    document.getElementById("inspector").addEventListener("mouseleave", () => {
+      _inspectorMouseOver = false;
+      // 인스펙터 밖으로 나가면 edge hover 가 아직 살아있으면 유지, 아니면 grace 후 비움
+      if (!hoveredEdgeId && !hoveredNodeId) scheduleInspectorClear();
+    });
+
+    document.getElementById("map").addEventListener("mousemove", (e) => {
+      const nodeHit = e.target.closest("[data-node-id]");
+      const edgeHit = e.target.closest("[data-edge-id]");
+      const prevHoverNode = hoveredNodeId;
+      const prevHoverEdge = hoveredEdgeId;
+      if (nodeHit) {
+        const nid = nodeHit.dataset.nodeId;
+        if (nid !== hoveredNodeId) {
+          hoveredNodeId = nid;
+          hoveredEdgeId = "";
+          showInspectorNode(nodeById.get(nid));
+        }
+        cancelInspectorClear();
+      } else if (edgeHit) {
+        const eid = edgeHit.dataset.edgeId;
+        if (eid !== hoveredEdgeId) {
+          // edge 가 바뀐 경우에만 인스펙터 재생성 (input focus / 부분 입력값 보존)
+          hoveredNodeId = "";
+          hoveredEdgeId = eid;
+          // pinned 상태에서는 hover 가 바뀌어도 인스펙터 유지 (pinned edge 정보 계속 표시)
+          if (!pinnedEdgeId) showInspectorEdge(edges.find(x => x.id === eid));
+        }
+        cancelInspectorClear();
+      } else {
+        hoveredNodeId = "";
+        hoveredEdgeId = "";
+        // pinned 또는 인스펙터에 마우스 있는 동안은 비우지 않음. 빈 공간이면 grace 후 비움.
+        if (!_inspectorMouseOver && !pinnedEdgeId) scheduleInspectorClear();
+      }
+      // hover 변화 시 재렌더 (drag 중 아닐 때만)
+      const changed = (prevHoverNode !== hoveredNodeId) || (prevHoverEdge !== hoveredEdgeId);
+      if (changed && !paintTrajectory && !isPanning) {
+        render();
+      }
+    });
+    // SVG 밖으로 나가면 visual hover 만 해제, 인스펙터는 grace (pinned 면 유지)
+    document.getElementById("map").addEventListener("mouseleave", () => {
+      const had = hoveredEdgeId || hoveredNodeId;
+      hoveredEdgeId = "";
+      hoveredNodeId = "";
+      if (had && !paintTrajectory && !isPanning) {
+        render();
+        if (!_inspectorMouseOver && !pinnedEdgeId) scheduleInspectorClear();
+      }
+    });
+
+    function showInspectorNode(n) {
+      const role = n.role || "standard";
+      const extras = [];
+      if (n.is_charger) extras.push("charger");
+      if (n.is_holding) extras.push("holding");
+      document.getElementById("inspector").innerHTML = `
+        <div class="inspector-row"><span class="k">type</span><span class="v">📍 NODE</span></div>
+        <div class="inspector-row"><span class="k">id</span><span class="v">${n.id}</span></div>
+        <div class="inspector-row"><span class="k">name</span><span class="v">${n.name}</span></div>
+        <div class="inspector-row"><span class="k">position</span><span class="v">(${n.x.toFixed(1)}, ${n.y.toFixed(1)})</span></div>
+        <div class="inspector-row"><span class="k">role</span><span class="v">${role}${extras.length ? ' · ' + extras.join(', ') : ''}</span></div>
+        <div class="inspector-row"><span class="k">degree</span><span class="v">in ${n.degree_in} / out ${n.degree_out}</span></div>
+      `;
+    }
+    function showInspectorEdge(ed) {
+      const a = nodeById.get(ed.src), b = nodeById.get(ed.dst);
+      const curVal = (ed.v_max !== null && ed.v_max !== undefined)
+        ? Number(ed.v_max).toFixed(2) : "";
+      // F1b-ux (rev2): 정확 조작용 +/- 버튼 + number input + 해제 버튼.
+      // scroll 은 보조 (부호 노이즈 디바이스에선 불안정).
+      const vmaxEditor = `
+        <div style="display:flex; align-items:center; gap:4px;">
+          <button data-vmax-act="dec" title="−0.1"
+                  style="width:24px; height:22px; padding:0; border:1px solid var(--border-strong);
+                         background:var(--surface-2); border-radius:4px; cursor:pointer;">−</button>
+          <input type="number" data-vmax-input id="vmax-input"
+                 value="${curVal}" placeholder="—" min="0.1" max="5.0" step="0.1"
+                 style="width:64px; padding:2px 4px; font-family:var(--font-mono); font-size:11px;
+                        text-align:center; border:1px solid var(--border-strong); border-radius:4px;" />
+          <button data-vmax-act="inc" title="+0.1"
+                  style="width:24px; height:22px; padding:0; border:1px solid var(--border-strong);
+                         background:var(--surface-2); border-radius:4px; cursor:pointer;">+</button>
+          <span style="color:var(--muted); font-size:10.5px; margin-left:2px;">m/s</span>
+          <button data-vmax-act="clear" title="해제(미설정으로)"
+                  style="margin-left:auto; padding:2px 6px; font-size:10.5px; border:1px solid var(--border);
+                         background:transparent; color:var(--muted); border-radius:4px; cursor:pointer;">×</button>
+        </div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:4px;">
+          범위 0.1 ~ 5.0 m/s · Shift+휠 도 가능 (단일 선택 시)
+        </div>`;
+      document.getElementById("inspector").innerHTML = `
+        <div class="inspector-row"><span class="k">type</span><span class="v">↔ EDGE</span></div>
+        <div class="inspector-row"><span class="k">id</span><span class="v">${ed.id}</span></div>
+        <div class="inspector-row"><span class="k">from → to</span><span class="v">${ed.src} → ${ed.dst}</span></div>
+        <div class="inspector-row"><span class="k">direction</span><span class="v">${ed.bidir ? '↔ bidirectional' : '→ unidirectional'}</span></div>
+        <div class="inspector-row"><span class="k">corridor</span><span class="v">${ed.corridor || '(unlabeled)'}</span></div>
+        <div class="inspector-row"><span class="k">access</span><span class="v">${ed.access || '—'}</span></div>
+        <div class="inspector-row" style="flex-direction:column; align-items:stretch; gap:6px;">
+          <span class="k">v_max</span>
+          ${vmaxEditor}
+        </div>
+      `;
+      // 버튼/input 핸들러 바인딩 (hover edge 가 살아있는 동안만 유효)
+      const inspector = document.getElementById("inspector");
+      const targetId = ed.id;
+      function findEdge() { return edges.find(x => x.id === targetId); }
+      inspector.querySelectorAll("[data-vmax-act]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const edge = findEdge(); if (!edge) return;
+          const act = btn.dataset.vmaxAct;
+          if (act === "clear") {
+            if (edge.v_max == null) return;
+            pushHistoryAndApply(edge, null);
+          } else {
+            const dir = (act === "inc") ? +1 : -1;
+            const cur = (edge.v_max == null) ? VMAX_DEFAULT : Number(edge.v_max);
+            const next = clampToStep(cur + dir * VMAX_STEP, VMAX_MIN, VMAX_MAX);
+            if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
+              pushHistoryAndApply(edge, next);
+            }
+          }
+          showInspectorEdge(findEdge());
+          if (typeof updateSpeedControlPanel === "function") updateSpeedControlPanel();
+        });
+      });
+      const inputEl = inspector.querySelector("[data-vmax-input]");
+      if (inputEl) {
+        inputEl.addEventListener("change", () => {
+          const edge = findEdge(); if (!edge) return;
+          const v = inputEl.value.trim();
+          if (v === "") {
+            if (edge.v_max != null) pushHistoryAndApply(edge, null);
+          } else {
+            const num = parseFloat(v);
+            if (!Number.isFinite(num)) { inputEl.value = (edge.v_max == null ? "" : Number(edge.v_max).toFixed(2)); return; }
+            const clamped = Math.max(VMAX_MIN, Math.min(VMAX_MAX, num));
+            const stepped = Math.round(clamped / VMAX_STEP) * VMAX_STEP;
+            const next = Number(stepped.toFixed(2));
+            if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
+              pushHistoryAndApply(edge, next);
+            }
+          }
+          showInspectorEdge(findEdge());
+          if (typeof updateSpeedControlPanel === "function") updateSpeedControlPanel();
+        });
+      }
+    }
+
+    // ── Pan / Zoom ─────────────────────────────────────────────
+    // F1b-ux (rev): scroll 기본 = zoom. v_max 편집은 Shift+scroll on hovered edge 로만.
+    //   - 기본 scroll → zoom (어느 줌 레벨이든 항상)
+    //   - Shift + scroll on hovered edge → v_max 0.1 ~ 1.5 자유 조절 (0.1 step)
+    //     · 0.6 ↔ 0.7 경계 없음 — 전 범위 자유 이동
+    //     · 미설정(null)이면 1.0 부터 시작
+    const VMAX_STEP = 0.1;
+    const VMAX_MIN = 0.1, VMAX_MAX = 5.0;
+    const VMAX_DEFAULT = 1.0;
+    function pushHistoryAndApply(edge, newVMax) {
+      history.past.push(snapshot());
+      history.future = [];
+      edge.v_max = newVMax;
+      render();
+    }
+    function clampToStep(v, lo, hi) {
+      const stepped = Math.round(v / VMAX_STEP) * VMAX_STEP;
+      return Math.min(hi, Math.max(lo, Number(stepped.toFixed(2))));
+    }
+
+    // ── F1b-ux+: Speed Control 패널 (일괄 v_max 적용) ───────────
+    // selectedEdgeIds 의 현재 v_max 분포 → input/slider/status 갱신.
+    // - 0 선택: 비활성화
+    // - 1 선택: input 에 현재 값 표시 (없으면 VMAX_DEFAULT)
+    // - 다중 선택 & 동일 값: input 에 그 값 표시
+    // - 다중 선택 & 다른 값: input value 비우고 placeholder "(mixed)"
+    function updateSpeedControlPanel() {
+      const panel = document.getElementById("speed-control-panel");
+      if (!panel || panel.style.display === "none") return;
+      const statusEl = document.getElementById("speed-ctrl-status");
+      const inputEl = document.getElementById("speed-bulk-input");
+      const sliderEl = document.getElementById("speed-bulk-slider");
+      const applyBtn = document.getElementById("speed-apply-btn");
+      const unsetBtn = document.getElementById("speed-unset-btn");
+      if (!statusEl || !inputEl || !sliderEl) return;
+
+      const count = selectedEdgeIds.size;
+      if (count === 0) {
+        statusEl.innerHTML = "엣지를 선택하세요 <span style=\"color:var(--muted-2);\">(클릭 / Shift+드래그)</span>";
+        inputEl.placeholder = "—";
+        applyBtn.disabled = true;
+        unsetBtn.disabled = true;
+        return;
+      }
+      // 선택 엣지들의 v_max 분포
+      const values = [];
+      let hasUnset = false;
+      for (const eid of selectedEdgeIds) {
+        const ed = edges.find(x => x.id === eid);
+        if (!ed) continue;
+        if (ed.v_max == null) hasUnset = true;
+        else values.push(Number(ed.v_max));
+      }
+      const allUnset = (values.length === 0);
+      const uniqVals = [...new Set(values.map(v => v.toFixed(2)))];
+      const allSame = (values.length === selectedEdgeIds.size && uniqVals.length === 1);
+
+      let statusHtml;
+      if (count === 1) {
+        statusHtml = `<strong>1</strong> edge 선택됨` +
+          (allUnset ? ` · v_max 미설정` : ` · 현재 <strong>${uniqVals[0]} m/s</strong>`);
+      } else if (allSame) {
+        statusHtml = `<strong>${count}</strong> edges 선택됨 · 모두 <strong>${uniqVals[0]} m/s</strong>`;
+      } else if (allUnset) {
+        statusHtml = `<strong>${count}</strong> edges 선택됨 · 모두 미설정`;
+      } else {
+        const setN = values.length;
+        const mixed = `${uniqVals.length}가지 값`;
+        const unsetStr = hasUnset ? ` + ${count - setN} unset` : "";
+        statusHtml = `<strong>${count}</strong> edges 선택됨 · <strong>(mixed)</strong> <span style="color:var(--muted-2);">${mixed}${unsetStr}</span>`;
+      }
+      statusEl.innerHTML = statusHtml;
+
+      // input/slider 값
+      if (allSame || (count === 1 && !allUnset)) {
+        const v = Number(uniqVals[0]);
+        inputEl.value = v.toFixed(2);
+        sliderEl.value = v.toFixed(2);
+        inputEl.placeholder = "—";
+      } else if (allUnset) {
+        // 미설정만 있으면 기본값 1.0 으로 prefill (apply 시 모두 1.0)
+        inputEl.value = VMAX_DEFAULT.toFixed(2);
+        sliderEl.value = VMAX_DEFAULT.toFixed(2);
+        inputEl.placeholder = "—";
+      } else {
+        // mixed
+        inputEl.value = "";
+        inputEl.placeholder = "(mixed)";
+      }
+      applyBtn.disabled = false;
+      unsetBtn.disabled = false;
+    }
+
+    function applyBulkSpeed() {
+      if (selectedEdgeIds.size === 0) return;
+      const inputEl = document.getElementById("speed-bulk-input");
+      const raw = parseFloat(inputEl.value);
+      if (!Number.isFinite(raw)) {
+        showToast("유효한 m/s 값을 입력하세요");
+        return;
+      }
+      const v = clampToStep(raw, VMAX_MIN, VMAX_MAX);
+      history.past.push(snapshot());
+      history.future = [];
+      let changed = 0;
+      for (const eid of selectedEdgeIds) {
+        const ed = edges.find(x => x.id === eid);
+        if (!ed) continue;
+        const cur = (ed.v_max == null) ? null : Number(ed.v_max);
+        if (cur === null || Math.abs(cur - v) > 1e-9) {
+          ed.v_max = v;
+          changed++;
+        }
+      }
+      showToast(`${changed} edges → v_max ${v.toFixed(2)} m/s`);
+      updateSpeedControlPanel();
+      if (selectedEdgeIds.size === 1) {
+        const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+        if (ed) showInspectorEdge(ed);
+      }
+      render();
+    }
+
+    function unsetBulkSpeed() {
+      if (selectedEdgeIds.size === 0) return;
+      history.past.push(snapshot());
+      history.future = [];
+      let changed = 0;
+      for (const eid of selectedEdgeIds) {
+        const ed = edges.find(x => x.id === eid);
+        if (!ed) continue;
+        if (ed.v_max != null) {
+          ed.v_max = null;
+          changed++;
+        }
+      }
+      showToast(`${changed} edges → v_max 미설정`);
+      updateSpeedControlPanel();
+      if (selectedEdgeIds.size === 1) {
+        const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+        if (ed) showInspectorEdge(ed);
+      }
+      render();
+    }
+    // Wheel 누적기 — 마우스(deltaMode=0 pixel ~100/click, mode=1 line ~3/click) 와
+    // trackpad(mode=0 작은 값 ~±1~10 다발) 양쪽 모두 자연스럽게 1 tick씩 처리.
+    //   1. deltaMode 정규화 (line/page → pixel)
+    //   2. 누적값이 ±WHEEL_ACCUM_THRESHOLD 마다 1 tick
+    //   3. 200ms 무동작 시 누적 리셋 (다른 swipe 동작과 섞이지 않게)
+    let _wheelAccum = 0;
+    let _wheelResetTimer = null;
+    const WHEEL_ACCUM_THRESHOLD = 80;  // 마우스 한 click(~100px)에 1 tick, trackpad 짧은 swipe는 누적 후
+    document.getElementById("map").addEventListener("wheel", (e) => {
+      // F1b-ux+ (rev): Speed 모드에서는 Shift+휠 = 단일 edge 미세조정 (±0.1 m/s).
+      //   - 다중 선택 (size > 1) 시에는 wheel 로 변경 불가 (panel 의 Apply 사용)
+      //   - 단일 선택 또는 hover 한 edge 가 있을 때만 동작
+      //   - 평소 휠 (modifier 없음) = zoom (모드 무관)
+      if (mode === "speed" && e.shiftKey && selectedEdgeIds.size <= 1) {
+        const targetEid = (selectedEdgeIds.size === 1)
+          ? [...selectedEdgeIds][0]
+          : hoveredEdgeId;
+        const edge = targetEid ? edges.find(x => x.id === targetEid) : null;
+        if (edge) {
+          e.preventDefault();
+          // deltaMode 정규화
+          let scaled = e.deltaY;
+          if (e.deltaMode === 1) scaled *= 33;     // line → pixel
+          else if (e.deltaMode === 2) scaled *= 400; // page → pixel
+          _wheelAccum += scaled;
+          if (_wheelResetTimer) clearTimeout(_wheelResetTimer);
+          _wheelResetTimer = setTimeout(() => { _wheelAccum = 0; }, 200);
+          let ticks = 0;
+          while (Math.abs(_wheelAccum) >= WHEEL_ACCUM_THRESHOLD) {
+            const s = Math.sign(_wheelAccum);
+            ticks -= s;  // deltaY > 0 (아래로 굴림) → 감소
+            _wheelAccum -= s * WHEEL_ACCUM_THRESHOLD;
+          }
+          if (ticks === 0) return;
+          const cur = (edge.v_max == null) ? VMAX_DEFAULT : Number(edge.v_max);
+          const next = clampToStep(cur + ticks * VMAX_STEP, VMAX_MIN, VMAX_MAX);
+          if (edge.v_max == null || Math.abs(next - Number(edge.v_max)) > 1e-9) {
+            pushHistoryAndApply(edge, next);
+            showInspectorEdge(edge);
+            updateSpeedControlPanel();
+          }
+          return;
+        }
+      }
+      // default: zoom (모든 위치/줌 레벨)
+      e.preventDefault();
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) * (VW / rect.width);
+      const cy = (e.clientY - rect.top) * (VH / rect.height);
+      const nextScale = Math.min(8, Math.max(0.4, zoomScale * (e.deltaY < 0 ? 1.12 : 0.9)));
+      const ratio = nextScale / zoomScale;
+      panX = cx - (cx - panX) * ratio;
+      panY = cy - (cy - panY) * ratio;
+      zoomScale = nextScale;
+      render();
+    }, {passive: false});
+
+    // ── 마우스 인터랙션 — 모드별 분기 ─────────────────────────
+    //   pan 우선: Space 누른 상태면 모드와 무관하게 pan
+    //   Paint 모드 + 빈 공간 드래그: trajectory 그리기
+    //   Stamp/Single/Inspect 모드 + 빈 공간 드래그: pan
+    //   노드 위에서 시작한 드래그: 노드 클릭 (mouseup) 우선, drag 무시
+    // SVG screen pixel → viewBox 좌표 (preserveAspectRatio letterbox 정확히 처리)
+    function clientToSvg(svg, clientX, clientY) {
+      const pt = svg.createSVGPoint();
+      pt.x = clientX; pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return {x: 0, y: 0};
+      const inv = ctm.inverse();
+      const local = pt.matrixTransform(inv);
+      return {x: local.x, y: local.y};
+    }
+
+    // 휠 버튼 클릭 시 브라우저 autoscroll 방지
+    document.getElementById("map").addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
+    document.getElementById("map").addEventListener("pointerdown", (e) => {
+      const onNode = !!e.target.closest("[data-node-id]");
+      const onEdge = !onNode && !!e.target.closest("[data-edge-id]");
+      const svg = e.currentTarget;
+      const pt = clientToSvg(svg, e.clientX, e.clientY);
+      const localX = (pt.x - panX) / zoomScale;
+      const localY = (pt.y - panY) / zoomScale;
+
+      // ★ 휠(가운데) 버튼 = 어떤 모드든 pan (Photoshop / IDE 표준)
+      if (e.button === 1) {
+        isPanning = true;
+        panStart = {x: e.clientX, y: e.clientY, panX, panY};
+        document.querySelector(".map-shell").classList.add("dragging");
+        e.preventDefault();
+        return;
+      }
+      if (e.button !== 0 && e.button !== 2) return;
+
+      // Space + 좌클릭 = pan (모드 무관)
+      if (spaceKeyDown && e.button === 0) {
+        isPanning = true;
+        panStart = {x: e.clientX, y: e.clientY, panX, panY};
+        document.querySelector(".map-shell").classList.add("dragging");
+        return;
+      }
+
+      // Shift + 좌클릭 = 다중 선택 박스 (Stamp / Build / Speed 모드에서)
+      if (e.shiftKey && e.button === 0 && (mode === "stamp" || mode === "build" || mode === "speed")) {
+        selectionBox = {x1: localX, y1: localY, x2: localX, y2: localY};
+        // Speed 모드에서는 기존 edge 선택을 유지 (Shift = additive)
+        if (mode !== "speed") {
+          selectedNodeIds.clear();
+        }
+        e.preventDefault();
+        return;
+      }
+
+      if (mode === "paint") {
+        paintTrajectory = [{x: localX, y: localY}];
+        paintTrajectoryButton = e.button;
+        e.preventDefault();
+        return;
+      }
+
+      // Speed 모드: edge 좌클릭 → 선택 (Shift = 추가/제거 토글)
+      // selectedEdgeIds 가 1개면 인스펙터에 그 edge 표시 (pin 역할 흡수).
+      if (mode === "speed") {
+        if (onEdge && e.button === 0) {
+          const eid = e.target.closest("[data-edge-id]").dataset.edgeId;
+          if (e.shiftKey) {
+            // 토글
+            if (selectedEdgeIds.has(eid)) selectedEdgeIds.delete(eid);
+            else selectedEdgeIds.add(eid);
+          } else {
+            // 단일 선택으로 replace (이미 선택만 1개+동일이면 해제)
+            const onlyMe = (selectedEdgeIds.size === 1 && selectedEdgeIds.has(eid));
+            selectedEdgeIds.clear();
+            if (!onlyMe) selectedEdgeIds.add(eid);
+          }
+          pinnedEdgeId = (selectedEdgeIds.size === 1) ? [...selectedEdgeIds][0] : "";
+          updateSpeedControlPanel();
+          if (selectedEdgeIds.size === 1) {
+            const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+            if (ed) showInspectorEdge(ed);
+          } else if (selectedEdgeIds.size > 1) {
+            _emptyInspectorNow();
+          }
+          render();
+          return;
+        }
+        // 빈 공간 좌클릭 → 선택 해제 + 평소 pan
+        if (!onEdge && !onNode && e.button === 0) {
+          if (selectedEdgeIds.size > 0 || pinnedEdgeId) {
+            selectedEdgeIds.clear();
+            pinnedEdgeId = "";
+            updateSpeedControlPanel();
+            render();
+          }
+          isPanning = true;
+          panStart = {x: e.clientX, y: e.clientY, panX, panY};
+          document.querySelector(".map-shell").classList.add("dragging");
+          return;
+        }
+        return;
+      }
+
+      if (mode === "build") {
+        // Build 도구별 분기 (pointerdown 즉시 액션)
+        if (buildTool === "node") {
+          // 빈 공간 좌클릭만 — 노드 추가 (Shift = 직전 노드 축 고정)
+          if (!onNode && !onEdge && e.button === 0) {
+            addNodeAt(localX, localY, {shiftAxis: e.shiftKey});
+            render();
+          }
+          // Add Node 도구 + 노드 위 클릭은 무시 (또는 hint?)
+          return;
+        }
+        if (buildTool === "edge") {
+          if (onNode) {
+            const nid = e.target.closest("[data-node-id]").dataset.nodeId;
+            if (!edgeStartNodeId) {
+              // 첫 노드 선택
+              edgeStartNodeId = nid;
+              edgeStartButton = e.button;
+              edgePreviewClient = {x: localX, y: localY};
+              showToast(`Edge: ${nid} → ?`);
+              render();
+            } else {
+              // 두 번째 노드 → 엣지 생성
+              const bidir = (edgeStartButton === 2) || (e.button === 2);
+              addEdgeBetween(edgeStartNodeId, nid, bidir);
+              edgeStartNodeId = "";
+              edgePreviewClient = null;
+              render();
+            }
+          }
+          // F1d: edge 위 좌클릭 (그리는 중 아닐 때) = 단↔양방향 토글
+          else if (onEdge && !edgeStartNodeId && e.button === 0) {
+            const edgeId = e.target.closest("[data-edge-id]").dataset.edgeId;
+            toggleEdgeBidir(edgeId);
+            render();
+          }
+          // 빈 공간 클릭 = 진행 중 cancel
+          else if (edgeStartNodeId) {
+            edgeStartNodeId = "";
+            edgePreviewClient = null;
+            showToast("Edge add cancelled");
+            render();
+          }
+          return;
+        }
+        if (buildTool === "delete") {
+          if (onNode) {
+            deleteNode(e.target.closest("[data-node-id]").dataset.nodeId);
+            render();
+          } else if (onEdge) {
+            deleteEdge(e.target.closest("[data-edge-id]").dataset.edgeId);
+            render();
+          } else if (e.button === 0) {
+            // 빈 공간 좌클릭 = pan
+            isPanning = true;
+            panStart = {x: e.clientX, y: e.clientY, panX, panY};
+            document.querySelector(".map-shell").classList.add("dragging");
+          }
+          return;
+        }
+      }
+
+      // Stamp 모드
+      if (onNode) return;
+      if (e.button !== 0) return;
+      isPanning = true;
+      panStart = {x: e.clientX, y: e.clientY, panX, panY};
+      document.querySelector(".map-shell").classList.add("dragging");
+    });
+
+    document.getElementById("map").addEventListener("pointermove", (e) => {
+      const svg = e.currentTarget;
+      if (isPanning && panStart) {
+        const rect = svg.getBoundingClientRect();
+        panX = panStart.panX + (e.clientX - panStart.x) * (VW / rect.width);
+        panY = panStart.panY + (e.clientY - panStart.y) * (VH / rect.height);
+        render();
+        return;
+      }
+      const pt = clientToSvg(svg, e.clientX, e.clientY);
+      const localX = (pt.x - panX) / zoomScale;
+      const localY = (pt.y - panY) / zoomScale;
+
+      // 다중 선택 박스 업데이트
+      if (selectionBox) {
+        selectionBox.x2 = localX;
+        selectionBox.y2 = localY;
+        const xLo = Math.min(selectionBox.x1, selectionBox.x2);
+        const xHi = Math.max(selectionBox.x1, selectionBox.x2);
+        const yLo = Math.min(selectionBox.y1, selectionBox.y2);
+        const yHi = Math.max(selectionBox.y1, selectionBox.y2);
+        if (mode === "speed") {
+          // F1b-ux+: Speed 모드 — edge 미드포인트가 박스 안에 들어오면 선택.
+          //   ※ active graph 만 (multi-fleet 환경에서 비활성 graph 잠금)
+          // 드래그 시작 시 selectedEdgeIds 를 비우지 않았기에 이번 박스 범위만 새로
+          // 마킹하려면 한번 비우고 다시 채움.
+          selectedEdgeIds.clear();
+          for (const e of edges) {
+            const eGraphIdx = (e.graph_idx == null) ? 0 : e.graph_idx;
+            if (MULTI_FLEET_ACTIVE && eGraphIdx !== activeGraphIdx) continue;
+            const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+            if (!a || !b) continue;
+            const mx = (sx(a.x) + sx(b.x)) / 2;
+            const my = (sy(a.y) + sy(b.y)) / 2;
+            if (mx >= xLo && mx <= xHi && my >= yLo && my <= yHi) {
+              selectedEdgeIds.add(e.id);
+            }
+          }
+          updateSpeedControlPanel();
+        } else {
+          // Stamp/Build: 박스 안 노드 마킹 (실시간 시각 피드백)
+          selectedNodeIds.clear();
+          for (const n of nodes) {
+            const cx = sx(n.x), cy = sy(n.y);
+            if (cx >= xLo && cx <= xHi && cy >= yLo && cy <= yHi) {
+              selectedNodeIds.add(n.id);
+            }
+          }
+        }
+        render();
+        return;
+      }
+
+      // Paint trajectory 점 추가
+      if (paintTrajectory) {
+        paintTrajectory.push({x: localX, y: localY});
+        render();
+        return;
+      }
+
+      // Add Edge 진행 중 — preview line 갱신
+      if (mode === "build" && buildTool === "edge" && edgeStartNodeId) {
+        edgePreviewClient = {x: localX, y: localY};
+        render();
+        return;
+      }
+    });
+
+    document.getElementById("map").addEventListener("pointerup", (e) => {
+      document.querySelector(".map-shell").classList.remove("dragging");
+      if (isPanning) {
+        isPanning = false; panStart = null;
+        return;
+      }
+      // 다중 선택 박스 종료 → 현재 모드/도구에 맞춰 일괄 적용
+      if (selectionBox) {
+        selectionBox = null;
+        if (mode === "speed") {
+          // F1b-ux+: Speed 모드 — 박스 선택 결과만 유지, Apply 버튼으로 실제 변경
+          pinnedEdgeId = (selectedEdgeIds.size === 1) ? [...selectedEdgeIds][0] : "";
+          updateSpeedControlPanel();
+          if (selectedEdgeIds.size === 1) {
+            const ed = edges.find(x => x.id === [...selectedEdgeIds][0]);
+            if (ed) showInspectorEdge(ed);
+          } else if (selectedEdgeIds.size > 1) {
+            _emptyInspectorNow();
+          }
+        } else if (selectedNodeIds.size > 0) {
+          // Stamp 모드: 현재 stamp 도구로 일괄
+          if (mode === "stamp" && stampTool !== "inspect") {
+            stampSelected(stampTool);
+          }
+          // Build + Delete: 일괄 삭제
+          else if (mode === "build" && buildTool === "delete") {
+            deleteSelected();
+          }
+          // 다른 도구는 선택 유지 (사용자가 다음 액션 결정)
+        }
+        render();
+        return;
+      }
+      // Paint trajectory 종료
+      if (paintTrajectory) {
+        if (paintTrajectory.length >= 2) {
+          pushHistory();
+          const isBidir = (paintTrajectoryButton === 2);
+          applyPaint(paintTrajectory, isBidir, e.altKey);
+        }
+        paintTrajectory = null;
+        paintTrajectoryButton = -1;
+        render();
+      }
+    });
+    document.getElementById("map").addEventListener("pointerleave", (e) => {
+      document.querySelector(".map-shell").classList.remove("dragging");
+      if (paintTrajectory && paintTrajectory.length >= 2) {
+        pushHistory();
+        const isBidir = (paintTrajectoryButton === 2);
+        applyPaint(paintTrajectory, isBidir, false);
+      }
+      paintTrajectory = null;
+      paintTrajectoryButton = -1;
+      selectionBox = null;
+      isPanning = false; panStart = null;
+      render();
+    });
+
+    // ── Paint trajectory → 가까운 엣지 일괄 방향 변경 ─────────
+    function applyPaint(trajectory, forceBidir, altKey) {
+      // forceBidir: 우클릭 드래그 였는지. true 면 양방향, false 면 단방향
+      // altKey: 단방향일 때 역방향 강제 (양방향엔 의미 없음)
+      const effectiveDir = forceBidir ? "bi" : "uni";
+      const reverseUni = altKey;
+
+      // trajectory 의 평균 방향 벡터 (시작점 → 끝점)
+      const t0 = trajectory[0], tN = trajectory[trajectory.length - 1];
+      const tdx = tN.x - t0.x, tdy = tN.y - t0.y;
+
+      // 화면상 거리 임계값 (SVG 좌표 단위). zoom 무관하게 ~30px 화면 거리로.
+      const HIT_RADIUS = 30 / zoomScale;
+
+      let changedCount = 0;
+      for (const e of edges) {
+        const a = nodeById.get(e.src), b = nodeById.get(e.dst);
+        if (!a || !b) continue;
+        // F1a: 활성 graph 의 lane 만 영향
+        if (MULTI_FLEET_ACTIVE) {
+          const eg = (e.graph_idx == null) ? 0 : e.graph_idx;
+          if (eg !== activeGraphIdx) continue;
+        }
+        const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
+        // 엣지 중점이 trajectory 어느 segment 와 가까운가
+        const mx = (x1+x2)/2, my = (y1+y2)/2;
+        if (!nearTrajectory(mx, my, trajectory, HIT_RADIUS)) continue;
+
+        // 엣지 방향 (src→dst) vs trajectory 방향 내적
+        const edx = x2 - x1, edy = y2 - y1;
+        const dot = tdx * edx + tdy * edy;
+
+        if (effectiveDir === "bi") {
+          e.bidir = true;
+        } else {
+          e.bidir = false;
+          // 단방향: trajectory 와 같은 방향이면 src/dst 유지, 반대면 스왑
+          const wantReversed = (dot < 0) ^ reverseUni;
+          if (wantReversed) {
+            const tmp = e.src; e.src = e.dst; e.dst = tmp;
+          }
+        }
+        changedCount++;
+      }
+      if (changedCount > 0) {
+        showToast(`${changedCount} 개 엣지 → ${effectiveDir === "bi" ? "양방향" : (reverseUni ? "역방향 단방향" : "단방향")}`);
+      }
+    }
+
+    // 점 (px, py) 와 polyline segments 의 최소 거리 ≤ R 인가
+    function nearTrajectory(px, py, trajectory, R) {
+      for (let i = 0; i < trajectory.length - 1; i++) {
+        const a = trajectory[i], b = trajectory[i + 1];
+        if (pointSegmentDistance(px, py, a.x, a.y, b.x, b.y) <= R) return true;
+      }
+      return false;
+    }
+    function pointSegmentDistance(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const len2 = dx*dx + dy*dy;
+      if (len2 < 1e-9) return Math.hypot(px - x1, py - y1);
+      let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const cx = x1 + t * dx, cy = y1 + t * dy;
+      return Math.hypot(px - cx, py - cy);
+    }
+
+    // ── 좌클릭 (mouseup 직후) — Stamp / Build 모드 처리 ───────
+    // Paint 모드는 pointerdown/up 에서 trajectory 처리됨
+    document.getElementById("map").addEventListener("click", (e) => {
+      if (mode === "paint") return;
+      // Build 모드 click 은 pointerdown 에서 별도 처리 (좌/우 분기) → 여기선 skip
+      if (mode === "build") return;
+      // Stamp 모드
+      const nodeHit = e.target.closest("[data-node-id]");
+      if (!nodeHit) return;
+      if (stampTool === "inspect") return;
+      const n = nodeById.get(nodeHit.dataset.nodeId);
+      pushHistory();
+      applyStamp(n, stampTool);
+      render();
+      showToast(`${n.id} → ${stampTool}`);
+    });
+
+    function applyStamp(node, tool) {
+      // 노드 role/플래그를 즉시 변경
+      if (tool === "reset") {
+        node.role = "standard"; node.is_charger = false; node.is_holding = false;
+      } else if (tool === "station") {
+        node.role = "station"; node.is_charger = false; node.is_holding = false;
+      } else if (tool === "charger") {
+        node.role = "charger"; node.is_charger = true; node.is_holding = false;
+      } else if (tool === "holding") {
+        node.role = "holding"; node.is_charger = false; node.is_holding = true;
+      } else if (tool === "siding") {
+        node.role = "siding"; node.is_charger = false; node.is_holding = false;
+      }
+    }
+
+    // ── Build mutations (모두 호출 전 pushHistory()) ──────────
+    // SVG 좌표 (panX/panY/zoomScale 적용 전) → 데이터 좌표 (x, y)
+    function svgToData(sxv, syv) {
+      const x = (sxv - PAD) / scaleFit + minX;
+      const y = ((VH - PAD) - syv) / scaleFit + minY;
+      return {x, y};
+    }
+    function addNodeAt(svgX, svgY, opts) {
+      pushHistory();
+      let {x, y} = svgToData(svgX, svgY);
+      const shiftAxis = !!(opts && opts.shiftAxis);
+      // F1e: grid snap (data 좌표 기준)
+      if (gridSnapEnabled && gridSize > 0) {
+        x = Math.round(x / gridSize) * gridSize;
+        y = Math.round(y / gridSize) * gridSize;
+      }
+      // F1e: Shift = 직전 노드의 X 또는 Y 축 고정 (커서가 가까운 축으로)
+      if (shiftAxis && lastPlacedDataXY) {
+        const dx = Math.abs(x - lastPlacedDataXY.x);
+        const dy = Math.abs(y - lastPlacedDataXY.y);
+        if (dx < dy) x = lastPlacedDataXY.x;   // 수직 정렬 (X 고정)
+        else         y = lastPlacedDataXY.y;   // 수평 정렬 (Y 고정)
+      }
+      const id = nextNodeId();
+      const newNode = {
+        id, x, y, name: id,
+        role: "standard", is_charger: false, is_holding: false,
+        degree_in: 0, degree_out: 0,
+      };
+      nodes.push(newNode);
+      nodeById.set(id, newNode);
+      lastPlacedDataXY = {x, y};
+      const hint = (shiftAxis ? " [axis]" : "") + (gridSnapEnabled ? ` [grid ${gridSize}]` : "");
+      showToast(`+ Node ${id} at (${x.toFixed(1)}, ${y.toFixed(1)})${hint}`);
+    }
+    function addEdgeBetween(srcId, dstId, bidir) {
+      if (srcId === dstId) { showToast("동일 노드 — 엣지 생략"); return; }
+      // 같은 방향 중복?
+      if (edges.some(e => e.src === srcId && e.dst === dstId)) {
+        // 이미 있으면 양/단 update
+        const existing = edges.find(e => e.src === srcId && e.dst === dstId);
+        if (existing.bidir !== bidir) {
+          pushHistory();
+          existing.bidir = bidir;
+          showToast(`Edge ${srcId}→${dstId} → ${bidir ? '양방향' : '단방향'}`);
+        } else {
+          showToast(`이미 존재: ${srcId} → ${dstId}`);
+        }
+        return;
+      }
+      pushHistory();
+      const id = nextEdgeId();
+      // F1a: 새 엣지는 활성 graph 에 귀속
+      const graphIdx = MULTI_FLEET_ACTIVE ? activeGraphIdx : 0;
+      edges.push({
+        id, src: srcId, dst: dstId,
+        bidir: !!bidir, corridor: "", access: "",
+        graph_idx: graphIdx,
+      });
+      const gLabel = MULTI_FLEET_ACTIVE ? ` [graph ${graphIdx}]` : "";
+      showToast(`+ Edge ${srcId} ${bidir ? '↔' : '→'} ${dstId}${gLabel}`);
+    }
+    // F1d: 단↔양방향 토글
+    function toggleEdgeBidir(edgeId) {
+      const edge = edges.find(e => e.id === edgeId);
+      if (!edge) return;
+      // F1a: 비활성 graph 의 lane 은 건드리지 않음
+      if (MULTI_FLEET_ACTIVE) {
+        const eg = (edge.graph_idx == null) ? 0 : edge.graph_idx;
+        if (eg !== activeGraphIdx) { showToast(`다른 graph 의 edge — 무시`); return; }
+      }
+      pushHistory();
+      edge.bidir = !edge.bidir;
+      showToast(`Edge ${edge.src} ${edge.bidir ? '↔' : '→'} ${edge.dst}`);
+    }
+    function deleteNode(id) {
+      pushHistory();
+      const idx = nodes.findIndex(n => n.id === id);
+      if (idx >= 0) nodes.splice(idx, 1);
+      nodeById.delete(id);
+      // 관련 엣지 모두 삭제
+      const before = edges.length;
+      for (let i = edges.length - 1; i >= 0; i--) {
+        if (edges[i].src === id || edges[i].dst === id) edges.splice(i, 1);
+      }
+      showToast(`- Node ${id} (+ ${before - edges.length} edges)`);
+    }
+    function deleteEdge(id) {
+      const ed = edges.find(e => e.id === id);
+      if (!ed) return;
+      // F1a: 비활성 graph 의 lane 삭제 무시 (spec acceptance)
+      if (MULTI_FLEET_ACTIVE) {
+        const eg = (ed.graph_idx == null) ? 0 : ed.graph_idx;
+        if (eg !== activeGraphIdx) { showToast(`다른 graph 의 edge — 무시`); return; }
+      }
+      pushHistory();
+      const idx = edges.indexOf(ed);
+      if (idx >= 0) {
+        edges.splice(idx, 1);
+        showToast(`- Edge ${ed.src} → ${ed.dst}`);
+      }
+    }
+    function deleteSelected() {
+      if (selectedNodeIds.size === 0) return;
+      pushHistory();
+      const count = selectedNodeIds.size;
+      let edgeRemoved = 0;
+      for (const id of selectedNodeIds) {
+        const idx = nodes.findIndex(n => n.id === id);
+        if (idx >= 0) nodes.splice(idx, 1);
+        nodeById.delete(id);
+      }
+      for (let i = edges.length - 1; i >= 0; i--) {
+        if (selectedNodeIds.has(edges[i].src) || selectedNodeIds.has(edges[i].dst)) {
+          edges.splice(i, 1);
+          edgeRemoved++;
+        }
+      }
+      selectedNodeIds.clear();
+      showToast(`- ${count} nodes (+ ${edgeRemoved} edges)`);
+    }
+    function stampSelected(tool) {
+      if (selectedNodeIds.size === 0) return;
+      pushHistory();
+      const count = selectedNodeIds.size;
+      for (const id of selectedNodeIds) {
+        const n = nodeById.get(id);
+        if (n) applyStamp(n, tool);
+      }
+      selectedNodeIds.clear();
+      showToast(`${count} nodes → ${tool}`);
+    }
+
+    // ── 우클릭: 브라우저 기본 메뉴 차단 + Stamp 모드 노드 우클릭 = Reset
+    document.getElementById("map").addEventListener("contextmenu", (e) => {
+      // Paint 모드 우클릭은 pointerdown 에서 trajectory 시작에 이미 사용 → 메뉴 무조건 막음
+      e.preventDefault();
+      if (mode !== "stamp") return;
+      const nodeHit = e.target.closest("[data-node-id]");
+      if (!nodeHit) return;
+      const n = nodeById.get(nodeHit.dataset.nodeId);
+      // 우클릭 = "되돌리기" → standard 로 reset
+      applyStamp(n, "reset");
+      render();
+      showToast(`${n.id} → reset (standard)`);
+    });
+
+    // ── Reset View ──────────────────────────────────────────────
+    document.getElementById("btn-reset-view").addEventListener("click", () => {
+      zoomScale = 1; panX = 0; panY = 0; render();
+    });
+
+    // ── Save / Save & Run ─────────────────────────────────────
+    async function saveEdits(opts = {}) {
+      const edits = exportEdits();
+      // 1) 다운로드 (항상)
+      if (opts.download !== false) downloadEdits(edits);
+      // 2) 서버 메모리 갱신 (server_map_id 가 있을 때만)
+      if (SERVER_MAP_ID) {
+        try {
+          const resp = await fetch(`/update-map/${SERVER_MAP_ID}`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({edits}),
+          });
+          if (!resp.ok) throw new Error(await resp.text());
+          const data = await resp.json();
+          showToast(`Saved + applied (chargers=${data.stats.chargers}, stations=${data.stats.stations})`);
+        } catch (err) {
+          showToast(`Saved (download only) — server update 실패: ${err.message}`);
+        }
+      } else {
+        showToast("Saved (file download)");
+      }
+    }
+    document.getElementById("btn-save").addEventListener("click", () => { saveEdits(); });
+    document.getElementById("btn-save-run").addEventListener("click", async () => {
+      await saveEdits({download: false});  // 서버에 적용만 (다운로드 생략)
+      if (SERVER_MAP_ID) {
+        // Quickrun 페이지로 이동 — 이미 떠 있으면 새로고침으로 옵션 갱신됨
+        window.location.href = "/";
+      } else {
+        showToast("Server 없음 — 먼저 ./run quickrun 으로 띄우세요");
+      }
+    });
+
+    function exportEdits() {
+      // 원본 vs 현재 diff 를 정확하게 기록.
+      // 임포트 시 apply_edits(original, edits) 로 재현 가능한 형태.
+      const currentNodeIds = new Set(nodes.map(n => n.id));
+      const currentEdgeIds = new Set(edges.map(e => e.id));
+
+      // 삭제된 항목 = 원본에 있었지만 현재 없는 것
+      const deleted_node_ids = [];
+      for (const id of ORIGINAL_NODES.keys()) {
+        if (!currentNodeIds.has(id)) deleted_node_ids.push(id);
+      }
+      const deleted_edge_ids = [];
+      for (const id of ORIGINAL_EDGES.keys()) {
+        if (!currentEdgeIds.has(id)) deleted_edge_ids.push(id);
+      }
+
+      // 추가된 항목 = 원본에 없던 것 (Build 모드로 생성)
+      const added_nodes = [];
+      for (const n of nodes) {
+        if (!ORIGINAL_NODES.has(n.id)) {
+          added_nodes.push({
+            id: n.id, x: n.x, y: n.y, name: n.name || n.id,
+            role: n.role || "standard",
+            is_charger: !!n.is_charger,
+            is_holding: !!n.is_holding,
+          });
+        }
+      }
+      const added_edges = [];
+      for (const e of edges) {
+        if (!ORIGINAL_EDGES.has(e.id)) {
+          const payload = {id: e.id, src: e.src, dst: e.dst, bidir: !!e.bidir};
+          if (e.v_max !== null && e.v_max !== undefined) payload.v_max = e.v_max;
+          // F1a: 새 엣지의 graph_idx 도 보존 (multi-fleet 환경)
+          if (e.graph_idx !== null && e.graph_idx !== undefined) payload.graph_idx = e.graph_idx;
+          added_edges.push(payload);
+        }
+      }
+
+      // override = 원본에 있었지만 속성이 바뀐 것
+      const node_overrides = {};
+      for (const n of nodes) {
+        const orig = ORIGINAL_NODES.get(n.id);
+        if (!orig) continue;
+        const diff = {};
+        if ((n.role || "standard") !== (orig.role || "standard")) diff.role = n.role;
+        if (!!n.is_charger !== !!orig.is_charger) diff.is_charger = !!n.is_charger;
+        if (!!n.is_holding !== !!orig.is_holding) diff.is_holding = !!n.is_holding;
+        if (Object.keys(diff).length > 0) node_overrides[n.id] = diff;
+      }
+      const edge_overrides = {};
+      for (const e of edges) {
+        const orig = ORIGINAL_EDGES.get(e.id);
+        if (!orig) continue;
+        const diff = {};
+        if (!!e.bidir !== !!orig.bidir) diff.bidir = !!e.bidir;
+        // 단방향에서 src/dst 가 스왑됐는지 (Paint Alt 또는 Build edge)
+        if (e.src !== orig.src || e.dst !== orig.dst) {
+          diff.src = e.src; diff.dst = e.dst;
+        }
+        // F1b-ux: v_max diff — null/undefined 도 unset 의도로 명시 기록
+        const curV = (e.v_max === null || e.v_max === undefined) ? null : Number(e.v_max);
+        const origV = (orig.v_max === null || orig.v_max === undefined) ? null : Number(orig.v_max);
+        if (curV !== origV) diff.v_max = curV;
+        // F1a: graph_idx 변경 추적
+        const curG = (e.graph_idx === null || e.graph_idx === undefined) ? 0 : e.graph_idx;
+        const origG = (orig.graph_idx === null || orig.graph_idx === undefined) ? 0 : orig.graph_idx;
+        if (curG !== origG) diff.graph_idx = curG;
+        if (Object.keys(diff).length > 0) edge_overrides[e.id] = diff;
+      }
+
+      const result = {
+        format_version: 1,
+        source: SOURCE_NAME,
+        timestamp: new Date().toISOString(),
+        counts: {
+          deleted_nodes: deleted_node_ids.length,
+          deleted_edges: deleted_edge_ids.length,
+          added_nodes: added_nodes.length,
+          added_edges: added_edges.length,
+          overridden_nodes: Object.keys(node_overrides).length,
+          overridden_edges: Object.keys(edge_overrides).length,
+        },
+        deleted_node_ids,
+        deleted_edge_ids,
+        added_nodes,
+        added_edges,
+        node_overrides,
+        edge_overrides,
+      };
+
+      // 배경 이미지 포함
+      if (backgroundImage.url) {
+        result.background_image = {
+          url: backgroundImage.url,
+          opacity: backgroundImage.opacity,
+          x_offset: backgroundImage.x_offset,
+          y_offset: backgroundImage.y_offset,
+          scale: backgroundImage.scale,
+        };
+      }
+
+      return result;
+    }
+
+    function downloadEdits(edits) {
+      const blob = new Blob([JSON.stringify(edits, null, 2)], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${SOURCE_NAME}.edit.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ── Toast 알림 ──────────────────────────────────────────────
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+    }
+
+    // ── 배경 이미지 컨트롤 ──────────────────────────────────────────
+    function updateBackgroundImageUI() {
+      const controlsDiv = document.getElementById("bg-controls");
+      if (backgroundImage.url) {
+        controlsDiv.style.display = "flex";
+      } else {
+        controlsDiv.style.display = "none";
+      }
+      document.getElementById("bg-opacity-slider").value = backgroundImage.opacity;
+      document.getElementById("bg-opacity-value").textContent = backgroundImage.opacity;
+      document.getElementById("bg-scale-slider").value = backgroundImage.scale;
+      document.getElementById("bg-scale-value").textContent = backgroundImage.scale;
+      document.getElementById("bg-x-offset").value = backgroundImage.x_offset;
+      document.getElementById("bg-y-offset").value = backgroundImage.y_offset;
+    }
+
+    document.getElementById("bg-image-upload").addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        backgroundImage.url = evt.target.result;
+        backgroundImage.opacity = 100;
+        backgroundImage.x_offset = 0;
+        backgroundImage.y_offset = 0;
+        backgroundImage.scale = 100;
+        updateBackgroundImageUI();
+        render();
+        showToast("Background image uploaded");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById("bg-opacity-slider").addEventListener("input", (e) => {
+      backgroundImage.opacity = Number(e.target.value);
+      document.getElementById("bg-opacity-value").textContent = backgroundImage.opacity;
+      render();
+    });
+
+    document.getElementById("bg-scale-slider").addEventListener("input", (e) => {
+      backgroundImage.scale = Number(e.target.value);
+      document.getElementById("bg-scale-value").textContent = backgroundImage.scale;
+      render();
+    });
+
+    document.getElementById("bg-x-offset").addEventListener("input", (e) => {
+      backgroundImage.x_offset = Number(e.target.value) || 0;
+      render();
+    });
+
+    document.getElementById("bg-y-offset").addEventListener("input", (e) => {
+      backgroundImage.y_offset = Number(e.target.value) || 0;
+      render();
+    });
+
+    document.getElementById("bg-clear").addEventListener("click", () => {
+      backgroundImage.url = null;
+      backgroundImage.opacity = 100;
+      backgroundImage.x_offset = 0;
+      backgroundImage.y_offset = 0;
+      backgroundImage.scale = 100;
+      document.getElementById("bg-image-upload").value = "";
+      updateBackgroundImageUI();
+      render();
+      showToast("Background image cleared");
+    });
+
+    // ── F1b-ux+: Speed Control 패널 이벤트 바인딩 ───────────────
+    (function bindSpeedControlPanel() {
+      const inputEl = document.getElementById("speed-bulk-input");
+      const sliderEl = document.getElementById("speed-bulk-slider");
+      const applyBtn = document.getElementById("speed-apply-btn");
+      const unsetBtn = document.getElementById("speed-unset-btn");
+      if (!inputEl || !sliderEl || !applyBtn || !unsetBtn) return;
+      // slider 움직이면 input 동기화
+      sliderEl.addEventListener("input", () => {
+        inputEl.value = Number(sliderEl.value).toFixed(2);
+      });
+      // input 바뀌면 slider 동기화 (범위 안에서)
+      inputEl.addEventListener("input", () => {
+        const v = parseFloat(inputEl.value);
+        if (Number.isFinite(v) && v >= VMAX_MIN && v <= VMAX_MAX) {
+          sliderEl.value = v.toFixed(2);
+        }
+      });
+      // Enter 키로 Apply
+      inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          applyBulkSpeed();
+        }
+      });
+      applyBtn.addEventListener("click", applyBulkSpeed);
+      unsetBtn.addEventListener("click", unsetBulkSpeed);
+    })();
+
+    // 초기 UI 상태 설정
+    updateBackgroundImageUI();
+    updateSpeedControlPanel();
+    // F1a: Active Graph / Fleet Info 패널 초기 렌더 (multi-fleet 환경에서만 노출)
+    renderActiveGraphPanel();
+
+    // ── 초기 렌더 ───────────────────────────────────────────────
+    render();
+    document.title = PAYLOAD.title;
+  </script>
+
+
+<div id="claude-agent-glow-border" bis_skin_checked="1" style="position: fixed; inset: 0px; pointer-events: none; z-index: 2147483646; opacity: 1; transition: opacity 0.3s ease-in-out; animation: 2s ease-in-out 0s infinite normal none running claude-pulse; box-shadow: rgba(217, 119, 87, 0.5) 0px 0px 10px inset, rgba(217, 119, 87, 0.3) 0px 0px 20px inset, rgba(217, 119, 87, 0.1) 0px 0px 30px inset;"></div></body></html>
