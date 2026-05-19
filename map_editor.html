@@ -3049,46 +3049,71 @@
       URL.revokeObjectURL(url);
     }
 
-    // ── VDA5050-style building.yaml export ────────────────────────
-    //   vertices: [x, y, {name, allowedDeviationXY, type, is_parking_spot?}]
-    //     type: "NONE" 기본 / "CHGE" 충전기. is_parking_spot 은 station·work 역할일 때 true.
-    //   lanes:    [from_idx, to_idx, {orientation, speed_limit, rotationallowed, corridor}]
-    //     bidir 엣지는 from→to + to→from 두 lane 으로 분해.
-    //     orientation 은 두 노드 사이 atan2(dy, dx) 라디안. 역방향은 +π 후 (-π, π] 정규화.
-    //     corridor 는 모든 lane 에서 동일 값 (leftWidth=0.7, rightWidth=0.7, corridorRefpoint=CONTOUR).
-    const LANE_DEFAULT_SPEED = 1.5;       // edge.v_max 가 비어 있을 때 채울 기본 속도
-    const VERTEX_DEFAULT_RADIUS = 0.3;    // allowedDeviationXY 디폴트
-    const CORRIDOR_INLINE = "{leftWidth: 0.7, rightWidth: 0.7, corridorRefpoint: CONTOUR}";
+    // ── VDA5050-style building.yaml export (block-style) ──────────
+    //   YAML 항목은 mixed sequence [scalar, scalar, mapping] 형태를 block 으로 풀어 씀.
+    //   lanes 가 vertices 보다 먼저 나옴 (운영 컨벤션).
+    //   vertex: [x, y, {name, allowedDeviationXY, type, is_parking_spot?}]
+    //     - type: "NONE" 기본 / "CHGE" 충전기. is_parking_spot 은 station·work 역할일 때만 출력.
+    //   lane: [from_idx, to_idx, {orientation, speed_limit, rotationallowed, corridor}]
+    //     - bidir 엣지는 from→to + to→from 두 lane 으로 분해. orientation 은 atan2(dy, dx) 라디안,
+    //       역방향은 +π 후 (-π, π] 정규화. corridor 폭/refpoint 는 모든 lane 에서 동일.
+    const LANE_DEFAULT_SPEED = 1.5;
+    const VERTEX_DEFAULT_RADIUS = 0.3;
+    const CORRIDOR_LEFT_WIDTH = 0.7;
+    const CORRIDOR_RIGHT_WIDTH = 0.7;
+    const CORRIDOR_REFPOINT = "CONTOUR";
 
     function _yamlQuoteString(s) {
       const escaped = String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       return `"${escaped}"`;
     }
 
-    // raw scalar marker: { __raw: "..." } 는 따옴표 없이 그대로 출력 (enum 식별자 등)
-    function _yamlInlineValue(v) {
-      if (v === true) return "true";
-      if (v === false) return "false";
-      if (v === null || v === undefined) return '""';
-      if (typeof v === "number") {
-        if (!isFinite(v)) return "0";
-        return Number.isInteger(v) ? String(v) : String(parseFloat(v.toFixed(6)));
-      }
-      if (typeof v === "object" && typeof v.__raw === "string") return v.__raw;
-      return _yamlQuoteString(v);
-    }
-
-    function _yamlInlineMap(obj) {
-      const entries = Object.keys(obj).map(k => `${k}: ${_yamlInlineValue(obj[k])}`);
-      return `{${entries.join(", ")}}`;
+    function _yamlNum(v) {
+      const n = Number(v);
+      if (!isFinite(n)) return "0";
+      return Number.isInteger(n) ? String(n) : String(parseFloat(n.toFixed(6)));
     }
 
     function _normalizeAngle(rad) {
-      // (-π, π] 로 정규화
       let a = rad;
       while (a > Math.PI) a -= 2 * Math.PI;
       while (a <= -Math.PI) a += 2 * Math.PI;
       return a;
+    }
+
+    // block-style mixed-sequence row: 첫 2 원소는 scalar, 마지막 원소는 mapping.
+    //   - - <first>
+    //     - <second>
+    //     - <key1>: <val1>
+    //       <key2>: <val2>
+    //       ...
+    // base indent (스페이스 수) 기준으로 dash/키 들여쓰기 결정.
+    function _pushLaneBlock(lines, from, to, orientation, speed) {
+      const ind = "      ";   // sequence 첫 dash 위치 (lanes 아래 6칸)
+      const ind2 = "        "; // 8칸 = nested dash / 마지막 dash 위치
+      const ind3 = "          "; // 10칸 = mapping 키
+      const ind4 = "            "; // 12칸 = corridor 내부 키
+      lines.push(`${ind}- - ${from}`);
+      lines.push(`${ind2}- ${to}`);
+      lines.push(`${ind2}- orientation: ${_yamlNum(orientation)}`);
+      lines.push(`${ind3}speed_limit: ${_yamlNum(speed)}`);
+      lines.push(`${ind3}rotationallowed: false`);
+      lines.push(`${ind3}corridor:`);
+      lines.push(`${ind4}leftWidth: ${_yamlNum(CORRIDOR_LEFT_WIDTH)}`);
+      lines.push(`${ind4}rightWidth: ${_yamlNum(CORRIDOR_RIGHT_WIDTH)}`);
+      lines.push(`${ind4}corridorRefpoint: ${CORRIDOR_REFPOINT}`);
+    }
+
+    function _pushVertexBlock(lines, x, y, name, isCharger, isStation) {
+      const ind = "      ";
+      const ind2 = "        ";
+      const ind3 = "          ";
+      lines.push(`${ind}- - ${_yamlNum(x)}`);
+      lines.push(`${ind2}- ${_yamlNum(y)}`);
+      lines.push(`${ind2}- name: ${_yamlQuoteString(name)}`);
+      lines.push(`${ind3}allowedDeviationXY: ${_yamlNum(VERTEX_DEFAULT_RADIUS)}`);
+      lines.push(`${ind3}type: ${isCharger ? "CHGE" : "NONE"}`);
+      if (isStation) lines.push(`${ind3}is_parking_spot: true`);
     }
 
     function buildRmfYaml() {
@@ -3100,21 +3125,7 @@
       lines.push("levels:");
       lines.push("  L1:");
 
-      // vertices
-      lines.push("    vertices:");
-      for (const n of nodes) {
-        const name = (n.name && String(n.name).trim()) ? String(n.name) : "";
-        const isCharger = !!n.is_charger;
-        const isStation = (n.role === "station" || n.role === "work");
-        const params = {};
-        params.name = name;
-        params.allowedDeviationXY = VERTEX_DEFAULT_RADIUS;
-        params.type = { __raw: isCharger ? "CHGE" : "NONE" };
-        if (isStation) params.is_parking_spot = true;
-        lines.push(`      - [${_yamlInlineValue(Number(n.x))}, ${_yamlInlineValue(Number(n.y))}, ${_yamlInlineMap(params)}]`);
-      }
-
-      // lanes — bidir 엣지는 2개 lane 으로 분해
+      // lanes 먼저 — bidir 엣지는 2개 lane 으로 분해
       lines.push("    lanes:");
       let laneCount = 0;
       for (const e of edges) {
@@ -3126,25 +3137,22 @@
         const angleFwd = _normalizeAngle(Math.atan2(dy, dx));
         const vmax = (e.v_max !== null && e.v_max !== undefined) ? Number(e.v_max) : LANE_DEFAULT_SPEED;
 
-        const fwdParams = {
-          orientation: angleFwd,
-          speed_limit: vmax,
-          rotationallowed: false,
-          corridor: { __raw: CORRIDOR_INLINE },
-        };
-        lines.push(`      - [${a}, ${b}, ${_yamlInlineMap(fwdParams)}]`);
+        _pushLaneBlock(lines, a, b, angleFwd, vmax);
         laneCount++;
 
         if (e.bidir) {
-          const revParams = {
-            orientation: _normalizeAngle(angleFwd + Math.PI),
-            speed_limit: vmax,
-            rotationallowed: false,
-            corridor: { __raw: CORRIDOR_INLINE },
-          };
-          lines.push(`      - [${b}, ${a}, ${_yamlInlineMap(revParams)}]`);
+          _pushLaneBlock(lines, b, a, _normalizeAngle(angleFwd + Math.PI), vmax);
           laneCount++;
         }
+      }
+
+      // vertices
+      lines.push("    vertices:");
+      for (const n of nodes) {
+        const name = (n.name && String(n.name).trim()) ? String(n.name) : "";
+        const isCharger = !!n.is_charger;
+        const isStation = (n.role === "station" || n.role === "work");
+        _pushVertexBlock(lines, n.x, n.y, name, isCharger, isStation);
       }
 
       return { yaml: lines.join("\n") + "\n", vertexCount: nodes.length, laneCount };
