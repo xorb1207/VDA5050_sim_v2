@@ -35,6 +35,7 @@ class ScenarioRunner:
             graph=graph,
             bus=bus,
             task_interval_s=tp.interval_seconds,
+            scheduler=sched,
         )
 
         engine = SimulationEngine(

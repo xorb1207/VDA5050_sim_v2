@@ -411,7 +411,13 @@ class RealRunner:
         self._scheduler = TimeWindowScheduler()
         bus = LocalMemoryBus()
         self._bus = bus
-        self._task_gen = TaskGenerator(graph, bus, task_interval_s=self.task_interval_s)
+        # PR-D: scheduler 전달 → station capacity 사전 거부 (다른 AGV 가
+        # pickup/dropoff station 점유 중이면 demand 보류). station 중복 점유 1차 방어.
+        self._task_gen = TaskGenerator(
+            graph, bus,
+            task_interval_s=self.task_interval_s,
+            scheduler=self._scheduler,
+        )
         # recorder 를 엔진에 연결 → AGV/스케줄러가 이벤트 자동 기록
         self._recorder = PlaybackTraceRecorder(graph, sample_interval_s=0.5)
         self._engine = SimulationEngine(
