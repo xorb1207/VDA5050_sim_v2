@@ -3113,6 +3113,7 @@
       lines.push(`${ind2}- name: ${_yamlQuoteString(name)}`);
       lines.push(`${ind3}allowedDeviationXY: ${_yamlNum(VERTEX_DEFAULT_RADIUS)}`);
       lines.push(`${ind3}type: ${isCharger ? "CHGE" : "NONE"}`);
+      if (isCharger) lines.push(`${ind3}is_charger: true`);
       if (isStation) lines.push(`${ind3}is_parking_spot: true`);
     }
 
