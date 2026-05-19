@@ -1061,9 +1061,9 @@
         <h2>Speed Control</h2>
         <div id="speed-ctrl-status" class="speed-ctrl-status" bis_skin_checked="1">엣지를 선택하세요 <span style="color:var(--muted-2);">(클릭 / Shift+드래그)</span></div>
         <div class="speed-ctrl-row" bis_skin_checked="1">
-          <input type="number" id="speed-bulk-input" min="0.1" max="5.0" step="0.1" value="1.0" placeholder="—">
+          <input type="number" id="speed-bulk-input" min="0.1" max="1.5" step="0.1" value="1.0" placeholder="—">
           <span style="color:var(--muted); font-size:11px;">m/s</span>
-          <input type="range" id="speed-bulk-slider" min="0.1" max="5.0" step="0.1" value="1.0">
+          <input type="range" id="speed-bulk-slider" min="0.1" max="1.5" step="0.1" value="1.0">
         </div>
         <div class="speed-ctrl-buttons" bis_skin_checked="1">
           <button id="speed-apply-btn" class="primary" disabled="">Apply to selected</button>
@@ -1706,6 +1706,20 @@
       }
     });
 
+    // Speed 모드 v_max → 색 그라데이션 (신호등 메타포)
+    //   0.1 m/s (creep) → red(hue 0°) … 1.5 m/s (max) → green(hue 120°)
+    //   stroke 와 label fill 두 곳에서 공용.
+    const VMAX_COLOR_MIN = 0.1;
+    const VMAX_COLOR_MAX = 1.5;
+    function _vmaxColor(v) {
+      if (v === null || v === undefined) return "var(--warn)";
+      const n = Number(v);
+      const clamped = Math.max(VMAX_COLOR_MIN, Math.min(VMAX_COLOR_MAX, n));
+      const t = (clamped - VMAX_COLOR_MIN) / (VMAX_COLOR_MAX - VMAX_COLOR_MIN);
+      const hue = Math.round(t * 120);  // 0=red, 60=yellow, 120=green
+      return `hsl(${hue}, 70%, 45%)`;
+    }
+
     // ── 맵 렌더링 ───────────────────────────────────────────────
     // Phase 1: 정적 렌더링 (편집 결과를 즉시 반영하지만 인터랙션은 stub)
     function render() {
@@ -1735,7 +1749,7 @@
           stroke = "#9aa5b1";
           strokeOpacity = 0.3;
         } else if (showVMaxColor) {
-          stroke = "var(--warn)";                          // Speed 모드 + v_max 설정된 edge (amber)
+          stroke = _vmaxColor(e.v_max);                    // Speed 모드 + v_max 설정된 edge (red→green 그라데이션)
         } else if (MULTI_FLEET_ACTIVE) {
           // 활성 graph: fleet 색깔 (양방향/단방향 구분은 화살촉으로 명확하므로 fleet 색 우선)
           stroke = colorForGraphIdx(eGraphIdx);
@@ -1803,7 +1817,7 @@
           const my = (sy(a.y) + sy(b.y)) / 2;
           const hasV = (e.v_max !== null && e.v_max !== undefined);
           const txt = hasV ? Number(e.v_max).toFixed(2) : "—";
-          const fill = hasV ? "var(--warn)" : "var(--muted-2)";
+          const fill = hasV ? _vmaxColor(e.v_max) : "var(--muted-2)";
           return `<g transform="translate(${mx} ${my}) scale(${labelScale})" style="pointer-events:none">
             <rect x="-14" y="-7" width="28" height="14" rx="3" fill="rgba(255,255,255,0.92)" stroke="${fill}" stroke-width="0.8" />
             <text x="0" y="3" text-anchor="middle" fill="${fill}" font-family="var(--font-mono)" font-size="9">${txt}</text>
@@ -2072,7 +2086,7 @@
                   style="width:24px; height:22px; padding:0; border:1px solid var(--border-strong);
                          background:var(--surface-2); border-radius:4px; cursor:pointer;">−</button>
           <input type="number" data-vmax-input id="vmax-input"
-                 value="${curVal}" placeholder="—" min="0.1" max="5.0" step="0.1"
+                 value="${curVal}" placeholder="—" min="0.1" max="1.5" step="0.1"
                  style="width:64px; padding:2px 4px; font-family:var(--font-mono); font-size:11px;
                         text-align:center; border:1px solid var(--border-strong); border-radius:4px;" />
           <button data-vmax-act="inc" title="+0.1"
