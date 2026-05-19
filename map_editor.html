@@ -304,6 +304,7 @@
         <span class="stat-chip" id="chip-components">component <strong id="stat-components">1</strong></span>
         <span class="spacer"></span>
         <button id="btn-reset-view" title="줌/팬 초기화">⌂ Reset View</button>
+        <button id="btn-export-yaml" title="OpenRMF building.yaml 포맷으로 다운로드">⬇ Export YAML</button>
         <button id="btn-save">💾 Save</button>
         <button id="btn-save-run" class="primary">▶ Save &amp; Run</button>
       </div>
@@ -1818,7 +1819,11 @@
       const _pxClamped = Math.max(HIT_RADIUS_PX_MIN, Math.min(HIT_RADIUS_PX_MAX, _wantPx));
       const hitR = _pxClamped / zoomScale;  // viewBox 단위
 
-      const nodesSvg = nodes.map(n => {
+      // F-yaml: 줌 임계값 이상일 때 노드명/인덱스 라벨 표시
+      const NODE_LABEL_ZOOM_THRESHOLD = 1.5;
+      const showNodeLabels = (zoomScale >= NODE_LABEL_ZOOM_THRESHOLD);
+
+      const nodesSvg = nodes.map((n, idx) => {
         const cx = sx(n.x), cy = sy(n.y);
         const color = roleColor(n.role, n.is_charger, n.is_holding);
         const shape = roleShape(n.role, n.is_charger, n.is_holding, color);
@@ -1827,12 +1832,22 @@
         if (selectedNodeIds.has(n.id)) rings.push(`<circle class="node-selected" r="13" fill="none" />`);
         if (n.id === edgeStartNodeId) rings.push(`<circle class="node-edge-start" r="14" fill="none" />`);
         // outer g: translate only (hit circle = world unit). inner g: labelScale (visual = pixel constant).
+        let labelSvg = "";
+        if (showNodeLabels) {
+          const labelText = (n.name && String(n.name).trim()) ? String(n.name) : String(idx);
+          const safeLabel = labelText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          // 노드 중심에서 아래로 약간 띄움. labelScale 적용된 inner g 안에서 픽셀 단위로 위치.
+          labelSvg = `<text x="0" y="-9" text-anchor="middle" font-family="var(--font-mono)" font-size="10"
+                            fill="#ffffff" stroke="rgba(0,0,0,0.65)" stroke-width="2.5" paint-order="stroke"
+                            style="pointer-events:none; user-select:none">${safeLabel}</text>`;
+        }
         return `<g data-node-id="${n.id}" style="cursor:${stampTool === 'inspect' && mode !== 'build' ? 'default' : 'pointer'}"
                    transform="translate(${cx} ${cy})">
           <circle r="${hitR}" fill="transparent" />
           <g transform="scale(${labelScale})">
             ${rings.join('')}
             ${shape}
+            ${labelSvg}
           </g>
         </g>`;
       }).join("");
@@ -2904,6 +2919,10 @@
         showToast("Saved (file download)");
       }
     }
+    document.getElementById("btn-export-yaml").addEventListener("click", () => {
+      try { downloadYaml(); }
+      catch (err) { showToast(`Export YAML 실패: ${err.message}`); }
+    });
     document.getElementById("btn-save").addEventListener("click", () => { saveEdits(); });
     document.getElementById("btn-save-run").addEventListener("click", async () => {
       await saveEdits({download: false});  // 서버에 적용만 (다운로드 생략)
@@ -3028,6 +3047,118 @@
       a.download = `${SOURCE_NAME}.edit.json`;
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    // ── OpenRMF building.yaml export ──────────────────────────────
+    // 포맷: vertices = [x, y, 0, name, {typed_params}]
+    //       lanes    = [from_idx, to_idx, {typed_params}]
+    // typed_params: {key: [type_code, value]} — 1=string, 2=int, 3=float, 4=bool
+    const RMF_TYPE_STRING = 1, RMF_TYPE_INT = 2, RMF_TYPE_FLOAT = 3, RMF_TYPE_BOOL = 4;
+
+    function _yamlQuoteString(s) {
+      // OpenRMF 빌더가 읽는 안전한 더블쿼트 문자열. 백슬래시/쿼트만 이스케이프.
+      const escaped = String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      return `"${escaped}"`;
+    }
+
+    function _yamlScalar(v) {
+      if (v === true) return "true";
+      if (v === false) return "false";
+      if (typeof v === "number") {
+        if (!isFinite(v)) return "0";
+        // 정수면 정수로, 아니면 소수 — 너무 긴 부동소수점 자릿수 컷
+        return Number.isInteger(v) ? String(v) : String(parseFloat(v.toFixed(6)));
+      }
+      return _yamlQuoteString(v == null ? "" : v);
+    }
+
+    function _yamlTypedParam(typeCode, value) {
+      // [type_code, value] 쌍 — OpenRMF inline 리스트 형식
+      return `[${typeCode}, ${_yamlScalar(value)}]`;
+    }
+
+    function _yamlParamsBlock(params) {
+      // params = {key: [type_code, value], ...} → "{k1: [t, v], k2: [t, v]}"
+      const entries = Object.keys(params).map(k => `${k}: ${_yamlTypedParam(params[k][0], params[k][1])}`);
+      return `{${entries.join(", ")}}`;
+    }
+
+    function _vertexParamsFor(node) {
+      const params = {};
+      if (node.is_charger) params.is_charger = [RMF_TYPE_BOOL, true];
+      if (node.is_holding) params.is_parking_spot = [RMF_TYPE_BOOL, true];
+      // station/work 역할은 holdable 의미로 별도 키 — RMF builder 가 무시해도 안전
+      if (node.role === "station" || node.role === "work") {
+        params.is_holding_point = [RMF_TYPE_BOOL, true];
+      }
+      return params;
+    }
+
+    function _laneParamsFor(edge) {
+      const params = {};
+      params.bidirectional = [RMF_TYPE_BOOL, !!edge.bidir];
+      params.graph_idx = [RMF_TYPE_INT, (edge.graph_idx == null) ? 0 : edge.graph_idx];
+      params.orientation = [RMF_TYPE_STRING, ""];
+      params.demo_mock_floor_name = [RMF_TYPE_STRING, ""];
+      params.demo_mock_lift_name = [RMF_TYPE_STRING, ""];
+      if (edge.v_max !== null && edge.v_max !== undefined) {
+        params.speed_limit = [RMF_TYPE_FLOAT, Number(edge.v_max)];
+      }
+      return params;
+    }
+
+    function buildRmfYaml() {
+      // 노드 인덱스 매핑: nodes 배열 순서 = 0-based vertex index
+      const idToIdx = new Map();
+      nodes.forEach((n, i) => idToIdx.set(n.id, i));
+
+      const lines = [];
+      lines.push(`name: ${_yamlScalar(SOURCE_NAME || "map")}`);
+      lines.push("lifts: {}");
+      lines.push("levels:");
+      lines.push("  L1:");
+      lines.push("    elevation: 0");
+      lines.push("    flattened_x_offset: 0");
+      lines.push("    flattened_y_offset: 0");
+      lines.push("    layers: {}");
+      lines.push("    floors: []");
+      lines.push("    walls: []");
+      lines.push("    models: []");
+      lines.push("    measurements: []");
+      lines.push("    doors: []");
+
+      // vertices
+      lines.push("    vertices:");
+      for (const n of nodes) {
+        const name = (n.name && String(n.name).trim()) ? String(n.name) : "";
+        const params = _vertexParamsFor(n);
+        const x = Number(n.x), y = Number(n.y);
+        lines.push(`      - [${_yamlScalar(x)}, ${_yamlScalar(y)}, 0, ${_yamlQuoteString(name)}, ${_yamlParamsBlock(params)}]`);
+      }
+
+      // lanes: bidir 엣지는 단일 lane (bidirectional: true) 로 export.
+      // 양방향 임포터가 src/dst 를 어느 쪽으로 둬도 무방하므로 입력 순서 그대로 둠.
+      lines.push("    lanes:");
+      for (const e of edges) {
+        const a = idToIdx.get(e.src), b = idToIdx.get(e.dst);
+        if (a === undefined || b === undefined) continue;  // 끊긴 엣지 스킵
+        const params = _laneParamsFor(e);
+        lines.push(`      - [${a}, ${b}, ${_yamlParamsBlock(params)}]`);
+      }
+
+      return lines.join("\n") + "\n";
+    }
+
+    function downloadYaml() {
+      const yaml = buildRmfYaml();
+      const blob = new Blob([yaml], {type: "application/x-yaml"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${SOURCE_NAME || "map"}.building.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${nodes.length} vertices, ${edges.length} lanes → building.yaml`);
     }
 
     // ── Toast 알림 ──────────────────────────────────────────────
