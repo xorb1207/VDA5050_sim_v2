@@ -3096,8 +3096,8 @@
       nodes.forEach((n, i) => idToIdx.set(n.id, i));
 
       const lines = [];
-      lines.push(`name: ${_yamlQuoteString(SOURCE_NAME || "map")}`);
-      lines.push("lifts: {}");
+      lines.push(`building_name: ${_yamlQuoteString(SOURCE_NAME || "map")}`);
+      lines.push("doors: {}");
       lines.push("levels:");
       lines.push("  L1:");
       lines.push("    elevation: 0");
