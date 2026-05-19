@@ -575,6 +575,9 @@ class RealRunner:
             )
         unmatched_demand_count = auto_unmatched + len(self._pending_manual_demands)
 
+        # 데드락 감지 payload (매 tick 갱신됨).
+        deadlock_payload = getattr(self._engine, "last_deadlock_payload", {}) or {}
+
         await self.broadcast({
             "type": "tick",
             "snapshot": snapshot,
@@ -582,6 +585,10 @@ class RealRunner:
             "kpi": kpi,
             "edge_density": edge_density,
             "unmatched_demand_count": unmatched_demand_count,
+            "deadlock_detected": deadlock_payload.get("deadlock_detected", False),
+            "deadlock_groups": deadlock_payload.get("deadlock_groups", []),
+            "deadlock_count_total": deadlock_payload.get("deadlock_count_total", 0),
+            "deadlock_alert": deadlock_payload.get("deadlock_alert", False),
         })
 
     def _compute_by_fleet_kpi(self, rec_events: list) -> dict:

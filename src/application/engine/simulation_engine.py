@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import Optional, TYPE_CHECKING
 
+from src.application.deadlock_detector import DeadlockDetector
+
 if TYPE_CHECKING:
     from src.domain.agv.agv import AGV
     from src.domain.map.graph import MapGraph
@@ -11,7 +13,8 @@ if TYPE_CHECKING:
     from src.domain.policy.traffic_policy import TrafficPolicy
     from src.analytics.playback_trace import PlaybackTraceRecorder
 
-# Deadlock 감지 주기 (초)
+# Deadlock 감지 주기 (초) — scheduler 기반 reservation cycle 의 fallback 검사용.
+# DeadlockDetector (위치 기반) 은 매 tick 동작.
 DEADLOCK_CHECK_INTERVAL_S: float = 5.0
 
 
@@ -42,6 +45,16 @@ class SimulationEngine:
 
         self._deadlock_count:    int   = 0
         self._next_deadlock_check: float = DEADLOCK_CHECK_INTERVAL_S
+
+        # 위치 기반 데드락 감지기. 매 tick 동작. tick payload 채움.
+        self.deadlock_detector: DeadlockDetector = DeadlockDetector()
+        self.last_deadlock_payload: dict = {
+            "deadlock_detected": False,
+            "deadlock_groups": [],
+            "deadlock_count_total": 0,
+            "deadlock_alert": False,
+            "deadlock_resolutions": [],
+        }
 
         if policy and policy.lane_mode == "one_way":
             self._apply_one_way(graph)
@@ -88,6 +101,20 @@ class SimulationEngine:
         if self.task_generator:
             coros.append(self.task_generator.step(self.sim_time, self.agvs))
         await asyncio.gather(*coros)
+
+        # 위치 기반 데드락 감지 (매 tick) — payload 는 runner 가 broadcast 에 끼움.
+        payload = await self.deadlock_detector.step(
+            self.agvs, self.scheduler, self.sim_time
+        )
+        self.last_deadlock_payload = payload
+        if payload["deadlock_detected"] and self.trace_recorder is not None:
+            for group in payload["deadlock_groups"]:
+                self.trace_recorder.record_event(
+                    "deadlock_detected",
+                    self.sim_time,
+                    cycle=group,
+                )
+
         if self.trace_recorder is not None:
             self.trace_recorder.sample(self.sim_time, self.agvs, self.scheduler)
 
@@ -118,6 +145,11 @@ class SimulationEngine:
         kpis = KPICalculator().compute(self.agvs, self.scheduler, self.sim_time)
         kpis["sim_time_s"]               = round(self.sim_time, 2)
         kpis["avg_wait_per_agv_s"]       = kpis.get("avg_wait_time_s", 0.0)
-        kpis["deadlock_or_stall_count"]  = self._deadlock_count
-        kpis["deadlock_count"]           = self._deadlock_count
+        # reservation cycle 검사기 + 위치 기반 detector 누적치 합산.
+        # 두 경로는 같은 데드락을 중복 카운트할 수 있으나 운영 알림 관점에서
+        # "감지된 데드락 발생 수" 의 상한이라는 의미로 합산해 노출.
+        detector_total = self.deadlock_detector.total_count
+        kpis["deadlock_or_stall_count"]  = self._deadlock_count + detector_total
+        kpis["deadlock_count"]           = self._deadlock_count + detector_total
+        kpis["deadlock_position_count"]  = detector_total
         return kpis
