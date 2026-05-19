@@ -2096,6 +2096,22 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     .live-dot {{ width:6px; height:6px; border-radius:50%; background:var(--danger);
       animation:pulse 1.2s infinite; }}
     @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:0.3}} }}
+    /* 데드락 KPI chip: count>0 일 때 빨강 강조 */
+    .kpi-chip.deadlock-hot {{ background:var(--danger-soft); color:var(--danger);
+      border:1px solid #fdb8b4; }}
+    .kpi-chip.deadlock-hot strong {{ color:var(--danger); }}
+    /* 화면 상단 alert 배너 — deadlock_alert=true 시 표시 */
+    .deadlock-alert {{ display:none; padding:10px 16px; margin:0 0 12px 0;
+      background:#fff1ef; color:#8a1f1f; border:1px solid #f5a99c;
+      border-left:4px solid var(--danger); border-radius:var(--radius-sm);
+      font-size:13px; font-weight:600; align-items:center; gap:10px;
+      box-shadow:var(--shadow-sm); animation:dl-pulse 1.4s infinite; }}
+    .deadlock-alert.active {{ display:flex; }}
+    .deadlock-alert .dl-icon {{ font-size:18px; }}
+    .deadlock-alert .dl-detail {{ font-weight:400; font-size:12px; color:#5d2222;
+      font-family:var(--font-mono); }}
+    @keyframes dl-pulse {{ 0%,100%{{box-shadow:0 0 0 0 rgba(192,57,43,0.0)}}
+      50%{{box-shadow:0 0 0 6px rgba(192,57,43,0.15)}} }}
     .lower-layout {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; }}
     .main-layout {{ display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:16px; align-items:start; }}
     .side-stack {{ display:flex; flex-direction:column; gap:16px; position:sticky;
@@ -2181,9 +2197,16 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           <span class="kpi-chip">가동률 <strong id="live-kpi-util">—</strong></span>
           <span class="kpi-chip">정면충돌 <strong id="live-kpi-headon">—</strong></span>
           <span class="kpi-chip">평균대기 <strong id="live-kpi-wait">—</strong></span>
+          <span class="kpi-chip" id="live-kpi-deadlock-chip">데드락 <strong id="live-kpi-deadlock">0</strong></span>
           <span class="kpi-chip">스냅샷 <strong id="snapshot-count">—</strong></span>
           <span class="kpi-chip">이벤트 <strong id="event-count">—</strong></span>
         </div>
+      </div>
+      <!-- 데드락 alert 배너: backup/reroute 모두 실패한 진성 데드락 발생 시 표시 -->
+      <div class="deadlock-alert" id="deadlock-alert">
+        <span class="dl-icon">⛔</span>
+        <span>데드락 발생 — operator 개입 필요</span>
+        <span class="dl-detail" id="deadlock-alert-detail"></span>
       </div>
       <!-- F1a: fleet 별 KPI 카드 (multi-fleet 일 때만 표시) -->
       <div id="fleet-kpi-row" class="kpi-strip" style="display:none; gap:8px; padding-top:4px; border-top:1px dashed var(--border);"></div>
@@ -2477,6 +2500,53 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       updateFleetKpiCards(kpi.by_fleet || null);
     }}
 
+    // ── 데드락 표시 ─────────────────────────────────────────────
+    // 매 tick payload 의 deadlock_* 필드 → KPI chip + 알림 배너 + AGV 사이클 강조.
+    let _lastDeadlockCycleKey = '';  // 같은 사이클 반복 강조 방지
+    function updateDeadlock(msg) {{
+      const total = msg.deadlock_count_total || 0;
+      const detected = !!msg.deadlock_detected;
+      const alert = !!msg.deadlock_alert;
+      const groups = Array.isArray(msg.deadlock_groups) ? msg.deadlock_groups : [];
+
+      // KPI chip: 누적 카운트 + count>0 일 때 빨강 강조
+      const chip = document.getElementById('live-kpi-deadlock-chip');
+      const num = document.getElementById('live-kpi-deadlock');
+      if (num) num.textContent = String(total);
+      if (chip) chip.classList.toggle('deadlock-hot', total > 0);
+
+      // 사이클 멤버 강조 — 새 사이클이 감지된 tick 에만.
+      const cycleKey = groups.map(g => g.slice().sort().join(',')).sort().join('|');
+      if (detected && groups.length && cycleKey !== _lastDeadlockCycleKey) {{
+        _lastDeadlockCycleKey = cycleKey;
+        const cycle = groups[0];
+        // 사이클 첫 멤버를 anchor 로 highlight + chain 에 전체 멤버
+        setHighlight('', cycle[0], {{ chain: cycle, cycle: true }});
+        // 합성 이벤트로 이벤트 패널 / 사고 카운터 에 노출
+        const synth = {{
+          t: (snapshots.length && snapshots[snapshots.length-1].t) || 0,
+          kind: 'deadlock_resolved',
+          agv_id: cycle[0],
+          cycle: cycle,
+          deadlock_total: total,
+        }};
+        events.push(synth);
+        _eventMarkersBuiltKey = '';
+      }} else if (!detected) {{
+        _lastDeadlockCycleKey = '';
+      }}
+
+      // alert 배너 — backup/reroute 모두 실패 시 빨강 깜빡임
+      const banner = document.getElementById('deadlock-alert');
+      const detail = document.getElementById('deadlock-alert-detail');
+      if (banner) banner.classList.toggle('active', alert);
+      if (detail && alert && groups.length) {{
+        detail.textContent = `cycle=[${{groups[0].join(', ')}}]`;
+      }} else if (detail && !alert) {{
+        detail.textContent = '';
+      }}
+    }}
+
     // ── F1a: fleet 색/카드 상태 ────────────────────────────────
     let currentFleets = []; // [{{id, color, graph_idx, count, agv_ids}}]
     let fleetById = new Map();
@@ -2666,6 +2736,8 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
           _eventMarkersBuiltKey = '';
         }}
         if (msg.kpi) updateLiveKpi(msg.kpi);
+        // 데드락 필드: KPI chip + 사이클 강조 + alert 배너
+        updateDeadlock(msg);
         // AGV 목록이 생기면 드롭다운 채우기
         if (snap.agvs && snap.agvs.length && agvIds.length === 0) {{
           agvIds = snap.agvs.map(a => a.agv_id).sort();
@@ -2727,6 +2799,14 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       document.getElementById('live-kpi-util').textContent = '—';
       document.getElementById('live-kpi-headon').textContent = '—';
       document.getElementById('live-kpi-wait').textContent = '—';
+      // 데드락 KPI / alert 초기화
+      const dlNum = document.getElementById('live-kpi-deadlock');
+      if (dlNum) dlNum.textContent = '0';
+      const dlChip = document.getElementById('live-kpi-deadlock-chip');
+      if (dlChip) dlChip.classList.remove('deadlock-hot');
+      const dlBanner = document.getElementById('deadlock-alert');
+      if (dlBanner) dlBanner.classList.remove('active');
+      _lastDeadlockCycleKey = '';
       // F1a: fleet 카드/legend 도 초기화 (단일 default 로 돌림)
       setCurrentFleets([]);
       populateAgvFocusOptions();
