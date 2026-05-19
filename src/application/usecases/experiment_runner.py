@@ -276,6 +276,7 @@ async def _run_single(
             bus,
             task_interval_s=task_interval_s,
             demand_set=demand_set,
+            scheduler=sched,
         )
         trace_recorder = (
             PlaybackTraceRecorder(graph, sample_interval_s=playback_sample_interval_s)

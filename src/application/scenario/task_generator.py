@@ -39,6 +39,9 @@ class TaskGenerationDiagnostics:
     no_path_pickup_to_dropoff: int = 0
     # F1a: required_capability 매칭 AGV 가 없어서 보류된 demand 누적
     unmatched_demand_count: int = 0
+    # PR-D: dropoff / pickup station 이 다른 AGV 에게 점유/예약 중이라 보류된 횟수.
+    # Open-RMF 식 station capacity 거부 흐름. station 중복 점유의 1차 방어.
+    station_capacity_reject: int = 0
     path_failures: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -57,6 +60,7 @@ class TaskGenerationDiagnostics:
             "no_path_to_pickup": self.no_path_to_pickup,
             "no_path_pickup_to_dropoff": self.no_path_pickup_to_dropoff,
             "unmatched_demand_count": self.unmatched_demand_count,
+            "station_capacity_reject": self.station_capacity_reject,
             "path_failures": dict(sorted(self.path_failures.items())),
         }
 
@@ -77,14 +81,20 @@ class TaskGenerator:
         task_interval_s: float = 30.0,
         demand_set: DemandSet | None = None,
         mode: str = "auto",
+        scheduler=None,
     ) -> None:
         # mode:
         #   "auto"   — demand_set이 있으면 demand_set, 없으면 랜덤 (기존 동작).
         #   "manual" — 자동 발행 비활성. JobDispatcher.dispatch()로만 작업 주입.
+        # scheduler:
+        #   TimeWindowScheduler. PR-D: dispatch 전 station capacity (다른 AGV
+        #   reservation 검사) 거부에 사용. 기존 호출 호환 위해 optional —
+        #   None 이면 capacity 검사 skip (기존 동작).
         if mode not in ("auto", "manual"):
             raise ValueError(f"unknown TaskGenerator mode: {mode}")
         self._graph = graph
         self._bus = bus
+        self._scheduler = scheduler
         self._interval = task_interval_s
         self._next_task_time: float = 0.0
         self._task_counter: int = 0
@@ -236,7 +246,20 @@ class TaskGenerator:
             self._next_task_time = sim_time + self._interval
             return
 
-        pickup, dropoff = random.choice(candidate_pairs)
+        # PR-D: station capacity 사전 필터 — pickup / dropoff 가 다른 AGV 에게
+        # 활성 reservation 잡혀 있으면 (= 그 station 에서 작업 중 또는 가고
+        # 있음) 후보에서 제외. random.choice 전에 거름으로써 거부률 ↓.
+        # 모든 후보가 막혀 있으면만 station_capacity_reject 로 보류.
+        capacity_filtered = [
+            (p, d) for (p, d) in candidate_pairs
+            if not self._is_node_capacity_blocked(p, agv.agv_id)
+            and not self._is_node_capacity_blocked(d, agv.agv_id)
+        ]
+        if not capacity_filtered:
+            self._diagnostics.station_capacity_reject += 1
+            self._next_task_time = sim_time + self._interval
+            return
+        pickup, dropoff = random.choice(capacity_filtered)
 
         # 현재 위치 → pickup → dropoff 전체 경로
         full_path = self._graph.get_path(agv.current_node_id, pickup)
@@ -370,6 +393,12 @@ class TaskGenerator:
                 self._graph.get_path(a.current_node_id, demand.pickup_node_id, fleet=a.fleet)
             ),
         )
+        # PR-D: station capacity 사전 거부 — pickup/dropoff 가 다른 AGV 에게
+        # active reservation 잡혀 있으면 보류 (backlog 로 다음 tick 재시도).
+        if self._is_node_capacity_blocked(demand.pickup_node_id, agv.agv_id) \
+                or self._is_node_capacity_blocked(demand.dropoff_node_id, agv.agv_id):
+            self._diagnostics.station_capacity_reject += 1
+            return False
         path_to_pickup = self._graph.get_path(
             agv.current_node_id, demand.pickup_node_id, fleet=agv.fleet
         )
@@ -413,6 +442,19 @@ class TaskGenerator:
         self._diagnostics.path_failures[key] = (
             self._diagnostics.path_failures.get(key, 0) + 1
         )
+
+    def _is_node_capacity_blocked(self, node_id: str, requester_agv_id: str) -> bool:
+        """PR-D: station capacity 거부 검사.
+
+        다른 AGV 가 해당 node 에 active reservation 을 들고 있으면 True.
+        scheduler 가 없으면 (legacy 호출) False (기존 동작 유지).
+        """
+        if self._scheduler is None:
+            return False
+        for r in self._scheduler._reservations.get(node_id, []):
+            if not r.released and r.agv_id != requester_agv_id:
+                return True
+        return False
 
     def _build_order(
         self,
