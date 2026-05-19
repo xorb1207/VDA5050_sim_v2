@@ -167,7 +167,7 @@
     }
     return function colorOf(agv) {
       const fl = (agv.fleet_id && byId.get(agv.fleet_id)) || byAgv.get(agv.agv_id || agv.id);
-      return (fl && fl.color) ? fl.color : "#3a4555";
+      return (fl && fl.color) ? fl.color : "#2563eb";
     };
   }
 

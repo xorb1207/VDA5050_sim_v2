@@ -736,6 +736,8 @@ def build_playback_html(trace: dict) -> str:
     }
     .meta { color: var(--muted); font-size: 11.5px; }
     .agv-label { font-size: 10px; fill: var(--ink); font-weight: 600; paint-order: stroke; stroke: rgba(255,255,255,0.85); stroke-width: 2px; }
+    .node-label { font-size: 7px; fill: #475569; font-weight: 500; paint-order: stroke;
+      stroke: rgba(255,255,255,0.9); stroke-width: 1.5px; pointer-events: none; }
     .section-title {
       display: flex;
       justify-content: space-between;
@@ -868,7 +870,7 @@ def build_playback_html(trace: dict) -> str:
             <span class="legend-item"><span class="swatch" style="background:#1f6feb"></span>충전(CH)</span>
             <span class="legend-item"><span class="swatch" style="background:#e0a000"></span>사이딩(SD)</span>
             <span class="legend-item"><span class="swatch swatch-ring"></span>홀딩(HP)</span>
-            <span class="legend-item"><span class="swatch" style="background:#3a4555"></span>AGV</span>
+            <span class="legend-item"><span class="swatch" style="background:#2563eb"></span>AGV</span>
           </div>
         </div>
         <div class="map-shell">
@@ -1229,16 +1231,18 @@ def build_playback_html(trace: dict) -> str:
     }
     function agvShapeMarkup(cx, cy, color, anchored, faded) {
       const opacity = faded ? 0.18 : 1.0;
+      // 어두운 outline (faded 는 흐리게) — 회색 배경 위에서도 AGV 윤곽 항상 보임.
+      const stroke = faded ? 0.4 : 0.9;
       if (anchored) {
         // 마커 크기 축소: r 8→5 (faded 6→4) — 시각 사이즈가 실 robot에 가까워지도록
-        return `<circle cx="${cx}" cy="${cy}" r="${faded ? 4 : 5}" fill="${color}" opacity="${opacity}" />`;
+        return `<circle cx="${cx}" cy="${cy}" r="${faded ? 4 : 5}" fill="${color}" stroke="#0f172a" stroke-width="${stroke}" vector-effect="non-scaling-stroke" opacity="${opacity}" />`;
       }
       return '';
     }
     // ── AGV 상태별 색상 매핑 ────────────────────────────────────
     // 우선순위: ERROR > CHARGING > 작업중(demand) > WAITING > NAVIGATING(빈손) > IDLE
     function lightenHex(hex, amount) {
-      let h = (hex || '#3a4555').replace('#', '');
+      let h = (hex || '#2563eb').replace('#', '');
       if (h.length === 3) h = h.split('').map(c => c + c).join('');
       if (h.length !== 6) return hex;
       const r = parseInt(h.slice(0, 2), 16);
@@ -1270,7 +1274,7 @@ def build_playback_html(trace: dict) -> str:
       return '#' + [nr, ng, nb].map(c => c.toString(16).padStart(2, '0')).join('');
     }
     function agvDisplayColor(agv, baseColor) {
-      const base = baseColor || '#3a4555';
+      const base = baseColor || '#2563eb';
       const state = (agv && agv.state) || '';
       if (state === 'ERROR') return '#e74c3c';
       if (state === 'CHARGING') return '#9b59b6';
@@ -1300,7 +1304,9 @@ def build_playback_html(trace: dict) -> str:
         rotatePoint(-1, 0),
         rotatePoint(-8, 9),
       ].join(' ');
-      return `<polygon points="${points}" fill="${color}" opacity="${opacity}" />`;
+      // 어두운 outline (faded 는 흐리게)
+      const stroke = faded ? 0.4 : 0.9;
+      return `<polygon points="${points}" fill="${color}" stroke="#0f172a" stroke-width="${stroke}" stroke-linejoin="round" vector-effect="non-scaling-stroke" opacity="${opacity}" />`;
     }
     function renderMap() {
       const svg = document.getElementById('map');
@@ -1424,13 +1430,18 @@ def build_playback_html(trace: dict) -> str:
               const radius = isAccess ? 2.5 : 3;
               inner = `<circle r="${radius}" fill="#8b98a8" opacity="0.7" />`;
             }
-            return `<g transform="translate(${cx} ${cy}) scale(${labelScale})">${inner}</g>`;
+            // 노드 ID 라벨 — zoom 임계 이상에서만. live HTML 과 동일 규칙.
+            const labelMinZoom = isAccess ? 3.0 : 2.0;
+            const labelHtml = (zoomScale >= labelMinZoom)
+              ? `<text class="node-label" y="-9" text-anchor="middle">${id}</text>`
+              : '';
+            return `<g transform="translate(${cx} ${cy}) scale(${labelScale})">${inner}${labelHtml}</g>`;
           }).join('')}
           ${fadedDisplay.map(item => {
             const agv = item.agv;
             const cx = sx(agv.x) + item.ox;
             const cy = sy(agv.y) + item.oy;
-            const fadedColor = agvDisplayColor(agv, '#3a4555');
+            const fadedColor = agvDisplayColor(agv, '#2563eb');
             const inner = item.anchored
               ? agvShapeMarkup(0, 0, fadedColor, true, true)
               : agvArrowMarkup(0, 0, fadedColor, agv.heading, true);
@@ -1445,7 +1456,7 @@ def build_playback_html(trace: dict) -> str:
             const labelText = item.bucketCount > 1
               ? agvCaption(agv, true)
               : agvCaption(agv, false);
-            const visColor = agvDisplayColor(agv, '#3a4555');
+            const visColor = agvDisplayColor(agv, '#2563eb');
             const inner = item.anchored
               ? agvShapeMarkup(0, 0, visColor, true, false)
               : agvArrowMarkup(0, 0, visColor, agv.heading, false);
@@ -2151,6 +2162,9 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     .meta {{ color:var(--muted); font-size:11.5px; }}
     .agv-label {{ font-size:10px; fill:var(--ink); font-weight:600; paint-order:stroke;
       stroke:rgba(255,255,255,0.85); stroke-width:2px; }}
+    /* 노드 ID 텍스트 — 줌 일정 이상일 때만 보이도록 render 에서 conditional 출력 */
+    .node-label {{ font-size:7px; fill:#475569; font-weight:500; paint-order:stroke;
+      stroke:rgba(255,255,255,0.9); stroke-width:1.5px; pointer-events:none; }}
     .section-title {{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px; }}
     .section-title h2 {{ font-size:13px; font-weight:700; letter-spacing:-0.005em; }}
     .map-topline {{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; }}
@@ -2543,7 +2557,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
         if (fl && fl.color) return fl.color;
       }}
       const fl = fleetByAgvId.get(agv.agv_id);
-      return (fl && fl.color) ? fl.color : '#3a4555';
+      return (fl && fl.color) ? fl.color : '#2563eb';
     }}
     window.__fleetColorOfAgv = fleetColorOfAgv;  // renderMap 에서 사용
     // F1a: imported map 의 fleets 로 슬라이더 빌드
@@ -2560,7 +2574,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       agvGroup.style.display = 'none';
       sliderGroup.style.display = 'inline-flex';
       sliderGroup.innerHTML = fleets.map((fl, idx) => {{
-        const color = fl.color || '#3a4555';
+        const color = fl.color || '#2563eb';
         const def = Math.max(1, Number(fl.count || 1));
         return `
           <span class="param-group" data-fleet-slider="${{fl.id}}" style="gap:6px;">
@@ -2887,21 +2901,24 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
     }}
     function agvShapeMarkup(cx,cy,color,anchored,faded) {{
       const opacity = faded ? 0.18 : 1.0;
-      if (anchored) return `<circle cx="${{cx}}" cy="${{cy}}" r="${{faded?4:5}}" fill="${{color}}" opacity="${{opacity}}" />`;
+      // 어두운 outline (faded 는 흐리게) — 회색 배경 위에서도 AGV 윤곽 항상 보임.
+      const stroke = faded ? 0.4 : 0.9;
+      if (anchored) return `<circle cx="${{cx}}" cy="${{cy}}" r="${{faded?4:5}}" fill="${{color}}" stroke="#0f172a" stroke-width="${{stroke}}" vector-effect="non-scaling-stroke" opacity="${{opacity}}" />`;
       return '';
     }}
     function agvArrowMarkup(cx,cy,color,heading,faded) {{
       const opacity = faded ? 0.18 : 1.0;
       const scale = faded ? 0.5 : 0.65;
+      const stroke = faded ? 0.4 : 0.9;
       const cos = Math.cos(heading||0), sin = Math.sin(heading||0);
       const rp = (px,py) => `${{cx+(px*cos-py*sin)*scale}},${{cy-(px*sin+py*cos)*scale}}`;
       const points = [rp(14,0),rp(-8,-9),rp(-1,0),rp(-8,9)].join(' ');
-      return `<polygon points="${{points}}" fill="${{color}}" opacity="${{opacity}}" />`;
+      return `<polygon points="${{points}}" fill="${{color}}" stroke="#0f172a" stroke-width="${{stroke}}" stroke-linejoin="round" vector-effect="non-scaling-stroke" opacity="${{opacity}}" />`;
     }}
     // ── AGV 상태별 색상 매핑 ────────────────────────────────────
     // 우선순위: ERROR > CHARGING > 작업중(demand) > WAITING > NAVIGATING(빈손) > IDLE
     function lightenHex(hex, amount) {{
-      let h = (hex || '#3a4555').replace('#', '');
+      let h = (hex || '#2563eb').replace('#', '');
       if (h.length === 3) h = h.split('').map(c => c + c).join('');
       if (h.length !== 6) return hex;
       const r = parseInt(h.slice(0, 2), 16);
@@ -2933,7 +2950,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
       return '#' + [nr, ng, nb].map(c => c.toString(16).padStart(2, '0')).join('');
     }}
     function agvDisplayColor(agv, baseColor) {{
-      const base = baseColor || '#3a4555';
+      const base = baseColor || '#2563eb';
       const state = (agv && agv.state) || '';
       if (state === 'ERROR') return '#e74c3c';
       if (state === 'CHARGING') return '#9b59b6';
@@ -3089,11 +3106,18 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
               : '';
             // 노드 클릭용 hit 영역 — 평소엔 투명, 수동 모드에선 hover 가능
             const hit = `<circle r="10" class="node-hit" data-node-id="${{id}}" />`;
-            return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{pickupRing}}${{inner}}${{hit}}</g>`;
+            // 노드 ID 라벨 — zoomScale 임계 이상일 때만 그림 (성능/가독성).
+            //   main 노드 (ST/HP/CH/WP/BAY/SD): zoom>=2.0
+            //   access 노드 (SA/CA/HA): zoom>=3.0 (개수 많아서 더 보수적)
+            const labelMinZoom = isAccess ? 3.0 : 2.0;
+            const labelHtml = (zoomScale >= labelMinZoom)
+              ? `<text class="node-label" y="-9" text-anchor="middle">${{id}}</text>`
+              : '';
+            return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{pickupRing}}${{inner}}${{hit}}${{labelHtml}}</g>`;
           }}).join('')}}
           ${{fadedDisplay.map(item=>{{
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
-            const baseColor = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const baseColor = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#2563eb');
             const color = agvDisplayColor(agv, baseColor);
             const inner=item.anchored?agvShapeMarkup(0,0,color,true,true):agvArrowMarkup(0,0,color,agv.heading,true);
             return `<g transform="translate(${{cx}} ${{cy}}) scale(${{labelScale}})">${{inner}}</g>`;
@@ -3102,7 +3126,7 @@ def build_live_html(default_params: dict | None = None) -> str:  # noqa: E501
             const agv=item.agv, cx=sx(agv.x)+item.ox, cy=sy(agv.y)+item.oy;
             const labelX=cx+item.labelOx, labelY=cy+item.labelOy;
             const labelText=item.bucketCount>1?agvCaption(agv,true):agvCaption(agv,false);
-            const baseColor = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#3a4555');
+            const baseColor = (window.__fleetColorOfAgv ? window.__fleetColorOfAgv(agv) : '#2563eb');
             const color = agvDisplayColor(agv, baseColor);
             const inner=item.anchored?agvShapeMarkup(0,0,color,true,false):agvArrowMarkup(0,0,color,agv.heading,false);
             return `
