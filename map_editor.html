@@ -3049,71 +3049,54 @@
       URL.revokeObjectURL(url);
     }
 
-    // ── OpenRMF building.yaml export ──────────────────────────────
-    // 포맷: vertices = [x, y, 0, name, {typed_params}]
-    //       lanes    = [from_idx, to_idx, {typed_params}]
-    // typed_params: {key: [type_code, value]} — 1=string, 2=int, 3=float, 4=bool
-    const RMF_TYPE_STRING = 1, RMF_TYPE_INT = 2, RMF_TYPE_FLOAT = 3, RMF_TYPE_BOOL = 4;
+    // ── VDA5050-style building.yaml export ────────────────────────
+    //   vertices: [x, y, {name, allowedDeviationXY, type, is_parking_spot?}]
+    //     type: "NONE" 기본 / "CHGE" 충전기. is_parking_spot 은 station·work 역할일 때 true.
+    //   lanes:    [from_idx, to_idx, {orientation, speed_limit, rotationallowed, corridor}]
+    //     bidir 엣지는 from→to + to→from 두 lane 으로 분해.
+    //     orientation 은 두 노드 사이 atan2(dy, dx) 라디안. 역방향은 +π 후 (-π, π] 정규화.
+    //     corridor 는 모든 lane 에서 동일 값 (leftWidth=0.7, rightWidth=0.7, corridorRefpoint=CONTOUR).
+    const LANE_DEFAULT_SPEED = 1.5;       // edge.v_max 가 비어 있을 때 채울 기본 속도
+    const VERTEX_DEFAULT_RADIUS = 0.3;    // allowedDeviationXY 디폴트
+    const CORRIDOR_INLINE = "{leftWidth: 0.7, rightWidth: 0.7, corridorRefpoint: CONTOUR}";
 
     function _yamlQuoteString(s) {
-      // OpenRMF 빌더가 읽는 안전한 더블쿼트 문자열. 백슬래시/쿼트만 이스케이프.
       const escaped = String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       return `"${escaped}"`;
     }
 
-    function _yamlScalar(v) {
+    // raw scalar marker: { __raw: "..." } 는 따옴표 없이 그대로 출력 (enum 식별자 등)
+    function _yamlInlineValue(v) {
       if (v === true) return "true";
       if (v === false) return "false";
+      if (v === null || v === undefined) return '""';
       if (typeof v === "number") {
         if (!isFinite(v)) return "0";
-        // 정수면 정수로, 아니면 소수 — 너무 긴 부동소수점 자릿수 컷
         return Number.isInteger(v) ? String(v) : String(parseFloat(v.toFixed(6)));
       }
-      return _yamlQuoteString(v == null ? "" : v);
+      if (typeof v === "object" && typeof v.__raw === "string") return v.__raw;
+      return _yamlQuoteString(v);
     }
 
-    function _yamlTypedParam(typeCode, value) {
-      // [type_code, value] 쌍 — OpenRMF inline 리스트 형식
-      return `[${typeCode}, ${_yamlScalar(value)}]`;
-    }
-
-    function _yamlParamsBlock(params) {
-      // params = {key: [type_code, value], ...} → "{k1: [t, v], k2: [t, v]}"
-      const entries = Object.keys(params).map(k => `${k}: ${_yamlTypedParam(params[k][0], params[k][1])}`);
+    function _yamlInlineMap(obj) {
+      const entries = Object.keys(obj).map(k => `${k}: ${_yamlInlineValue(obj[k])}`);
       return `{${entries.join(", ")}}`;
     }
 
-    function _vertexParamsFor(node) {
-      const params = {};
-      if (node.is_charger) params.is_charger = [RMF_TYPE_BOOL, true];
-      if (node.is_holding) params.is_parking_spot = [RMF_TYPE_BOOL, true];
-      // station/work 역할은 holdable 의미로 별도 키 — RMF builder 가 무시해도 안전
-      if (node.role === "station" || node.role === "work") {
-        params.is_holding_point = [RMF_TYPE_BOOL, true];
-      }
-      return params;
-    }
-
-    function _laneParamsFor(edge) {
-      const params = {};
-      params.bidirectional = [RMF_TYPE_BOOL, !!edge.bidir];
-      params.graph_idx = [RMF_TYPE_INT, (edge.graph_idx == null) ? 0 : edge.graph_idx];
-      params.orientation = [RMF_TYPE_STRING, ""];
-      params.demo_mock_floor_name = [RMF_TYPE_STRING, ""];
-      params.demo_mock_lift_name = [RMF_TYPE_STRING, ""];
-      if (edge.v_max !== null && edge.v_max !== undefined) {
-        params.speed_limit = [RMF_TYPE_FLOAT, Number(edge.v_max)];
-      }
-      return params;
+    function _normalizeAngle(rad) {
+      // (-π, π] 로 정규화
+      let a = rad;
+      while (a > Math.PI) a -= 2 * Math.PI;
+      while (a <= -Math.PI) a += 2 * Math.PI;
+      return a;
     }
 
     function buildRmfYaml() {
-      // 노드 인덱스 매핑: nodes 배열 순서 = 0-based vertex index
       const idToIdx = new Map();
       nodes.forEach((n, i) => idToIdx.set(n.id, i));
 
       const lines = [];
-      lines.push(`name: ${_yamlScalar(SOURCE_NAME || "map")}`);
+      lines.push(`name: ${_yamlQuoteString(SOURCE_NAME || "map")}`);
       lines.push("lifts: {}");
       lines.push("levels:");
       lines.push("  L1:");
@@ -3131,26 +3114,54 @@
       lines.push("    vertices:");
       for (const n of nodes) {
         const name = (n.name && String(n.name).trim()) ? String(n.name) : "";
-        const params = _vertexParamsFor(n);
-        const x = Number(n.x), y = Number(n.y);
-        lines.push(`      - [${_yamlScalar(x)}, ${_yamlScalar(y)}, 0, ${_yamlQuoteString(name)}, ${_yamlParamsBlock(params)}]`);
+        const isCharger = !!n.is_charger;
+        const isStation = (n.role === "station" || n.role === "work");
+        const params = {};
+        params.name = name;
+        params.allowedDeviationXY = VERTEX_DEFAULT_RADIUS;
+        params.type = { __raw: isCharger ? "CHGE" : "NONE" };
+        if (isStation) params.is_parking_spot = true;
+        lines.push(`      - [${_yamlInlineValue(Number(n.x))}, ${_yamlInlineValue(Number(n.y))}, ${_yamlInlineMap(params)}]`);
       }
 
-      // lanes: bidir 엣지는 단일 lane (bidirectional: true) 로 export.
-      // 양방향 임포터가 src/dst 를 어느 쪽으로 둬도 무방하므로 입력 순서 그대로 둠.
+      // lanes — bidir 엣지는 2개 lane 으로 분해
       lines.push("    lanes:");
+      let laneCount = 0;
       for (const e of edges) {
         const a = idToIdx.get(e.src), b = idToIdx.get(e.dst);
-        if (a === undefined || b === undefined) continue;  // 끊긴 엣지 스킵
-        const params = _laneParamsFor(e);
-        lines.push(`      - [${a}, ${b}, ${_yamlParamsBlock(params)}]`);
+        if (a === undefined || b === undefined) continue;
+        const aN = nodes[a], bN = nodes[b];
+        const dx = Number(bN.x) - Number(aN.x);
+        const dy = Number(bN.y) - Number(aN.y);
+        const angleFwd = _normalizeAngle(Math.atan2(dy, dx));
+        const vmax = (e.v_max !== null && e.v_max !== undefined) ? Number(e.v_max) : LANE_DEFAULT_SPEED;
+
+        const fwdParams = {
+          orientation: angleFwd,
+          speed_limit: vmax,
+          rotationallowed: false,
+          corridor: { __raw: CORRIDOR_INLINE },
+        };
+        lines.push(`      - [${a}, ${b}, ${_yamlInlineMap(fwdParams)}]`);
+        laneCount++;
+
+        if (e.bidir) {
+          const revParams = {
+            orientation: _normalizeAngle(angleFwd + Math.PI),
+            speed_limit: vmax,
+            rotationallowed: false,
+            corridor: { __raw: CORRIDOR_INLINE },
+          };
+          lines.push(`      - [${b}, ${a}, ${_yamlInlineMap(revParams)}]`);
+          laneCount++;
+        }
       }
 
-      return lines.join("\n") + "\n";
+      return { yaml: lines.join("\n") + "\n", vertexCount: nodes.length, laneCount };
     }
 
     function downloadYaml() {
-      const yaml = buildRmfYaml();
+      const { yaml, vertexCount, laneCount } = buildRmfYaml();
       const blob = new Blob([yaml], {type: "application/x-yaml"});
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -3158,7 +3169,7 @@
       a.download = `${SOURCE_NAME || "map"}.building.yaml`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast(`Exported ${nodes.length} vertices, ${edges.length} lanes → building.yaml`);
+      showToast(`Exported ${vertexCount} vertices, ${laneCount} lanes → building.yaml`);
     }
 
     // ── Toast 알림 ──────────────────────────────────────────────
