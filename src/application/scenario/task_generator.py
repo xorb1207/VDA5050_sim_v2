@@ -257,11 +257,20 @@ class TaskGenerator:
 
         self._task_counter += 1
         self._diagnostics.orders_published += 1
+        task_id = f"task_{self._task_counter:04d}"
+        # demand_id / pickup_node_id / dropoff_node_id 를 같이 보내야 AGV 가
+        # _is_current_demand_dropoff_complete() 를 평가해 demand_completed 이벤트를
+        # 발행하고 _clear_demand_context() 가 호출된다. 빠뜨리면 AGV 가 평생 "현재
+        # 주문 없음" 상태로 표시되고, 마지막에 traffic 정체로 막히면 WAITING_RESERVATION
+        # 으로 영구 stuck 된다 (path 는 살아있지만 demand 없음). T-71 회귀 픽스.
         order_payload = self._build_order(
-            task_id=f"task_{self._task_counter:04d}",
+            task_id=task_id,
             agv_id=agv.agv_id,
             node_ids=full_path,
             dispatch_time_s=sim_time,
+            demand_id=task_id,
+            pickup_node_id=pickup,
+            dropoff_node_id=dropoff,
         )
 
         await self._bus.publish(
