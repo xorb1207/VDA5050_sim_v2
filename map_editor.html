@@ -304,6 +304,7 @@
         <span class="stat-chip" id="chip-components">component <strong id="stat-components">1</strong></span>
         <span class="spacer"></span>
         <button id="btn-reset-view" title="줌/팬 초기화">⌂ Reset View</button>
+        <button id="btn-export-yaml" title="OpenRMF building.yaml 포맷으로 다운로드">⬇ Export YAML</button>
         <button id="btn-save">💾 Save</button>
         <button id="btn-save-run" class="primary">▶ Save &amp; Run</button>
       </div>
@@ -1818,7 +1819,11 @@
       const _pxClamped = Math.max(HIT_RADIUS_PX_MIN, Math.min(HIT_RADIUS_PX_MAX, _wantPx));
       const hitR = _pxClamped / zoomScale;  // viewBox 단위
 
-      const nodesSvg = nodes.map(n => {
+      // F-yaml: 줌 임계값 이상일 때 노드명/인덱스 라벨 표시
+      const NODE_LABEL_ZOOM_THRESHOLD = 1.5;
+      const showNodeLabels = (zoomScale >= NODE_LABEL_ZOOM_THRESHOLD);
+
+      const nodesSvg = nodes.map((n, idx) => {
         const cx = sx(n.x), cy = sy(n.y);
         const color = roleColor(n.role, n.is_charger, n.is_holding);
         const shape = roleShape(n.role, n.is_charger, n.is_holding, color);
@@ -1827,12 +1832,22 @@
         if (selectedNodeIds.has(n.id)) rings.push(`<circle class="node-selected" r="13" fill="none" />`);
         if (n.id === edgeStartNodeId) rings.push(`<circle class="node-edge-start" r="14" fill="none" />`);
         // outer g: translate only (hit circle = world unit). inner g: labelScale (visual = pixel constant).
+        let labelSvg = "";
+        if (showNodeLabels) {
+          const labelText = (n.name && String(n.name).trim()) ? String(n.name) : String(idx);
+          const safeLabel = labelText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          // 노드 중심에서 아래로 약간 띄움. labelScale 적용된 inner g 안에서 픽셀 단위로 위치.
+          labelSvg = `<text x="0" y="-9" text-anchor="middle" font-family="var(--font-mono)" font-size="10"
+                            fill="#ffffff" stroke="rgba(0,0,0,0.65)" stroke-width="2.5" paint-order="stroke"
+                            style="pointer-events:none; user-select:none">${safeLabel}</text>`;
+        }
         return `<g data-node-id="${n.id}" style="cursor:${stampTool === 'inspect' && mode !== 'build' ? 'default' : 'pointer'}"
                    transform="translate(${cx} ${cy})">
           <circle r="${hitR}" fill="transparent" />
           <g transform="scale(${labelScale})">
             ${rings.join('')}
             ${shape}
+            ${labelSvg}
           </g>
         </g>`;
       }).join("");
@@ -2904,6 +2919,10 @@
         showToast("Saved (file download)");
       }
     }
+    document.getElementById("btn-export-yaml").addEventListener("click", () => {
+      try { downloadYaml(); }
+      catch (err) { showToast(`Export YAML 실패: ${err.message}`); }
+    });
     document.getElementById("btn-save").addEventListener("click", () => { saveEdits(); });
     document.getElementById("btn-save-run").addEventListener("click", async () => {
       await saveEdits({download: false});  // 서버에 적용만 (다운로드 생략)
@@ -3028,6 +3047,127 @@
       a.download = `${SOURCE_NAME}.edit.json`;
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    // ── VDA5050-style building.yaml export (block-style) ──────────
+    //   YAML 항목은 mixed sequence [scalar, scalar, mapping] 형태를 block 으로 풀어 씀.
+    //   lanes 가 vertices 보다 먼저 나옴 (운영 컨벤션).
+    //   vertex: [x, y, {name, allowedDeviationXY, type, is_parking_spot?}]
+    //     - type: "NONE" 기본 / "CHGE" 충전기. is_parking_spot 은 station·work 역할일 때만 출력.
+    //   lane: [from_idx, to_idx, {orientation, speed_limit, rotationallowed, corridor}]
+    //     - bidir 엣지는 from→to + to→from 두 lane 으로 분해. orientation 은 atan2(dy, dx) 라디안,
+    //       역방향은 +π 후 (-π, π] 정규화. corridor 폭/refpoint 는 모든 lane 에서 동일.
+    const LANE_DEFAULT_SPEED = 1.5;
+    const VERTEX_DEFAULT_RADIUS = 0.3;
+    const CORRIDOR_LEFT_WIDTH = 0.7;
+    const CORRIDOR_RIGHT_WIDTH = 0.7;
+    const CORRIDOR_REFPOINT = "CONTOUR";
+
+    function _yamlQuoteString(s) {
+      const escaped = String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      return `"${escaped}"`;
+    }
+
+    function _yamlNum(v) {
+      const n = Number(v);
+      if (!isFinite(n)) return "0";
+      return Number.isInteger(n) ? String(n) : String(parseFloat(n.toFixed(6)));
+    }
+
+    function _normalizeAngle(rad) {
+      let a = rad;
+      while (a > Math.PI) a -= 2 * Math.PI;
+      while (a <= -Math.PI) a += 2 * Math.PI;
+      return a;
+    }
+
+    // block-style mixed-sequence row: 첫 2 원소는 scalar, 마지막 원소는 mapping.
+    //   - - <first>
+    //     - <second>
+    //     - <key1>: <val1>
+    //       <key2>: <val2>
+    //       ...
+    // base indent (스페이스 수) 기준으로 dash/키 들여쓰기 결정.
+    function _pushLaneBlock(lines, from, to, orientation, speed) {
+      const ind = "      ";   // sequence 첫 dash 위치 (lanes 아래 6칸)
+      const ind2 = "        "; // 8칸 = nested dash / 마지막 dash 위치
+      const ind3 = "          "; // 10칸 = mapping 키
+      const ind4 = "            "; // 12칸 = corridor 내부 키
+      lines.push(`${ind}- - ${from}`);
+      lines.push(`${ind2}- ${to}`);
+      lines.push(`${ind2}- orientation: ${_yamlNum(orientation)}`);
+      lines.push(`${ind3}speed_limit: ${_yamlNum(speed)}`);
+      lines.push(`${ind3}rotationallowed: false`);
+      lines.push(`${ind3}corridor:`);
+      lines.push(`${ind4}leftWidth: ${_yamlNum(CORRIDOR_LEFT_WIDTH)}`);
+      lines.push(`${ind4}rightWidth: ${_yamlNum(CORRIDOR_RIGHT_WIDTH)}`);
+      lines.push(`${ind4}corridorRefpoint: ${CORRIDOR_REFPOINT}`);
+    }
+
+    function _pushVertexBlock(lines, x, y, name, isCharger, isStation) {
+      const ind = "      ";
+      const ind2 = "        ";
+      const ind3 = "          ";
+      lines.push(`${ind}- - ${_yamlNum(x)}`);
+      lines.push(`${ind2}- ${_yamlNum(y)}`);
+      lines.push(`${ind2}- name: ${_yamlQuoteString(name)}`);
+      lines.push(`${ind3}allowedDeviationXY: ${_yamlNum(VERTEX_DEFAULT_RADIUS)}`);
+      lines.push(`${ind3}type: ${isCharger ? "CHGE" : "NONE"}`);
+      if (isStation) lines.push(`${ind3}is_parking_spot: true`);
+    }
+
+    function buildRmfYaml() {
+      const idToIdx = new Map();
+      nodes.forEach((n, i) => idToIdx.set(n.id, i));
+
+      const lines = [];
+      lines.push(`building_name: ${_yamlQuoteString(SOURCE_NAME || "map")}`);
+      lines.push("levels:");
+      lines.push("  L1:");
+
+      // lanes 먼저 — bidir 엣지는 2개 lane 으로 분해
+      lines.push("    lanes:");
+      let laneCount = 0;
+      for (const e of edges) {
+        const a = idToIdx.get(e.src), b = idToIdx.get(e.dst);
+        if (a === undefined || b === undefined) continue;
+        const aN = nodes[a], bN = nodes[b];
+        const dx = Number(bN.x) - Number(aN.x);
+        const dy = Number(bN.y) - Number(aN.y);
+        const angleFwd = _normalizeAngle(Math.atan2(dy, dx));
+        const vmax = (e.v_max !== null && e.v_max !== undefined) ? Number(e.v_max) : LANE_DEFAULT_SPEED;
+
+        _pushLaneBlock(lines, a, b, angleFwd, vmax);
+        laneCount++;
+
+        if (e.bidir) {
+          _pushLaneBlock(lines, b, a, _normalizeAngle(angleFwd + Math.PI), vmax);
+          laneCount++;
+        }
+      }
+
+      // vertices
+      lines.push("    vertices:");
+      for (const n of nodes) {
+        const name = (n.name && String(n.name).trim()) ? String(n.name) : "";
+        const isCharger = !!n.is_charger;
+        const isStation = (n.role === "station" || n.role === "work");
+        _pushVertexBlock(lines, n.x, n.y, name, isCharger, isStation);
+      }
+
+      return { yaml: lines.join("\n") + "\n", vertexCount: nodes.length, laneCount };
+    }
+
+    function downloadYaml() {
+      const { yaml, vertexCount, laneCount } = buildRmfYaml();
+      const blob = new Blob([yaml], {type: "application/x-yaml"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${SOURCE_NAME || "map"}.building.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${vertexCount} vertices, ${laneCount} lanes → building.yaml`);
     }
 
     // ── Toast 알림 ──────────────────────────────────────────────

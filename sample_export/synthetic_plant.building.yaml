@@ -1,0 +1,85 @@
+building_name: "synthetic_plant"
+levels:
+  L1:
+    lanes:
+      # ── 대표 케이스 발췌 (synthetic_plant 의 84 lanes 중) ─────
+      # bidir 첫 쌍: L0001 (N_north_x0 ↔ N_north_x10)
+      - - 0
+        - 1
+        - orientation: 0.016476
+          speed_limit: 1.5
+          rotationallowed: false
+          corridor:
+            leftWidth: 0.7
+            rightWidth: 0.7
+            corridorRefpoint: CONTOUR
+      - - 1
+        - 0
+        - orientation: -3.125116
+          speed_limit: 1.5
+          rotationallowed: false
+          corridor:
+            leftWidth: 0.7
+            rightWidth: 0.7
+            corridorRefpoint: CONTOUR
+      # 단방향: L0025 (N_center_x0 → N_center_x10, 역방향 없음)
+      - - 13
+        - 14
+        - orientation: 0.037682
+          speed_limit: 1.5
+          rotationallowed: false
+          corridor:
+            leftWidth: 0.7
+            rightWidth: 0.7
+            corridorRefpoint: CONTOUR
+      # 수직 lane: L0047 (N_north_x20 ↔ N_bay_x20_mid) — orientation ≈ ±π/2
+      - - 2
+        - 37
+        - orientation: -1.575396
+          speed_limit: 1.5
+          rotationallowed: false
+          corridor:
+            leftWidth: 0.7
+            rightWidth: 0.7
+            corridorRefpoint: CONTOUR
+      - - 37
+        - 2
+        - orientation: 1.566197
+          speed_limit: 1.5
+          rotationallowed: false
+          corridor:
+            leftWidth: 0.7
+            rightWidth: 0.7
+            corridorRefpoint: CONTOUR
+    vertices:
+      # ── 대표 케이스 발췌 (synthetic_plant 의 51 vertices 중) ──
+      # 일반 노드 (type: NONE)
+      - - 0.11
+        - 79.62
+        - name: "N_north_x0"
+          allowedDeviationXY: 0.3
+          type: NONE
+      - - 9.82
+        - 79.78
+        - name: "N_north_x10"
+          allowedDeviationXY: 0.3
+          type: NONE
+      # 사용자 stamp 모드로 station 지정 시 — is_parking_spot 키 추가
+      - - 17.33
+        - 64.97
+        - name: "N_station_x20"
+          allowedDeviationXY: 0.3
+          type: NONE
+          is_parking_spot: true
+      # 사용자 stamp 모드로 charger 지정 시 — type: CHGE
+      - - -10.31
+        - 50.1
+        - name: "N_charger_y50"
+          allowedDeviationXY: 0.3
+          type: CHGE
+      # 음수 좌표 / 일반 노드
+      - - -2.6
+        - 50.01
+        - name: "N_charger_access"
+          allowedDeviationXY: 0.3
+          type: NONE
