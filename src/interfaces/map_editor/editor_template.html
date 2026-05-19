@@ -1721,8 +1721,10 @@
         const isActiveGraph = (!MULTI_FLEET_ACTIVE) || (eGraphIdx === activeGraphIdx);
         if (MULTI_FLEET_ACTIVE && !isActiveGraph && !showInactiveGraphs) return "";
         const x1 = sx(a.x), y1 = sy(a.y), x2 = sx(b.x), y2 = sy(b.y);
-        // F1b-ux: v_max 설정된 edge 는 amber, 일반 edge 는 기존 색
+        // F1b-ux: v_max amber 색은 Speed 모드 진입 시에만 적용 — 다른 모드 (Paint/Stamp/Build)
+        // 에서는 양방향/단방향 색을 그대로 유지해 사용자가 방향성을 잃지 않도록.
         const hasVMax = (e.v_max !== null && e.v_max !== undefined);
+        const showVMaxColor = (mode === "speed") && hasVMax;
         const isActive = (e.id === hoveredEdgeId);
         const isPinned = (e.id === pinnedEdgeId);
         const isSelectedEdge = selectedEdgeIds.has(e.id);
@@ -1732,8 +1734,8 @@
           // 비활성 graph: 회색 + 흐리게
           stroke = "#9aa5b1";
           strokeOpacity = 0.3;
-        } else if (hasVMax) {
-          stroke = "var(--warn)";                          // 속도 제한 표시색 (amber)
+        } else if (showVMaxColor) {
+          stroke = "var(--warn)";                          // Speed 모드 + v_max 설정된 edge (amber)
         } else if (MULTI_FLEET_ACTIVE) {
           // 활성 graph: fleet 색깔 (양방향/단방향 구분은 화살촉으로 명확하므로 fleet 색 우선)
           stroke = colorForGraphIdx(eGraphIdx);
