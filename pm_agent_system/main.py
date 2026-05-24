@@ -168,6 +168,14 @@ async def main() -> None:
             notification_level=config.notification_level,
         )
 
+        # Orchestrator → Telegram 알림 연결
+        if orchestrator is not None:
+            orchestrator.notify_fn = bot.send_message
+            # Phase 2: READY_TO_SHIP 카드 (inline keyboard 포함)
+            orchestrator.notify_card_fn = bot.send_ready_to_ship_card
+            # Phase 3: 실패 카드 (inline keyboard 포함)
+            orchestrator.notify_failure_card_fn = bot.send_failure_card
+
         print("[startup] PM Agent System 시작됨.")
         if config.dry_run:
             print("[startup] DRY-RUN 모드 활성화.")
