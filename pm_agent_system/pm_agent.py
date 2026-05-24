@@ -17,10 +17,13 @@ import anthropic
 from config import Config
 from schemas import TaskPacket
 
-# 히스토리 압축 임계치 — 30 → 15 (히스토리 누적 절반으로 단축)
+# 히스토리 압축 임계치 — 15턴
 _HISTORY_COMPACT_THRESHOLD = 15
 # spec 요약 최대 글자 수 (~2.6k 토큰)
 _SPEC_SUMMARY_MAX_CHARS = 10_000
+# ★ 히스토리 전송 시 오래된 메시지 잘라내기 (현재 메시지 제외)
+# Telegram 최대 4096자이지만, 히스토리 누적 비용 방지를 위해 더 짧게 제한
+_HISTORY_MSG_MAX_CHARS = 600
 
 _SYSTEM_PROMPT = """\
 당신은 FAB AMR 시뮬레이터 프로젝트(vda5050_sim_v2)의 PM입니다.
@@ -126,11 +129,23 @@ class PMAgent:
             }
         ]
 
+        # ★ 히스토리 전송 전 오래된 메시지 트리밍
+        # - 현재 메시지(마지막)는 전문 전달 (이해 정확도 유지)
+        # - 이전 메시지는 _HISTORY_MSG_MAX_CHARS로 잘라냄
+        #   → 코드 붙여넣기 등 큰 메시지가 이후 모든 턴 비용을 올리는 구멍 차단
+        api_messages = []
+        for i, msg in enumerate(self._history):
+            is_current = (i == len(self._history) - 1)
+            content = msg["content"]
+            if not is_current and len(content) > _HISTORY_MSG_MAX_CHARS:
+                content = content[:_HISTORY_MSG_MAX_CHARS] + "…[이전 메시지 축약]"
+            api_messages.append({"role": msg["role"], "content": content})
+
         response = await self._client.messages.create(
             model=self._dialog_model,
-            max_tokens=4096,
+            max_tokens=2048,   # 4096 → 2048: 대화형 응답에 충분
             system=system_blocks,
-            messages=self._history,
+            messages=api_messages,
         )
 
         assistant_text = ""
