@@ -10,6 +10,7 @@ telegram_bot.py — Telegram Bot interface for PM Agent System
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -69,7 +70,12 @@ class TelegramBot:
     # ── 공개 API ──────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        """Application 빌드 후 polling 시작 (blocking)."""
+        """Application 빌드 후 polling 시작.
+
+        run_polling()은 자체 이벤트루프를 만들려 해서 asyncio.run() 안에서 충돌.
+        대신 initialize/start/updater.start_polling() 을 직접 호출해
+        기존 루프에서 동작하도록 한다.
+        """
         self._app = (
             Application.builder()
             .token(self.token)
@@ -86,7 +92,15 @@ class TelegramBot:
         )
 
         logger.info("Telegram Bot polling 시작.")
-        await self._app.run_polling()
+        async with self._app:
+            await self._app.start()
+            await self._app.updater.start_polling()
+            # 취소될 때까지 대기
+            try:
+                await asyncio.Event().wait()
+            finally:
+                await self._app.updater.stop()
+                await self._app.stop()
 
     async def send_message(self, text: str) -> None:
         """지정된 chat_id로 메시지 전송."""

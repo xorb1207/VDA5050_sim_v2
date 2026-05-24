@@ -172,7 +172,12 @@ async def main() -> None:
         if config.dry_run:
             print("[startup] DRY-RUN 모드 활성화.")
 
-        await bot.run()
+        # orchestrator와 bot을 같은 이벤트루프에서 병렬 실행
+        tasks = [bot.run()]
+        if orchestrator is not None:
+            tasks.append(orchestrator.start())
+
+        await asyncio.gather(*tasks)
 
     finally:
         _release_lock()
