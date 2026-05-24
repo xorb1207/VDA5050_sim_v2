@@ -150,7 +150,17 @@ async def main() -> None:
             print("[error] TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID 환경변수가 없습니다.")
             sys.exit(1)
 
-        orchestrator = Orchestrator(config=config, git_manager=git_manager) if Orchestrator else None
+        review_agent = None
+        try:
+            from review_agent import ReviewAgent
+            review_agent = ReviewAgent(
+                model=config.anthropic_model,
+                api_key=config.anthropic_api_key,
+            )
+        except ImportError:
+            print("[warn] review_agent 모듈을 찾을 수 없습니다.")
+
+        orchestrator = Orchestrator(config=config, git_manager=git_manager, review_agent=review_agent) if Orchestrator else None
         pm_agent = PMAgent(config=config, git_manager=git_manager, orchestrator=orchestrator) if PMAgent else None
 
         # 시작 시 완료 이력 주입
