@@ -17,9 +17,9 @@ import anthropic
 from config import Config
 from schemas import TaskPacket
 
-# 히스토리 압축 임계치 (턴 수)
-_HISTORY_COMPACT_THRESHOLD = 30
-# spec 요약 최대 글자 수 (~2.6k 토큰 대응)
+# 히스토리 압축 임계치 — 30 → 15 (히스토리 누적 절반으로 단축)
+_HISTORY_COMPACT_THRESHOLD = 15
+# spec 요약 최대 글자 수 (~2.6k 토큰)
 _SPEC_SUMMARY_MAX_CHARS = 10_000
 
 _SYSTEM_PROMPT = """\
@@ -96,7 +96,8 @@ class PMAgent:
         self._github_token = _gh_token
         self._github_repo = _gh_repo
 
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        # ★ api_key 버그 수정: 파라미터 api_key가 None일 수 있으므로 _api_key 사용
+        self._client = anthropic.AsyncAnthropic(api_key=_api_key)
         self._history: list[dict] = []
         self._spec_summary: str = self._build_spec_summary()
 
@@ -111,15 +112,24 @@ class PMAgent:
         """사용자 메시지를 받아 응답을 반환한다. 태스크 JSON이 포함되면 .md 파일을 생성한다."""
         self._history.append({"role": "user", "content": user_message})
 
-        # 히스토리 압축
+        # 히스토리 압축 (임계치 초과 시)
         await self._maybe_compact_history()
 
-        system = f"{_SYSTEM_PROMPT}\n\n## 프로젝트 스펙 요약\n{self._spec_summary}"
+        # ★ Prompt caching: system prompt + spec_summary는 매 턴 동일 →
+        #   cache_control 으로 캐싱. 5분 TTL 내 재호출 시 ~3,300 토큰 절약.
+        system_text = f"{_SYSTEM_PROMPT}\n\n## 프로젝트 스펙 요약\n{self._spec_summary}"
+        system_blocks = [
+            {
+                "type": "text",
+                "text": system_text,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
 
         response = await self._client.messages.create(
             model=self._dialog_model,
             max_tokens=4096,
-            system=system,
+            system=system_blocks,
             messages=self._history,
         )
 
@@ -367,9 +377,10 @@ class PMAgent:
         )
 
         try:
+            # util_model로 요약 — 단발 호출이라 캐싱 불필요
             resp = await self._client.messages.create(
                 model=self._util_model,
-                max_tokens=1024,
+                max_tokens=512,   # 요약은 짧게 충분
                 messages=[{"role": "user", "content": summary_prompt}],
             )
             summary_text = ""
