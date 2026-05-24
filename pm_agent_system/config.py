@@ -19,6 +19,7 @@ class Config:
     state_path: str = "state/git_state.json"
     logs_dir: str = "logs"
     notification_level: str = "NORMAL"
+    auto_ship_after_review: bool = False
     anthropic_model: str = "claude-haiku-4-5-20251001"
     pm_dialog_model: str = "claude-sonnet-4-6"
     cli_model: str = "claude-opus-4-7"
@@ -54,6 +55,7 @@ def load_config() -> Config:
         completed_dir=os.environ.get("COMPLETED_DIR", "completed"),
         state_path=os.environ.get("STATE_PATH", "state/git_state.json"),
         logs_dir=os.environ.get("LOGS_DIR", "logs"),
+        auto_ship_after_review=parse_bool(os.environ.get("AUTO_SHIP_AFTER_REVIEW", ""), default=False),
         notification_level=os.environ.get("NOTIFICATION_LEVEL", "NORMAL"),
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
         pm_dialog_model=os.environ.get("PM_DIALOG_MODEL", "claude-sonnet-4-6"),

@@ -21,6 +21,13 @@ class CompletedPacket:
     test_result: str
     agent_notes: str = ""
     timestamp: str = ""
+    # Phase 4: actual git diff 기반 리뷰
+    actual_diff: str = ""           # git diff HEAD (staged+unstaged)
+    git_status: str = ""            # git status --short
+    diff_stat: str = ""             # git diff --stat HEAD
+    diff_numstat: str = ""          # git diff --numstat HEAD (per-file +/-)
+    name_status: str = ""           # git diff --name-status HEAD (M/A/D + filename)
+    review_target: str = "stdout"   # "actual_git_diff" | "stdout"
 
 
 @dataclass
