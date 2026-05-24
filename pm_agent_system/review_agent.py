@@ -185,7 +185,9 @@ class ReviewAgent:
             )
 
         # 1d. diff가 비어 있음 (변경 없음)
-        has_actual_changes = bool(packet.actual_diff.strip() or packet.files_changed)
+        # actual_diff 기준으로만 판단 — files_changed는 fallback으로 allowed_files가
+        # 들어올 수 있어서 신뢰하지 않음
+        has_actual_changes = bool(packet.actual_diff.strip())
         if not has_actual_changes:
             return ReviewVerdict(
                 verdict="NEEDS_REVISION",

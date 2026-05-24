@@ -70,11 +70,19 @@ def _parse_task_id(path: Path) -> str:
 
 
 def _parse_allowed_files(task_content: str) -> list[str]:
-    """마크다운에서 'allowed_files:' 섹션의 파일 목록 파싱."""
+    """마크다운에서 allowed_files 섹션의 파일 목록 파싱.
+
+    지원 형식:
+      1) 헤딩 형식: ## allowed_files\n- file.py\n- file2.py
+      2) 키-값 블록: allowed_files:\n- file.py
+      3) 인라인:    allowed_files: file.py, file2.py
+    """
     files: list[str] = []
 
+    # 형식 1+2: "allowed_files" 뒤에 콜론이 있든 없든, 헤딩(##)이든 키-값이든
+    # 모두 잡는 통합 패턴 — 이어지는 "- item" 줄들을 수집
     block_pattern = re.compile(
-        r"(?:^|\n)allowed_files\s*:\s*\n((?:[ \t]*-[ \t]+\S[^\n]*\n?)+)",
+        r"(?:^|\n)(?:#+\s*)?allowed_files\s*:?\s*\n((?:[ \t]*-[ \t]+\S[^\n]*\n?)+)",
         re.IGNORECASE,
     )
     m = block_pattern.search(task_content)
@@ -85,8 +93,9 @@ def _parse_allowed_files(task_content: str) -> list[str]:
                 files.append(stripped)
         return files
 
+    # 형식 3: 인라인 콤마 구분
     inline_pattern = re.compile(
-        r"(?:^|\n)allowed_files\s*:\s*([^\n]+)", re.IGNORECASE
+        r"(?:^|\n)(?:#+\s*)?allowed_files\s*:\s*([^\n]+)", re.IGNORECASE
     )
     m2 = inline_pattern.search(task_content)
     if m2:
