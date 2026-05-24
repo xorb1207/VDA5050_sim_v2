@@ -1,0 +1,61 @@
+import os
+from dataclasses import dataclass, field
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
+
+
+@dataclass
+class Config:
+    anthropic_api_key: str
+    repo_path: str
+    spec_path: str
+    github_token: str = ""
+    github_repo: str = ""
+    dry_run: bool = False
+    no_auto_pr: bool = False
+    task_queue_dir: str = "task_queue"
+    completed_dir: str = "completed"
+    state_path: str = "state/git_state.json"
+    logs_dir: str = "logs"
+    notification_level: str = "NORMAL"
+    anthropic_model: str = "claude-haiku-4-5-20251001"
+    pm_dialog_model: str = "claude-sonnet-4-6"
+    cli_model: str = "claude-opus-4-7"
+
+
+def load_config() -> Config:
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not anthropic_api_key:
+        raise RuntimeError("Required environment variable ANTHROPIC_API_KEY is not set")
+
+    repo_path = os.environ.get("REPO_PATH", "")
+    if not repo_path:
+        raise RuntimeError("Required environment variable REPO_PATH is not set")
+
+    spec_path = os.environ.get("SPEC_PATH", "")
+    if not spec_path:
+        raise RuntimeError("Required environment variable SPEC_PATH is not set")
+
+    def parse_bool(value: str, default: bool = False) -> bool:
+        if not value:
+            return default
+        return value.strip().lower() in ("1", "true", "yes")
+
+    return Config(
+        anthropic_api_key=anthropic_api_key,
+        repo_path=repo_path,
+        spec_path=spec_path,
+        github_token=os.environ.get("GITHUB_TOKEN", ""),
+        github_repo=os.environ.get("GITHUB_REPO", ""),
+        dry_run=parse_bool(os.environ.get("DRY_RUN", ""), default=False),
+        no_auto_pr=parse_bool(os.environ.get("NO_AUTO_PR", ""), default=False),
+        task_queue_dir=os.environ.get("TASK_QUEUE_DIR", "task_queue"),
+        completed_dir=os.environ.get("COMPLETED_DIR", "completed"),
+        state_path=os.environ.get("STATE_PATH", "state/git_state.json"),
+        logs_dir=os.environ.get("LOGS_DIR", "logs"),
+        notification_level=os.environ.get("NOTIFICATION_LEVEL", "NORMAL"),
+        anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
+        pm_dialog_model=os.environ.get("PM_DIALOG_MODEL", "claude-sonnet-4-6"),
+        cli_model=os.environ.get("CLI_MODEL", "claude-opus-4-7"),
+    )

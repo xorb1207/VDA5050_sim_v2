@@ -22,3 +22,11 @@ venv/
 mockup.html
 mockup_app.html
 mockup_blob_*.js
+
+# PM Agent System — runtime dirs & secrets
+pm_agent_system/.env
+pm_agent_system/state/
+pm_agent_system/completed/
+pm_agent_system/logs/
+pm_agent_system/task_queue/
+pm_agent_system/tests/__pycache__/
