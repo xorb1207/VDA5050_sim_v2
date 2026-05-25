@@ -111,6 +111,25 @@
     return await resp.json();
   }
 
+  // GAP-B: 수동 demand 발행. pickup/dropoff node_id, 선택적 required_capability.
+  async function dispatchManualJob(runId, pickup, dropoff, requiredCapability) {
+    const resp = await fetch(backendBase() + "/manual-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        runId,
+        pickup_node_id: pickup,
+        dropoff_node_id: dropoff,
+        required_capability: requiredCapability || null,
+      }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error("manual-job failed: " + resp.status + " " + text);
+    }
+    return await resp.json();
+  }
+
   // ── Engine adapter ──────────────────────────────────────────
   // WS 구독. onTick(snapshot), onEnd(reason).
   // 반환값: {disconnect()}.

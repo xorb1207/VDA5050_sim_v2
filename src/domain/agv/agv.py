@@ -681,7 +681,7 @@ class AGV:
             if node.is_charger or node.role == NodeRole.CHARGER
         ]
         for charger_id in charger_ids:
-            path = self._graph.get_path(start_node_id, charger_id)
+            path = self._graph.get_path(start_node_id, charger_id, fleet=self.fleet)
             if not path or len(path) < 2:
                 continue
             distance = self._path_distance(path)
@@ -767,7 +767,7 @@ class AGV:
             ]
             if active:
                 continue
-            path = self._graph.get_path(start_node_id, holding_id)
+            path = self._graph.get_path(start_node_id, holding_id, fleet=self.fleet)
             if not path or len(path) < 2:
                 continue
             distance = self._path_distance(path)
@@ -824,13 +824,14 @@ class AGV:
                 near_node,
                 sid,
                 blocked_edges=blocked_edges,
+                fleet=self.fleet,
             )
             if not path_to_siding or len(path_to_siding) < 2:
                 continue
             if self._path_uses_bay_edge(path_to_siding):
                 continue
 
-            tail = self._graph.get_path(sid, goal_node)
+            tail = self._graph.get_path(sid, goal_node, fleet=self.fleet)
             if not tail or len(tail) < 2:
                 continue
 
@@ -912,8 +913,8 @@ class AGV:
             return
         # 원래 가려던 다음 hop. 우회 후 다시 이 노드로 복귀해 잔여 경로를 이어간다.
         next_hop = self._path[self._path_index]
-        path_to_siding = self._graph.get_path(self.current_node_id, siding_id)
-        return_path = self._graph.get_path(siding_id, next_hop)
+        path_to_siding = self._graph.get_path(self.current_node_id, siding_id, fleet=self.fleet)
+        return_path = self._graph.get_path(siding_id, next_hop, fleet=self.fleet)
         if (
             path_to_siding
             and len(path_to_siding) >= 2
@@ -957,6 +958,7 @@ class AGV:
         new_path = self._graph.get_path(
             self.current_node_id, goal,
             blocked_edges={blocked_edge} if blocked_edge else None,
+            fleet=self.fleet,
         )
 
         if new_path and len(new_path) > 1:

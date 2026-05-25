@@ -346,16 +346,81 @@ def import_map_yaml(
 # 1단계: 구조 임포트
 # ────────────────────────────────────────────────────────────────────
 def _import_nodes(raw_nodes: list[dict]) -> list[ImportedNode]:
+    """JSON 노드 목록 → ImportedNode 목록.
+
+    지원 필드:
+      - position: {x, y}  또는 루트 x, y
+      - type / node_type_cd: "charger"|"station"|"holding"|"siding" 등
+      - is_charger / is_station / is_holding_point: bool 명시 플래그
+      - capability: str (F1a fleet 매칭용)
+    """
+    # type 문자열 → raw_node_type_cd 매핑 (대소문자 무관)
+    _TYPE_TO_CD: dict[str, str] = {
+        "charger": "charger",
+        "station": "station",
+        "holding": "holding",
+        "siding":  "siding",
+    }
     nodes = []
     for raw in raw_nodes:
-        pos = raw.get("position", {}) or {}
+        # 좌표: position.x/y 또는 루트 x/y
+        pos = raw.get("position") or {}
+        x = float(pos.get("x", raw.get("x", 0.0)))
+        y = float(pos.get("y", raw.get("y", 0.0)))
+
+        # type 코드 결정: 명시 type 필드 → node_type_cd 순으로 참조
+        raw_type = str(raw.get("type", "") or raw.get("node_type_cd", "") or "").strip()
+        type_cd = _TYPE_TO_CD.get(raw_type.lower(), raw_type)
+
+        # 명시적 bool 플래그 (있으면 type_cd 보다 우선)
+        is_charger_flag  = bool(raw.get("is_charger", False))
+        is_station_flag  = bool(raw.get("is_station", False))
+        is_holding_flag  = bool(raw.get("is_holding_point", False))
+
+        if is_charger_flag and not type_cd:
+            type_cd = "charger"
+        if is_station_flag and not type_cd:
+            type_cd = "station"
+        if is_holding_flag and not type_cd:
+            type_cd = "holding"
+
+        # inferred_role / inferred_is_* 선(先)초기화 (bool 플래그가 명시된 경우)
+        inferred_role     = "standard"
+        inferred_is_charger  = False
+        inferred_is_holding  = False
+        if type_cd.lower() in ("charger", "ch", "chrg"):
+            inferred_role = "charger"
+            inferred_is_charger = True
+        elif type_cd.lower() in ("station", "st", "stn"):
+            inferred_role = "station"
+        elif type_cd.lower() in ("holding", "hp", "hold"):
+            inferred_role = "holding"
+            inferred_is_holding = True
+        elif type_cd.lower() in ("siding", "sd"):
+            inferred_role = "siding"
+        # bool 플래그 추가 보강 (type_cd 가 없어도 플래그만 있는 경우)
+        if is_charger_flag:
+            inferred_is_charger = True
+            if inferred_role == "standard":
+                inferred_role = "charger"
+        if is_holding_flag:
+            inferred_is_holding = True
+            if inferred_role == "standard":
+                inferred_role = "holding"
+        if is_station_flag and inferred_role == "standard":
+            inferred_role = "station"
+
         nodes.append(ImportedNode(
             node_id=str(raw.get("id", "")),
-            x=float(pos.get("x", 0.0)),
-            y=float(pos.get("y", 0.0)),
+            x=x,
+            y=y,
             name=str(raw.get("name", "") or raw.get("id", "")),
-            raw_node_type_cd=str(raw.get("node_type_cd", "") or ""),
+            raw_node_type_cd=type_cd,
             raw_align_type_cd=str(raw.get("align_type_cd", "") or ""),
+            inferred_role=inferred_role,
+            inferred_is_charger=inferred_is_charger,
+            inferred_is_holding=inferred_is_holding,
+            capability=raw.get("capability") or None,
         ))
     return nodes
 

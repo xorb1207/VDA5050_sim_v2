@@ -120,7 +120,7 @@ python tests/integration/test_simulation.py        # T1~T59 + 추가 invariant
 
 ---
 
-## 현재 우선순위 (2026-05-16 재정의)
+## 현재 우선순위 (2026-05-25 재정의)
 
 ### 완료 (이번 사이클)
 - [x] **외부 맵 임포터** — JSON/YAML import + 자동 추론 (양방향 100%, 코리도 클러스터링, 도달성)
@@ -132,12 +132,19 @@ python tests/integration/test_simulation.py        # T1~T59 + 추가 invariant
 - [x] **(b) 시각화 2차** — 3-pane / 사고 클릭→맵 강조 / blocking chain / 히트맵
 - [x] **Windows 호환** — `run.bat` + sys.path 자동 추가
 - [x] **Agent B Dispatcher/KPI** — JobDispatcher, JobApi, manual mode
+- [x] **F1a (Multi-graph / 이기종 fleet)** — 2026-05-25 완료.
+  - 엔진: `Edge.graph_idx`, `Fleet` 클래스, `MapGraph.get_path(fleet=)` 필터링
+  - 디스패처: `required_capability` → fleet capability 매칭
+  - AGV: 7개 `get_path` 호출에 `fleet=self.fleet` 연결
+  - Quickrun UI: AGV fleet 색 ring, Fleet KPI 카드, fleet별 count 슬라이더, 임포트 맵 드롭다운
+  - 임포터: `type/is_charger/is_station/is_holding_point/capability` 명시 필드 인식
+  - 검증 맵: `scripts/generate_synthetic_3fleet.py` → TYPE_A/B/C 3-fleet 합성 맵
+  - 테스트: T66 20/20, 통합 63/63 PASS
 
 ### 다음 사이클 — 주력 (운영 도구)
 
-- [ ] **F1a (Multi-graph / 이기종 fleet)** ← **1순위**. lane `graph_idx` + `Fleet` 클래스 + Editor graph 탭. 최대 3 fleet 지원. 설계 완료 (`agent_a_map_editor_spec.md` 또는 별도 spec). 견적 ~4.5일.
-- [ ] **RMF building_map YAML import/export** ← 2순위. 폐쇄망 데이터 호환. 견적 ~1일.
-- [ ] **Background image overlay** ← 3순위. 실 도면 PNG 위에 그리기. 견적 ~1일.
+- [ ] **RMF building_map YAML import/export** ← **1순위**. 폐쇄망 데이터 호환. 견적 ~1일.
+- [ ] **Background image overlay** ← 2순위. 실 도면 PNG 위에 그리기. 견적 ~1일.
 - [ ] **Editor 속성 풀 편집** — vertex lock_radius, edge capacity/width 등.
 
 ### Advanced (연구·검증 영역, 후순위)
