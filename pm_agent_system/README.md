@@ -243,6 +243,33 @@ projects:
 
 ---
 
+## 운영 전 체크리스트
+
+Bot 재시작 또는 새로운 태스크 투입 전 확인 항목:
+
+| 항목 | 확인 방법 | 정상 상태 |
+|------|-----------|-----------|
+| Bot 프로세스 | `tmux attach -t pmbot` | Python 프로세스 실행 중 |
+| `/doctor` 정상 | Telegram `/doctor` | ✅ 모두 초록 |
+| `/current` 프로젝트 | Telegram `/current` | 대상 repo 정확히 표시 |
+| `AUTO_SHIP_AFTER_REVIEW` | `.env` 확인 | `false` (수동 승인 필수) |
+| task_queue 감시 | 테스트 파일 투입 후 Telegram 알림 | 📋 대기열 등록 알림 |
+| git branch clean | `git status` | 진행 중 branch 없음 |
+| Telegram callback | 실패 카드 버튼 클릭 | 응답 수신 |
+| `/stale` 방치 없음 | Telegram `/stale` | 방치 태스크 0개 |
+
+### 고위험 설정 주의
+
+```
+⚠️  AUTO_SHIP_AFTER_REVIEW=true  → 리뷰 PASS 즉시 main 자동 머지
+    이 설정 시 모든 PASS 결과가 승인 없이 배포됨
+
+✅  AUTO_SHIP_AFTER_REVIEW=false  → 반드시 /ship 명령으로만 배포
+    RC 운영 표준 설정
+```
+
+---
+
 ## 디렉토리 구조
 
 ```
