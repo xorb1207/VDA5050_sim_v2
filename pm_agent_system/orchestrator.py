@@ -65,9 +65,10 @@ def _parse_task_id(path: Path) -> str:
     숫자 prefix 없으면 stem 그대로 반환.
     """
     stem = path.stem  # e.g. "01_T-60a"
-    # Phase 3: retry_ prefix 처리
-    if stem.startswith("retry_"):
-        return stem[len("retry_"):]
+    # Phase 3: retry_ / resume_ prefix 처리
+    for _pfx in ("retry_", "resume_"):
+        if stem.startswith(_pfx):
+            return stem[len(_pfx):]
     parts = stem.split("_", 1)
     if len(parts) > 1 and parts[0].isdigit():
         return parts[1]
@@ -307,6 +308,108 @@ def _recommended_action(category: str) -> str:
         "TIMEOUT":         "태스크 복잡도를 줄이거나 분할하여 재시도하세요.",
         "UNKNOWN":         "로그를 확인하고 재시도하세요.",
     }.get(category, "로그를 확인하세요.")
+
+
+# Phase 3: Handoff 유틸리티 ──────────────────────────────────────────────────
+
+def _extract_handoff_section(content: str, section_name: str) -> str:
+    """Handoff 마크다운에서 특정 섹션 내용 추출."""
+    m = re.search(
+        r"## " + re.escape(section_name) + r"\n(.*?)(?=\n## |\Z)",
+        content,
+        re.DOTALL,
+    )
+    return m.group(1).strip() if m else ""
+
+
+def _replace_handoff_section(content: str, section_name: str, new_body: str) -> str:
+    """Handoff 마크다운의 특정 섹션 내용 교체. 섹션 없으면 말미에 추가."""
+    pattern = re.compile(
+        r"(## " + re.escape(section_name) + r"\n)(.*?)(?=\n## |\Z)",
+        re.DOTALL,
+    )
+    replacement = f"## {section_name}\n{new_body.rstrip()}\n"
+    result, n = pattern.subn(replacement, content)
+    if n == 0:
+        return content.rstrip("\n") + f"\n\n## {section_name}\n{new_body.rstrip()}\n"
+    return result
+
+
+_HANDOFF_PLACEHOLDERS = frozenset({
+    "-",
+    "(태스크 목표 — 태스크 파일에서 확인)",
+    "(현재 상태 직접 기입)",
+    "<!-- 완료된 항목을 여기에 기입 -->",
+    "<!-- 남은 작업을 여기에 기입 -->",
+    "<!-- 주의사항 / 미완성 부분 -->",
+    "<!-- PM Bot 또는 Claude Code에 넘길 다음 구현 지시문 -->",
+})
+
+
+def _format_handoff_summary(task_id: str, content: str) -> str:
+    """Handoff 파일을 Telegram 친화적 짧은 요약으로 변환."""
+    def _sec(name: str) -> str:
+        raw = _extract_handoff_section(content, name)
+        lines = [l for l in raw.splitlines() if l.strip() and not l.strip().startswith("<!--")]
+        text = "\n".join(lines).strip()
+        return text if text and text not in _HANDOFF_PLACEHOLDERS else ""
+
+    goal = _sec("Goal")
+    current = _sec("Current Status")
+    done = _sec("Done")
+    remaining = _sec("Remaining")
+    risks = _sec("Risks")
+    next_p = _sec("Next Prompt")
+
+    lines = [f"📄 {task_id} Handoff\n"]
+    if goal:
+        lines.append(f"Goal:\n{goal[:200]}")
+    if current:
+        lines.append(f"\n상태:\n{current[:200]}")
+    if done:
+        lines.append(f"\nDone:\n{done[:300]}")
+    if remaining:
+        lines.append(f"\nRemaining:\n{remaining[:300]}")
+    if risks:
+        lines.append(f"\nRisks:\n{risks[:200]}")
+    if next_p:
+        lines.append(f"\nNext:\n{next_p[:200]}")
+    if len(lines) == 1:
+        lines.append("(내용 없음 — /handoff 로 업데이트하세요)")
+    return "\n".join(lines)
+
+
+def _build_resume_prompt(task_id: str, handoff_content: str) -> str:
+    """Handoff 마크다운에서 Claude Code CLI 재개 프롬프트 생성 (짧고 집중적)."""
+    goal = _extract_handoff_section(handoff_content, "Goal")
+    current = _extract_handoff_section(handoff_content, "Current Status")
+    remaining = _extract_handoff_section(handoff_content, "Remaining")
+    risks = _extract_handoff_section(handoff_content, "Risks")
+    next_p = _extract_handoff_section(handoff_content, "Next Prompt")
+
+    # Next Prompt 우선, 없으면 Remaining, 없으면 Goal
+    instruction = next_p.strip() or remaining.strip() or goal.strip() or f"{task_id} 이어서 구현"
+
+    return f"""# Resume: {task_id}
+
+이전 작업을 이어서 진행합니다.
+전체 repo 재스캔 없이 아래 지시에 집중하세요.
+
+## 목표 (Goal)
+{goal or '(handoff에서 확인)'}
+
+## 현재 상태 (Current Status)
+{current or '(확인 필요)'}
+
+## 남은 작업 (Remaining)
+{remaining or '(handoff에서 확인)'}
+
+## 주의사항 (Risks)
+{risks or '없음'}
+
+## 구현 지시 (Next Prompt)
+{instruction}
+"""
 
 
 class Orchestrator:
@@ -575,6 +678,151 @@ class Orchestrator:
 
         return _format_diff_summary(task_id, diff_info)
 
+    def get_handoff_summary(self, task_id: str) -> str:
+        """Phase 3-E: 태스크 Handoff 파일의 Telegram 친화적 요약 반환."""
+        handoff_path = self._handoffs_dir / f"{task_id}.md"
+        if not handoff_path.exists():
+            return (
+                f"📄 {task_id} handoff 없음\n\n"
+                f"/handoff {task_id} 로 생성하거나\n"
+                f"/adopt {task_id} 로 현재 작업을 편입하세요."
+            )
+        try:
+            content = handoff_path.read_text(encoding="utf-8", errors="replace")
+            return _format_handoff_summary(task_id, content)
+        except OSError as e:
+            return f"❌ handoff 읽기 실패\n{e}"
+
+    async def adopt_task(self, task_id: str) -> str:
+        """Phase 3-A: 외부 작업을 PM Bot에 편입 (ADOPTED → READY_TO_SHIP).
+
+        현재 repo의 git status / diff 수집 후 _ready_to_ship에 등록.
+        자동 merge 없음 — /ship T-ID 로 승인 후 merge.
+        """
+        if task_id in self._active_tasks:
+            return (
+                f"❌ {task_id}이(가) 이미 실행 중입니다.\n"
+                f"- /running 으로 상태 확인"
+            )
+
+        # 현재 branch + 미커밋 diff 수집
+        branch = await self._get_current_branch()
+        diff_info = await self._collect_git_diff(branch)
+
+        # 커밋됐지만 main과 다른 파일도 추가 수집
+        vs_main_files = await self._get_files_vs_main()
+        all_changed = list(dict.fromkeys(
+            diff_info.get("changed_files", []) + vs_main_files
+        ))
+        diff_info["changed_files"] = all_changed
+
+        # _ready_to_ship에 등록
+        from schemas import CompletedPacket as _CP
+        packet = _CP(
+            task_id=task_id,
+            agent_id="external-work",
+            files_changed=all_changed,
+            code_diff="",
+            test_result="(외부 작업 편입 — 별도 테스트 없음)",
+            agent_notes=f"Adopted from branch: {branch or 'main'}",
+            timestamp=datetime.now().isoformat(),
+        )
+        stored_path = self.task_queue_dir / f"adopted_{task_id}.md"
+        commit_message = _build_commit_message(
+            task_id,
+            f"# {task_id}\n\nAdopted external work on branch {branch or 'main'}",
+        )
+        self._ready_to_ship[task_id] = {
+            "task_id": task_id,
+            "task_path": stored_path,
+            "task_content": f"# {task_id}\n\nAdopted from branch: {branch or 'main'}",
+            "packet": packet,
+            "commit_message": commit_message,
+            "branch": branch,
+            "ready_at": datetime.now().isoformat(),
+            "diff_info": diff_info,
+            "adopted": True,
+        }
+        self._task_diffs[task_id] = diff_info
+        self._save_diff_info(task_id, diff_info)
+        self._processed_ids.add(task_id)  # 중복 실행 방지
+
+        # Handoff 자동 업데이트 (ADOPTED)
+        self._update_handoff(
+            task_id,
+            current_status=f"ADOPTED — branch: {branch or 'main'}",
+            changed_files=all_changed or None,
+            next_prompt=(
+                f"/diff {task_id} 로 변경 확인\n"
+                f"/ship {task_id} 로 배포 승인"
+            ),
+        )
+
+        label = self._task_label(task_id)
+        files_text = (
+            "\n".join(f"- {f}" for f in all_changed[:10])
+            or "변경 파일 없음"
+        )
+        if len(all_changed) > 10:
+            files_text += f"\n... 외 {len(all_changed) - 10}개"
+
+        return (
+            f"📥 {label} 작업 편입 완료\n\n"
+            f"branch:\n{branch or '(확인 불가)'}\n\n"
+            f"변경 파일:\n{files_text}\n\n"
+            f"상태:\nREADY_TO_SHIP (수동 /ship 필요)\n\n"
+            f"다음:\n"
+            f"- /diff {task_id}\n"
+            f"- /ship {task_id}\n"
+            f"- /handoff {task_id}"
+        )
+
+    async def resume_task(self, task_id: str) -> str:
+        """Phase 3-B: Handoff 파일 기반 태스크 재개.
+
+        resume_{task_id}.md 를 task_queue에 생성 → watchdog이 감지해 실행.
+        """
+        if task_id in self._active_tasks:
+            return (
+                f"❌ {task_id}이(가) 이미 실행 중입니다.\n"
+                f"- /running 으로 상태 확인"
+            )
+
+        handoff_path = self._handoffs_dir / f"{task_id}.md"
+        if not handoff_path.exists():
+            return (
+                f"❌ {task_id} handoff 없음\n\n"
+                f"먼저 /handoff {task_id} 로 생성하거나\n"
+                f"/adopt {task_id} 로 현재 작업을 편입하세요."
+            )
+
+        try:
+            content = handoff_path.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            return f"❌ handoff 읽기 실패\n{e}"
+
+        resume_content = _build_resume_prompt(task_id, content)
+
+        resume_path = self.task_queue_dir / f"resume_{task_id}.md"
+        try:
+            resume_path.write_text(resume_content, encoding="utf-8")
+        except OSError as e:
+            return f"❌ resume 파일 생성 실패\n{e}"
+
+        # 재처리 허용
+        self._processed_ids.discard(task_id)
+        self._failed_tasks.pop(task_id, None)
+        self._ready_to_ship.pop(task_id, None)
+
+        label = self._task_label(task_id)
+        return (
+            f"▶ {label} 재개 요청됨\n\n"
+            f"handoff 기반으로 이어서 실행합니다.\n\n"
+            f"진행 상황:\n"
+            f"- /running\n"
+            f"- /log {task_id}"
+        )
+
     async def ship_task(self, task_id: str) -> str:
         """Phase 1: READY_TO_SHIP 태스크를 직접 머지/푸시.
 
@@ -619,10 +867,16 @@ class Orchestrator:
             self._running_task = {}
 
         branch_str = f"\nbranch: {branch}" if branch else ""
+        # Phase 3-C: Handoff 자동 업데이트 (HELD)
+        self._update_handoff(
+            task_id,
+            current_status=f"HELD — branch 유지 중{branch_str}",
+            next_prompt=f"/resume {task_id} 로 이어서 진행",
+        )
         return (
             f"⏸️ {task_id} 보류 처리됨\n\n"
             f"branch는 유지됩니다.{branch_str}\n\n"
-            f"나중에 다시 처리하려면 태스크를 재실행해주세요."
+            f"나중에 다시 처리하려면:\n- /resume {task_id}"
         )
 
     # ── Phase 3 public methods ───────────────────────────────────────────
@@ -794,6 +1048,7 @@ class Orchestrator:
             "branch": "",
             "phase": "QUEUED",
             "log_dir": str(self._log_dir),
+            "task_title": task_title,   # Phase 3-C: handoff 자동 업데이트용
         }
 
         try:
@@ -851,6 +1106,8 @@ class Orchestrator:
             f"로그:\n- /log {task_id}\n\n"
             f"상태:\n- /running"
         )
+        # Phase 3-C: Handoff 자동 업데이트 (RUNNING)
+        self._update_handoff(task_id, current_status="RUNNING — Claude Code CLI 실행 중")
 
         # Claude Code CLI 실행 (최대 MAX_RETRIES)
         last_verdict: ReviewVerdict | None = None
@@ -918,6 +1175,13 @@ class Orchestrator:
                 f"구현은 완료되었습니다.\n"
                 f"Review Agent 검토를 진행합니다.\n\n"
                 f"로그:\n- /log {task_id}"
+            )
+            # Phase 3-C: Handoff 자동 업데이트 (REVIEWING)
+            changed_files = self._task_diffs.get(task_id, {}).get("changed_files", [])
+            self._update_handoff(
+                task_id,
+                current_status="REVIEWING — Review Agent 검토 중",
+                changed_files=changed_files or None,
             )
 
             # ReviewAgent 검토
@@ -1121,6 +1385,16 @@ class Orchestrator:
                 f"- /diff {task_id}\n"
                 f"- /log {task_id}"
             )
+            # Phase 3-C: Handoff 자동 업데이트 (READY_TO_SHIP)
+            _rts_files = self._task_diffs.get(task_id, {}).get("changed_files") or None
+            self._update_handoff(
+                task_id,
+                current_status="READY_TO_SHIP — 배포 승인 대기 중",
+                done_item="Review PASS",
+                next_prompt=f"/ship {task_id} 로 배포 승인",
+                changed_files=_rts_files,
+            )
+
             if self.notify_card_fn is not None:
                 try:
                     await self.notify_card_fn(card_text, task_id)
@@ -1169,6 +1443,13 @@ class Orchestrator:
         label = self._task_label(task_id)
         await self._notify(
             f"🚀 {label} 배포 완료\n\nmain merge/push 완료{sha_line}"
+        )
+        # Phase 3-C: Handoff 자동 업데이트 (SHIPPED)
+        self._update_handoff(
+            task_id,
+            current_status=f"SHIPPED{sha_line}",
+            done_item=f"main merge/push 완료{sha_line}",
+            next_prompt="배포 완료 — 추가 작업 없음",
         )
         print(f"[orchestrator] {task_id} — 배포 완료.")
 
@@ -1233,12 +1514,27 @@ class Orchestrator:
             if is_structural else ""
         )
         label = self._task_label(task_id)
+        # Phase 3-D: handoff 존재 여부 확인
+        _hf_path = self._handoffs_dir / f"{task_id}.md"
+        _hf_note = f"\n\nhandoff:\n{task_id}.md 존재" if _hf_path.exists() else ""
         card_text = (
             f"❌ {label} 실패\n\n"
             f"분류:\n- {category}\n\n"
             f"요약:\n- {reason}\n\n"
             f"추천:\n- {action}"
             f"{structural_note}"
+            f"{_hf_note}"
+        )
+
+        # Phase 3-C: Handoff 자동 업데이트 (FAILED)
+        self._update_handoff(
+            task_id,
+            current_status=f"FAILED: {category}",
+            risks=reason,
+            next_prompt=(
+                f"/resume {task_id} 로 이어서 진행\n"
+                f"또는 /adopt {task_id} 로 현재 상태 편입"
+            ),
         )
 
         # Phase 3: notify_failure_card_fn 우선, fallback → _notify
@@ -1364,6 +1660,115 @@ class Orchestrator:
             pass
 
     # ── Helpers ───────────────────────────────────────────────────────────
+
+    async def _get_current_branch(self) -> str:
+        """현재 git branch 이름 반환."""
+        repo = str(self.config.repo_path)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            return out.decode("utf-8", errors="replace").strip()
+        except Exception:
+            return ""
+
+    async def _get_files_vs_main(self) -> list[str]:
+        """main 대비 현재 branch의 커밋된 변경 파일 목록."""
+        repo = str(self.config.repo_path)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "-C", repo, "diff", "--name-only", "main..HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            return [l.strip() for l in out.decode("utf-8", errors="replace").splitlines() if l.strip()]
+        except Exception:
+            return []
+
+    def _update_handoff(
+        self,
+        task_id: str,
+        *,
+        current_status: str = "",
+        done_item: str = "",        # Done 섹션에 추가할 단일 항목
+        remaining: str = "",
+        risks: str = "",
+        next_prompt: str = "",
+        changed_files: list[str] | None = None,
+    ) -> None:
+        """Phase 3-C: 의미 있는 단계에서 Handoff 파일 자동 업데이트.
+
+        파일이 없으면 최소 포맷으로 새로 생성한다.
+        짧고 가볍게 유지 — 전체 diff/로그 삽입 금지.
+        """
+        try:
+            self._handoffs_dir.mkdir(parents=True, exist_ok=True)
+            handoff_path = self._handoffs_dir / f"{task_id}.md"
+            now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+            if handoff_path.exists():
+                content = handoff_path.read_text(encoding="utf-8", errors="replace")
+            else:
+                # 최소 포맷으로 신규 생성
+                task_title = ""
+                if self._running_task.get("task_id") == task_id:
+                    task_title = self._running_task.get("task_title", "")
+                branch = self._running_task.get("branch", "") if self._running_task.get("task_id") == task_id else ""
+                content = (
+                    f"# Handoff {task_id}\n\n"
+                    f"> 자동 생성: {now} | branch: {branch} | project: {self._current_project_id}\n\n"
+                    f"## Goal\n\n{task_title or task_id}\n\n"
+                    f"## Current Status\n\n(확인 필요)\n\n"
+                    f"## Changed Files\n\n변경 파일 추적 중\n\n"
+                    f"## Done\n\n-\n\n"
+                    f"## Remaining\n\n-\n\n"
+                    f"## Risks\n\n-\n\n"
+                    f"## Next Prompt\n\n-\n"
+                )
+
+            # Current Status 갱신
+            if current_status:
+                content = _replace_handoff_section(
+                    content, "Current Status",
+                    f"{current_status}\n\n(업데이트: {now})"
+                )
+
+            # Done 항목 추가 (append, 교체 아님)
+            if done_item:
+                existing_done = _extract_handoff_section(content, "Done").strip()
+                if existing_done in ("-", "", "<!-- 완료된 항목을 여기에 기입 -->"):
+                    new_done = f"- {done_item}"
+                else:
+                    new_done = f"{existing_done}\n- {done_item}"
+                content = _replace_handoff_section(content, "Done", new_done)
+
+            # Remaining 교체
+            if remaining:
+                content = _replace_handoff_section(content, "Remaining", remaining)
+
+            # Risks 교체
+            if risks:
+                content = _replace_handoff_section(content, "Risks", f"- {risks}")
+
+            # Next Prompt 교체
+            if next_prompt:
+                content = _replace_handoff_section(content, "Next Prompt", next_prompt)
+
+            # Changed Files 갱신
+            if changed_files is not None:
+                files_text = (
+                    "\n".join(f"- {f}" for f in changed_files[:20])
+                    or "변경 파일 없음"
+                )
+                content = _replace_handoff_section(content, "Changed Files", files_text)
+
+            handoff_path.write_text(content, encoding="utf-8")
+        except Exception as exc:
+            print(f"[orchestrator] handoff 업데이트 오류 {task_id}: {exc}")
 
     def _task_label(self, task_id: str) -> str:
         """Telegram 알림용 '{project_id}:{task_id}' 레이블.

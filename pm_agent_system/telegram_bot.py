@@ -57,6 +57,10 @@ HELP_TEXT = """\
   /ship T-ID  — READY_TO_SHIP 태스크 main 배포 승인
   /hold T-ID  — READY_TO_SHIP 태스크 보류 (branch 유지)
 
+[Adopt / Resume]
+  /adopt T-ID  — 직접 작업한 내용을 PM Bot에 편입
+  /resume T-ID — Handoff 기반 중단 작업 재개
+
 [멀티 프로젝트]
   /projects         — 등록된 프로젝트 목록
   /project ID       — 프로젝트 전환  예: /project ios_capture
@@ -123,6 +127,10 @@ class TelegramBot:
         self._app.add_handler(CommandHandler("ship", self._handle_ship))
         self._app.add_handler(CommandHandler("hold", self._handle_hold))
 
+        # Phase 3 명령
+        self._app.add_handler(CommandHandler("adopt",  self._handle_adopt))
+        self._app.add_handler(CommandHandler("resume", self._handle_resume))
+
         # Phase 4 명령
         self._app.add_handler(CommandHandler("diff", self._handle_diff))
 
@@ -150,6 +158,8 @@ class TelegramBot:
                 BotCommand("log",      "태스크 로그 출력  예: /log T-73"),
                 BotCommand("ship",     "배포 승인  예: /ship T-73"),
                 BotCommand("hold",     "배포 보류  예: /hold T-73"),
+                BotCommand("adopt",    "외부 작업 편입  예: /adopt T-91"),
+                BotCommand("resume",   "Handoff 기반 재개  예: /resume T-91"),
                 BotCommand("diff",     "Diff 요약  예: /diff T-73"),
                 BotCommand("projects", "프로젝트 목록"),
                 BotCommand("project",  "프로젝트 전환  예: /project ios_capture"),
@@ -187,26 +197,26 @@ class TelegramBot:
             return
 
         if no_retry:
-            # 구조적 실패: 재시도 버튼 제거, 안내 버튼으로 대체
+            # 구조적 실패: 재시도 불가 — Resume / Adopt 우선
             keyboard = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton("🚫 재시도 불가", callback_data=f"no_retry_info:{task_id}"),
-                    InlineKeyboardButton("🛑 중단", callback_data=f"cancel_task:{task_id}"),
+                    InlineKeyboardButton("▶ 이어서",  callback_data=f"resume_task:{task_id}"),
+                    InlineKeyboardButton("📥 편입",   callback_data=f"adopt_task:{task_id}"),
                 ],
                 [
                     InlineKeyboardButton("📌 브랜치 유지", callback_data=f"hold_branch:{task_id}"),
-                    InlineKeyboardButton("📄 로그 보기", callback_data=f"show_log:{task_id}"),
+                    InlineKeyboardButton("📄 handoff",    callback_data=f"show_handoff:{task_id}"),
                 ],
             ])
         else:
             keyboard = InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton("🔁 재시도", callback_data=f"retry_task:{task_id}"),
-                    InlineKeyboardButton("🛑 중단", callback_data=f"cancel_task:{task_id}"),
+                    InlineKeyboardButton("▶ 이어서",  callback_data=f"resume_task:{task_id}"),
                 ],
                 [
-                    InlineKeyboardButton("📌 브랜치 유지", callback_data=f"hold_branch:{task_id}"),
-                    InlineKeyboardButton("📄 로그 보기", callback_data=f"show_log:{task_id}"),
+                    InlineKeyboardButton("📥 편입",  callback_data=f"adopt_task:{task_id}"),
+                    InlineKeyboardButton("📄 handoff", callback_data=f"show_handoff:{task_id}"),
                 ],
             ])
 
@@ -479,6 +489,55 @@ class TelegramBot:
             logger.error("ship_task 오류: %s", exc)
             await self._reply(update, f"❌ 배포 처리 중 오류 발생\n{exc}")
 
+    # ── Phase 3 명령 핸들러 ──────────────────────────────────────────
+
+    async def _handle_adopt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/adopt T-ID — 외부 작업을 PM Bot에 편입."""
+        if self.orchestrator is None:
+            await self._reply(update, "Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        args = context.args or []
+        if not args:
+            await self._reply(update, "사용법: /adopt T-ID\n예: /adopt T-91")
+            return
+
+        task_id = args[0].strip()
+        if not task_id:
+            await self._reply(update, "태스크 ID를 입력하세요.\n예: /adopt T-91")
+            return
+
+        await self._reply(update, f"📥 {task_id} 편입 처리 중...")
+        try:
+            result = await self.orchestrator.adopt_task(task_id)
+            await self._reply(update, result)
+        except Exception as exc:
+            logger.error("adopt_task 오류: %s", exc)
+            await self._reply(update, f"❌ 편입 처리 중 오류 발생\n{exc}")
+
+    async def _handle_resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/resume T-ID — Handoff 기반 태스크 재개."""
+        if self.orchestrator is None:
+            await self._reply(update, "Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        args = context.args or []
+        if not args:
+            await self._reply(update, "사용법: /resume T-ID\n예: /resume T-91")
+            return
+
+        task_id = args[0].strip()
+        if not task_id:
+            await self._reply(update, "태스크 ID를 입력하세요.\n예: /resume T-91")
+            return
+
+        try:
+            result = await self.orchestrator.resume_task(task_id)
+            await self._reply(update, result)
+        except Exception as exc:
+            logger.error("resume_task 오류: %s", exc)
+            await self._reply(update, f"❌ 재개 처리 중 오류 발생\n{exc}")
+
     async def _handle_hold(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """/hold T-ID — READY_TO_SHIP 태스크 보류 (branch 유지, main 머지 없음)."""
         if self.orchestrator is None:
@@ -687,13 +746,16 @@ class TelegramBot:
             await self._reply(update, f"❌ Handoff 생성 실패\n{exc}")
             return
 
-        await self._reply(
-            update,
-            f"📎 Handoff 생성 완료\n\n"
-            f"태스크: {task_id}\n"
-            f"파일: {handoff_path}\n\n"
-            f"Done / Remaining / Risks / Next Prompt 섹션을 직접 편집하세요."
-        )
+        # Phase 3-E: 생성 확인 + 요약 표시
+        try:
+            summary = self.orchestrator.get_handoff_summary(task_id) if self.orchestrator else ""
+        except Exception:
+            summary = ""
+
+        confirm = f"📎 Handoff 생성/갱신 완료\n파일: {handoff_path}"
+        await self._reply(update, confirm)
+        if summary:
+            await self._reply(update, summary)
 
     # ── Phase 2: Inline button callback ──────────────────────────────
 
@@ -759,6 +821,30 @@ class TelegramBot:
                     await query.edit_message_reply_markup(reply_markup=None)
                 except Exception:
                     pass
+
+            # ── Phase 3-A/B/E callbacks ────────────────────────────────
+            elif action == "adopt_task":
+                await self._cb_reply(query, f"📥 {task_id} 편입 처리 중...")
+                result = await self.orchestrator.adopt_task(task_id)
+                await self._cb_reply(query, result)
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            elif action == "resume_task":
+                result = await self.orchestrator.resume_task(task_id)
+                await self._cb_reply(query, result)
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+
+            elif action == "show_handoff":
+                summary = self.orchestrator.get_handoff_summary(task_id)
+                if len(summary) > 4000:
+                    summary = summary[:4000] + "\n...(이하 생략)"
+                await self._cb_reply(query, summary)
 
             # ── Phase 3 callbacks ──────────────────────────────────────
             elif action == "retry_task":
