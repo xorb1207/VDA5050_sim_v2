@@ -26,6 +26,7 @@ mockup_blob_*.js
 # PM Agent System — runtime dirs & secrets
 pm_agent_system/.env
 pm_agent_system/state/
+state/
 pm_agent_system/completed/
 pm_agent_system/logs/
 pm_agent_system/task_queue/
