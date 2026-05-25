@@ -817,8 +817,9 @@ class Orchestrator:
     ) -> None:
         """실제 태스크 실행 로직."""
         # Phase 1: QUEUED 알림
+        label = self._task_label(task_id)
         await self._notify(
-            f"📋 {task_id} 대기열 등록\n\n"
+            f"📋 {label} 대기열 등록\n\n"
             f"목표:\n- {task_title}\n\n"
             f"로그:\n- /log {task_id}"
         )
@@ -843,8 +844,9 @@ class Orchestrator:
 
         # Phase 1: RUNNING 알림
         self._running_task["phase"] = "RUNNING"
+        label = self._task_label(task_id)
         await self._notify(
-            f"⏳ {task_id} 진행 중\n\n"
+            f"⏳ {label} 진행 중\n\n"
             f"현재 단계:\n- Claude Code CLI 실행 중\n\n"
             f"로그:\n- /log {task_id}\n\n"
             f"상태:\n- /running"
@@ -910,8 +912,9 @@ class Orchestrator:
 
             # Phase 1: REVIEWING 알림
             self._running_task["phase"] = "REVIEWING"
+            label = self._task_label(task_id)
             await self._notify(
-                f"🧪 {task_id} 리뷰 중\n\n"
+                f"🧪 {label} 리뷰 중\n\n"
                 f"구현은 완료되었습니다.\n"
                 f"Review Agent 검토를 진행합니다.\n\n"
                 f"로그:\n- /log {task_id}"
@@ -1108,12 +1111,14 @@ class Orchestrator:
             }
             self._running_task["phase"] = "READY_TO_SHIP"
 
+            label = self._task_label(task_id)
             card_text = (
-                f"✅ {task_id} 리뷰 통과\n\n"
+                f"✅ {label} 리뷰 통과\n\n"
                 f"main에는 아직 반영하지 않았습니다.\n"
                 f"Ship 승인이 필요합니다.\n\n"
                 f"명령:\n"
                 f"- /ship {task_id}\n"
+                f"- /diff {task_id}\n"
                 f"- /log {task_id}"
             )
             if self.notify_card_fn is not None:
@@ -1161,8 +1166,9 @@ class Orchestrator:
 
         commit_sha = result.get("commit_sha", "") if self.git_manager else ""
         sha_line = f"\ncommit: {commit_sha}" if commit_sha else ""
+        label = self._task_label(task_id)
         await self._notify(
-            f"🚀 {task_id} 배포 완료\n\nmain merge/push 완료{sha_line}"
+            f"🚀 {label} 배포 완료\n\nmain merge/push 완료{sha_line}"
         )
         print(f"[orchestrator] {task_id} — 배포 완료.")
 
@@ -1226,8 +1232,9 @@ class Orchestrator:
             "\n⚠️ 구조적 차단 — 자동 재시도하지 않음\n태스크 범위를 수정해 새 태스크로 요청하세요."
             if is_structural else ""
         )
+        label = self._task_label(task_id)
         card_text = (
-            f"❌ {task_id} 실패\n\n"
+            f"❌ {label} 실패\n\n"
             f"분류:\n- {category}\n\n"
             f"요약:\n- {reason}\n\n"
             f"추천:\n- {action}"
@@ -1357,6 +1364,15 @@ class Orchestrator:
             pass
 
     # ── Helpers ───────────────────────────────────────────────────────────
+
+    def _task_label(self, task_id: str) -> str:
+        """Telegram 알림용 '{project_id}:{task_id}' 레이블.
+
+        project_id가 설정되어 있으면 접두사를 붙인다.
+        단일 프로젝트 모드에서는 task_id 그대로 반환.
+        """
+        pid = self._current_project_id
+        return f"{pid}:{task_id}" if pid else task_id
 
     async def _notify(self, text: str) -> None:
         """notify_fn이 있으면 Telegram 알림 전송."""

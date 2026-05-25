@@ -55,6 +55,7 @@ HELP_TEXT = """\
 
 [배포 제어]
   /ship T-ID  — READY_TO_SHIP 태스크 main 배포 승인
+  /hold T-ID  — READY_TO_SHIP 태스크 보류 (branch 유지)
 
 [멀티 프로젝트]
   /projects         — 등록된 프로젝트 목록
@@ -120,6 +121,7 @@ class TelegramBot:
 
         # Phase 1 명령
         self._app.add_handler(CommandHandler("ship", self._handle_ship))
+        self._app.add_handler(CommandHandler("hold", self._handle_hold))
 
         # Phase 4 명령
         self._app.add_handler(CommandHandler("diff", self._handle_diff))
@@ -147,6 +149,7 @@ class TelegramBot:
                 BotCommand("running",  "현재 실행 중인 태스크 확인"),
                 BotCommand("log",      "태스크 로그 출력  예: /log T-73"),
                 BotCommand("ship",     "배포 승인  예: /ship T-73"),
+                BotCommand("hold",     "배포 보류  예: /hold T-73"),
                 BotCommand("diff",     "Diff 요약  예: /diff T-73"),
                 BotCommand("projects", "프로젝트 목록"),
                 BotCommand("project",  "프로젝트 전환  예: /project ios_capture"),
@@ -475,6 +478,29 @@ class TelegramBot:
         except Exception as exc:
             logger.error("ship_task 오류: %s", exc)
             await self._reply(update, f"❌ 배포 처리 중 오류 발생\n{exc}")
+
+    async def _handle_hold(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/hold T-ID — READY_TO_SHIP 태스크 보류 (branch 유지, main 머지 없음)."""
+        if self.orchestrator is None:
+            await self._reply(update, "Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        args = context.args or []
+        if not args:
+            await self._reply(update, "사용법: /hold T-ID\n예: /hold T-73")
+            return
+
+        task_id = args[0].strip()
+        if not task_id:
+            await self._reply(update, "태스크 ID를 입력하세요.\n예: /hold T-73")
+            return
+
+        try:
+            result = self.orchestrator.hold_task(task_id)
+            await self._reply(update, result)
+        except Exception as exc:
+            logger.error("hold_task 오류: %s", exc)
+            await self._reply(update, f"❌ 보류 처리 중 오류 발생\n{exc}")
 
     # ── Phase 4 명령 핸들러 ───────────────────────────────────────────
 
