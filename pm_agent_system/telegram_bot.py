@@ -58,7 +58,8 @@ HELP_TEXT = """\
   /hold T-ID  — READY_TO_SHIP 태스크 보류 (branch 유지)
 
 [Adopt / Resume]
-  /adopt T-ID  — 직접 작업한 내용을 PM Bot에 편입
+  /adopt T-ID  — 직접 작업한 내용을 PM Bot에 편입 (ADOPTED)
+  /review T-ID — ADOPTED 태스크 Review Agent 검토 (→ READY_TO_SHIP)
   /resume T-ID — Handoff 기반 중단 작업 재개
 
 [멀티 프로젝트]
@@ -127,9 +128,10 @@ class TelegramBot:
         self._app.add_handler(CommandHandler("ship", self._handle_ship))
         self._app.add_handler(CommandHandler("hold", self._handle_hold))
 
-        # Phase 3 명령
-        self._app.add_handler(CommandHandler("adopt",  self._handle_adopt))
-        self._app.add_handler(CommandHandler("resume", self._handle_resume))
+        # Phase 3 / 3.5 명령
+        self._app.add_handler(CommandHandler("adopt",   self._handle_adopt))
+        self._app.add_handler(CommandHandler("review",  self._handle_review))
+        self._app.add_handler(CommandHandler("resume",  self._handle_resume))
 
         # Phase 4 명령
         self._app.add_handler(CommandHandler("diff", self._handle_diff))
@@ -158,7 +160,8 @@ class TelegramBot:
                 BotCommand("log",      "태스크 로그 출력  예: /log T-73"),
                 BotCommand("ship",     "배포 승인  예: /ship T-73"),
                 BotCommand("hold",     "배포 보류  예: /hold T-73"),
-                BotCommand("adopt",    "외부 작업 편입  예: /adopt T-91"),
+                BotCommand("adopt",    "외부 작업 편입 (ADOPTED)  예: /adopt T-91"),
+                BotCommand("review",   "ADOPTED → Review Agent  예: /review T-91"),
                 BotCommand("resume",   "Handoff 기반 재개  예: /resume T-91"),
                 BotCommand("diff",     "Diff 요약  예: /diff T-73"),
                 BotCommand("projects", "프로젝트 목록"),
@@ -514,6 +517,30 @@ class TelegramBot:
         except Exception as exc:
             logger.error("adopt_task 오류: %s", exc)
             await self._reply(update, f"❌ 편입 처리 중 오류 발생\n{exc}")
+
+    async def _handle_review(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/review T-ID — ADOPTED 태스크 Review Agent 검토 (→ READY_TO_SHIP 또는 FAILED)."""
+        if self.orchestrator is None:
+            await self._reply(update, "Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        args = context.args or []
+        if not args:
+            await self._reply(update, "사용법: /review T-ID\n예: /review T-91")
+            return
+
+        task_id = args[0].strip()
+        if not task_id:
+            await self._reply(update, "태스크 ID를 입력하세요.\n예: /review T-91")
+            return
+
+        await self._reply(update, f"🧪 {task_id} Review Agent 검토 시작...")
+        try:
+            result = await self.orchestrator.review_adopted_task(task_id)
+            await self._reply(update, result)
+        except Exception as exc:
+            logger.error("review_adopted_task 오류: %s", exc)
+            await self._reply(update, f"❌ 리뷰 처리 중 오류 발생\n{exc}")
 
     async def _handle_resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """/resume T-ID — Handoff 기반 태스크 재개."""

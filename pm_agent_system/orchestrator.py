@@ -469,6 +469,9 @@ class Orchestrator:
         # Phase 1: READY_TO_SHIP 대기 중인 태스크
         self._ready_to_ship: dict[str, dict] = {}
 
+        # Phase 3.5: ADOPTED 태스크 (Review 전 중간 상태)
+        self._adopted_tasks: dict[str, dict] = {}
+
         # Phase 3: 실패 태스크 정보 (retry/hold_branch/cancel용)
         self._failed_tasks: dict[str, dict] = {}
         # 현재 실행 중인 subprocess (cancel용)
@@ -619,6 +622,14 @@ class Orchestrator:
                     "created_at": created_at,
                 }
 
+        # ADOPTED 태스크 (Phase 3.5)
+        for tid, info in self._adopted_tasks.items():
+            active[tid] = {
+                "status": "ADOPTED",
+                "branch": info.get("branch", ""),
+                "created_at": info.get("adopted_at", ""),
+            }
+
         # READY_TO_SHIP 태스크
         for tid, info in self._ready_to_ship.items():
             active[tid] = {
@@ -694,58 +705,45 @@ class Orchestrator:
             return f"❌ handoff 읽기 실패\n{e}"
 
     async def adopt_task(self, task_id: str) -> str:
-        """Phase 3-A: 외부 작업을 PM Bot에 편입 (ADOPTED → READY_TO_SHIP).
+        """Phase 3.5: 외부 작업을 PM Bot에 편입 — ADOPTED 상태로 보관.
 
-        현재 repo의 git status / diff 수집 후 _ready_to_ship에 등록.
-        자동 merge 없음 — /ship T-ID 로 승인 후 merge.
+        git status / diff 수집 후 _adopted_tasks에 저장.
+        READY_TO_SHIP 직접 진입 금지.
+        후속: /review T-ID (Review Agent) 또는 /resume T-ID (CLI 재실행).
         """
         if task_id in self._active_tasks:
             return (
                 f"❌ {task_id}이(가) 이미 실행 중입니다.\n"
                 f"- /running 으로 상태 확인"
             )
+        if task_id in self._adopted_tasks:
+            return (
+                f"ℹ️ {task_id}은(는) 이미 ADOPTED 상태입니다.\n"
+                f"- /review {task_id} 로 Review Agent 검토\n"
+                f"- /resume {task_id} 로 이어서 작업"
+            )
 
-        # 현재 branch + 미커밋 diff 수집
+        # 현재 branch + 미커밋/미머지 diff 수집
         branch = await self._get_current_branch()
         diff_info = await self._collect_git_diff(branch)
-
-        # 커밋됐지만 main과 다른 파일도 추가 수집
         vs_main_files = await self._get_files_vs_main()
         all_changed = list(dict.fromkeys(
             diff_info.get("changed_files", []) + vs_main_files
         ))
         diff_info["changed_files"] = all_changed
 
-        # _ready_to_ship에 등록
-        from schemas import CompletedPacket as _CP
-        packet = _CP(
-            task_id=task_id,
-            agent_id="external-work",
-            files_changed=all_changed,
-            code_diff="",
-            test_result="(외부 작업 편입 — 별도 테스트 없음)",
-            agent_notes=f"Adopted from branch: {branch or 'main'}",
-            timestamp=datetime.now().isoformat(),
-        )
-        stored_path = self.task_queue_dir / f"adopted_{task_id}.md"
-        commit_message = _build_commit_message(
-            task_id,
-            f"# {task_id}\n\nAdopted external work on branch {branch or 'main'}",
-        )
-        self._ready_to_ship[task_id] = {
+        # _adopted_tasks에 보관 (아직 READY_TO_SHIP 아님)
+        task_content = f"# {task_id}\n\nAdopted from branch: {branch or 'main'}"
+        self._adopted_tasks[task_id] = {
             "task_id": task_id,
-            "task_path": stored_path,
-            "task_content": f"# {task_id}\n\nAdopted from branch: {branch or 'main'}",
-            "packet": packet,
-            "commit_message": commit_message,
             "branch": branch,
-            "ready_at": datetime.now().isoformat(),
+            "task_content": task_content,
             "diff_info": diff_info,
-            "adopted": True,
+            "adopted_at": datetime.now().isoformat(),
         }
         self._task_diffs[task_id] = diff_info
         self._save_diff_info(task_id, diff_info)
-        self._processed_ids.add(task_id)  # 중복 실행 방지
+        self._processed_ids.add(task_id)  # 정상 task_queue 경로로 중복 실행 방지
 
         # Handoff 자동 업데이트 (ADOPTED)
         self._update_handoff(
@@ -753,8 +751,8 @@ class Orchestrator:
             current_status=f"ADOPTED — branch: {branch or 'main'}",
             changed_files=all_changed or None,
             next_prompt=(
-                f"/diff {task_id} 로 변경 확인\n"
-                f"/ship {task_id} 로 배포 승인"
+                f"/review {task_id} 로 Review Agent 검토\n"
+                f"또는 /resume {task_id} 로 이어서 작업"
             ),
         )
 
@@ -767,15 +765,166 @@ class Orchestrator:
             files_text += f"\n... 외 {len(all_changed) - 10}개"
 
         return (
-            f"📥 {label} 작업 편입 완료\n\n"
+            f"📥 {label} 편입 완료\n\n"
             f"branch:\n{branch or '(확인 불가)'}\n\n"
             f"변경 파일:\n{files_text}\n\n"
-            f"상태:\nREADY_TO_SHIP (수동 /ship 필요)\n\n"
+            f"상태:\nADOPTED\n\n"
             f"다음:\n"
-            f"- /diff {task_id}\n"
-            f"- /ship {task_id}\n"
+            f"- /review {task_id}\n"
+            f"- /resume {task_id}\n"
             f"- /handoff {task_id}"
         )
+
+    async def review_adopted_task(self, task_id: str) -> str:
+        """Phase 3.5: ADOPTED 태스크를 Review Agent로 검토.
+
+        PASS → _ready_to_ship (READY_TO_SHIP)
+        FAIL → FAILED 카드 전송
+
+        ADOPTED → REVIEWING → READY_TO_SHIP 또는 FAILED
+        """
+        if task_id not in self._adopted_tasks:
+            if task_id in self._ready_to_ship:
+                return (
+                    f"ℹ️ {task_id}은(는) 이미 READY_TO_SHIP 상태입니다.\n"
+                    f"/ship {task_id} 로 배포 승인하세요."
+                )
+            return (
+                f"❌ {task_id}은(는) ADOPTED 상태가 아닙니다.\n"
+                f"먼저 /adopt {task_id} 를 실행하세요.\n"
+                f"현재 ADOPTED: {list(self._adopted_tasks.keys()) or '없음'}"
+            )
+
+        info = self._adopted_tasks[task_id]
+        branch = info.get("branch", "")
+        task_content = info.get("task_content", f"# {task_id}")
+        label = self._task_label(task_id)
+
+        # REVIEWING 알림
+        await self._notify(
+            f"🧪 {label} 리뷰 중 (Adopted)\n\n"
+            f"git diff 기반 Review Agent 검토 중...\n\n"
+            f"branch: {branch or '(확인 중)'}"
+        )
+        self._update_handoff(task_id, current_status="REVIEWING — Adopted task Review Agent 검토 중")
+
+        # 최신 diff 재수집 (adopt 시점과 달라졌을 수 있음)
+        diff_info = await self._collect_git_diff(branch)
+        vs_main = await self._get_files_vs_main()
+        all_changed = list(dict.fromkeys(diff_info.get("changed_files", []) + vs_main))
+        diff_info["changed_files"] = all_changed
+        self._task_diffs[task_id] = diff_info
+
+        # CompletedPacket 구성
+        packet = CompletedPacket(
+            task_id=task_id,
+            agent_id="external-work",
+            files_changed=all_changed,
+            code_diff="",
+            test_result="(Adopted task 리뷰 — git diff 기반)",
+            agent_notes=f"branch: {branch or 'main'}",
+            timestamp=datetime.now().isoformat(),
+            actual_diff=diff_info.get("actual_diff", "")[:12000],
+            git_status=diff_info.get("git_status", ""),
+            diff_stat=diff_info.get("diff_stat", ""),
+            diff_numstat=diff_info.get("diff_numstat", ""),
+            name_status=diff_info.get("name_status_raw", ""),
+            review_target="actual_git_diff",
+        )
+
+        # Review Agent 실행
+        if self.review_agent is not None:
+            spec_context = self._load_spec_context()
+            verdict = await self.review_agent.review(
+                spec_context=spec_context,
+                completed_packet=packet,
+            )
+        else:
+            verdict = ReviewVerdict(
+                verdict="PASS",
+                task_id=task_id,
+                notes="review_agent 없음 — 자동 PASS",
+            )
+
+        print(f"[orchestrator] {task_id} (adopted) — verdict: {verdict.verdict}")
+
+        if verdict.verdict == "PASS":
+            # ADOPTED → READY_TO_SHIP
+            commit_message = _build_commit_message(task_id, task_content)
+            stored_path = self.task_queue_dir / f"adopted_{task_id}.md"
+
+            self._ready_to_ship[task_id] = {
+                "task_id": task_id,
+                "task_path": stored_path,
+                "task_content": task_content,
+                "packet": packet,
+                "commit_message": commit_message,
+                "branch": branch,
+                "ready_at": datetime.now().isoformat(),
+                "diff_info": diff_info,
+                "adopted": True,
+            }
+            self._adopted_tasks.pop(task_id, None)
+
+            self._update_handoff(
+                task_id,
+                current_status="READY_TO_SHIP — 배포 승인 대기 중",
+                done_item="Adopted task Review PASS",
+                next_prompt=f"/ship {task_id} 로 배포 승인",
+                changed_files=all_changed or None,
+            )
+
+            card_text = (
+                f"✅ {label} 리뷰 통과 (Adopted)\n\n"
+                f"main에는 아직 반영하지 않았습니다.\n"
+                f"Ship 승인이 필요합니다.\n\n"
+                f"명령:\n"
+                f"- /ship {task_id}\n"
+                f"- /diff {task_id}\n"
+                f"- /log {task_id}"
+            )
+            if self.notify_card_fn is not None:
+                try:
+                    await self.notify_card_fn(card_text, task_id)
+                except Exception as e:
+                    print(f"[orchestrator] notify_card_fn 실패, fallback: {e}")
+                    await self._notify(card_text)
+            else:
+                await self._notify(card_text)
+
+            return (
+                f"✅ {label} 리뷰 통과 → READY_TO_SHIP\n\n"
+                f"/ship {task_id} 로 배포 승인하세요."
+            )
+
+        else:
+            # FAIL
+            reason = _short_reason(verdict)
+            category = _classify_failure(0, verdict)
+            action = _recommended_action(category)
+
+            self._update_handoff(
+                task_id,
+                current_status=f"REVIEW FAILED: {category}",
+                risks=reason,
+                next_prompt=f"/resume {task_id} 로 수정 후 재시도",
+            )
+
+            card_text = (
+                f"❌ {label} 리뷰 실패 (Adopted)\n\n"
+                f"분류:\n- {category}\n\n"
+                f"요약:\n- {reason}\n\n"
+                f"추천:\n- {action}"
+            )
+            if self.notify_failure_card_fn is not None:
+                try:
+                    await self.notify_failure_card_fn(card_text, task_id, no_retry=False)
+                except Exception as e:
+                    await self._notify(card_text)
+            else:
+                await self._notify(card_text)
+
+            return f"❌ {label} 리뷰 실패\n{reason}"
 
     async def resume_task(self, task_id: str) -> str:
         """Phase 3-B: Handoff 파일 기반 태스크 재개.
@@ -828,6 +977,15 @@ class Orchestrator:
 
         Returns: 결과 메시지 문자열
         """
+        # Phase 3.5: ADOPTED 상태는 /review 먼저 필요
+        if task_id in self._adopted_tasks:
+            return (
+                f"❌ {task_id}은(는) ADOPTED 상태입니다.\n\n"
+                f"READY_TO_SHIP 직접 진입 금지.\n"
+                f"먼저 Review를 통과해야 합니다:\n"
+                f"- /review {task_id}\n"
+                f"- /resume {task_id}"
+            )
         if task_id not in self._ready_to_ship:
             return f"❌ {task_id}은(는) READY_TO_SHIP 상태가 아닙니다.\n현재 READY_TO_SHIP: {list(self._ready_to_ship.keys()) or '없음'}"
 
