@@ -918,12 +918,19 @@ class Orchestrator:
 
         stdout_buffer: list[str] = []
 
+        # Claude Code CLI subprocess 환경: ANTHROPIC_API_KEY를 제거해
+        # CLI가 API 과금 대신 OAuth(구독) 인증을 사용하도록 강제.
+        # ReviewAgent/PMAgent는 별도 AsyncAnthropic 클라이언트로 API key 사용.
+        import os as _os
+        cli_env = {k: v for k, v in _os.environ.items() if k != "ANTHROPIC_API_KEY"}
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(cfg.repo_path),
+                env=cli_env,
             )
             self._current_proc = proc  # Phase 3: cancel용 참조 저장
 
