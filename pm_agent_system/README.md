@@ -47,6 +47,15 @@ python main.py --status  # 현재 상태만 출력 후 종료
 | `/diff T-ID` | 태스크 git diff 요약 + 스니펫 |
 | `/status` | 시스템 상태 |
 
+### 이력 / 통계 (Batch 6)
+
+| 명령 | 설명 |
+|------|------|
+| `/history` | 최근 archive 목록 (SHIPPED/FAILED 최신 5개씩) |
+| `/stats` | 전체 통계 (pass rate, avg 소요시간, 프로젝트별 현황) |
+| `/stale` | 장시간 방치된 작업 감지 (HELD 7일+, RTS 3일+, ADOPTED 5일+) |
+| `/archive T-ID` | 태스크 파일·로그를 압축 archive에 수동 저장 |
+
 ### 배포 제어
 
 | 명령 | 설명 |
@@ -177,6 +186,10 @@ Claude Code CLI로 직접 작업 완료 (branch: feature/T-91)
 | `ANTHROPIC_MODEL` | `claude-haiku-4-5` | ReviewAgent 모델 |
 | `NOTIFICATION_LEVEL` | `NORMAL` | VERBOSE / NORMAL / QUIET |
 | `DRY_RUN` | `false` | true: git 작업 없이 시뮬레이션 |
+| `LOG_RETENTION_DAYS` | `30` | 로그 파일 보존 일수 (0=삭제 안 함) |
+| `ARCHIVE_RETENTION_DAYS` | `90` | archive 보존 일수 (0=삭제 안 함) |
+| `DAILY_REPORT` | `false` | true: 매일 `DAILY_REPORT_HOUR`시에 요약 Telegram 전송 |
+| `DAILY_REPORT_HOUR` | `9` | 일일 요약 전송 시각 (0-23, 로컬 시간) |
 
 ---
 
@@ -249,5 +262,12 @@ pm_agent_system/
   completed/        완료된 태스크 JSON
   logs/tasks/       태스크별 로그
   handoffs/         Handoff 파일
+  archive/          완료/실패 태스크 압축 archive
+    {task_id}/
+      meta.json     태스크 메타 + 상태
+      handoff.md    Handoff 사본
+      *.log.gz      로그 gzip 압축본
+      *.diff        git diff 파일
+  stats.json        누적 작업 통계 (최근 500건)
   tests/            자동화 테스트
 ```

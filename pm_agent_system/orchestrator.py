@@ -24,6 +24,8 @@ from schemas import TaskPacket, CompletedPacket, ReviewVerdict, FileFinding
 from git_manager import GitManager
 from review_agent import ReviewAgent
 from config import Config
+from archive_manager import ArchiveManager
+from stats_tracker import StatsTracker
 
 
 CLI_TIMEOUT_S = 3600   # 1시간 (subscription 모드)
@@ -526,6 +528,8 @@ class Orchestrator:
 
         # Phase 3: 실패 태스크 정보 (retry/hold_branch/cancel용)
         self._failed_tasks: dict[str, dict] = {}
+        # Batch 6: HELD 태스크 추적 (stale 감지용)
+        self._held_tasks: dict[str, dict] = {}
         # 현재 실행 중인 subprocess (cancel용)
         self._current_proc: asyncio.subprocess.Process | None = None  # type: ignore[type-arg]
         # cancel 요청된 task_id 집합
@@ -535,6 +539,9 @@ class Orchestrator:
 
         # Phase 4: 태스크별 git diff 정보 (/diff T-ID 및 리뷰용)
         self._task_diffs: dict[str, dict] = {}
+
+        # Batch 6: 태스크 시작 시각 (통계용)
+        self._task_started_at: dict[str, datetime] = {}
 
         # Phase 0.5: 프로젝트 전환 지원
         self._current_project_id: str = ""
@@ -547,6 +554,27 @@ class Orchestrator:
             else base / "handoffs"
         )
         self._handoffs_dir.mkdir(parents=True, exist_ok=True)
+
+        # Batch 6: Archive / Stats
+        self._archive_dir: Path = base / "archive"
+        self._archive_mgr = ArchiveManager(
+            archive_dir=self._archive_dir,
+            logs_dir=self._log_dir,
+            handoffs_dir=self._handoffs_dir,
+        )
+        self._stats = StatsTracker(stats_path=base / "stats.json")
+
+        # 시작 시 오래된 로그/archive 정리
+        _log_ret = cfg.log_retention_days
+        _arc_ret = cfg.archive_retention_days
+        if _log_ret > 0:
+            _removed_logs = self._archive_mgr.cleanup_old_logs(_log_ret)
+            if _removed_logs:
+                print(f"[orchestrator] 오래된 로그 {len(_removed_logs)}개 삭제 (>{_log_ret}일)")
+        if _arc_ret > 0:
+            _removed_arc = self._archive_mgr.cleanup_old_archives(_arc_ret)
+            if _removed_arc:
+                print(f"[orchestrator] 오래된 archive {len(_removed_arc)}개 삭제 (>{_arc_ret}일)")
 
         # Stale lock pre-populate — 중복 실행 방지
         for f in self.completed_dir.glob("*_completed.json"):
@@ -690,12 +718,22 @@ class Orchestrator:
                 "created_at": info.get("ready_at", ""),
             }
 
+        # HELD 태스크 (Batch 6)
+        held: dict[str, dict] = {}
+        for tid, info in self._held_tasks.items():
+            held[tid] = {
+                "status": "HELD",
+                "branch": info.get("branch", ""),
+                "created_at": info.get("held_at", ""),
+            }
+
         completed = []
         if self.git_manager is not None:
             completed = self.git_manager.get_state().get("completed_tasks", [])
 
         return {
             "active_tasks": active,
+            "held_tasks": held,
             "queued_tasks": list(self._active_tasks.keys()),
             "completed_tasks": completed,
         }
@@ -705,6 +743,120 @@ class Orchestrator:
         if not self._running_task:
             return None
         return dict(self._running_task)
+
+    # ── Batch 6 공개 메서드 ──────────────────────────────────────────
+
+    async def archive_task_manual(self, task_id: str) -> str:
+        """Phase 6-A: 수동 /archive T-ID — 태스크 파일을 archive에 저장.
+
+        SHIPPED/FAILED/HELD 모든 상태에서 호출 가능.
+        이미 archive된 경우 덮어쓰기.
+        """
+        # 현재 상태 판별
+        if task_id in self._ready_to_ship:
+            status = "READY_TO_SHIP"
+        elif task_id in self._adopted_tasks:
+            status = "ADOPTED"
+        elif task_id in self._held_tasks:
+            status = "HELD"
+        elif task_id in self._failed_tasks:
+            status = "FAILED"
+        else:
+            # git_manager completed 확인
+            status = "UNKNOWN"
+            if self.git_manager is not None:
+                completed = self.git_manager.get_state().get("completed_tasks", [])
+                if any(t.get("task_id") == task_id for t in completed):
+                    status = "SHIPPED"
+
+        label = self._task_label(task_id)
+        try:
+            arc_path = self._archive_mgr.archive_task(
+                task_id, status,
+                metadata={"project_id": self._current_project_id},
+            )
+            return (
+                f"📦 {label} archive 완료\n\n"
+                f"상태: {status}\n"
+                f"경로: {arc_path}\n\n"
+                f"/history 로 확인하세요."
+            )
+        except Exception as exc:
+            return f"❌ {label} archive 실패\n{exc}"
+
+    def get_history(self, limit: int = 20) -> list[dict]:
+        """Phase 6-A: archive 목록 반환 (최신순)."""
+        return self._archive_mgr.list_history(limit=limit)
+
+    def get_stats_summary(self) -> dict:
+        """Phase 6-B: 통계 집계 반환."""
+        return self._stats.get_summary()
+
+    def get_today_stats(self) -> dict:
+        """Phase 6-D: 오늘 통계 반환."""
+        return self._stats.get_today_summary()
+
+    def get_stale_tasks(self) -> list[dict]:
+        """Phase 6-C: 오래된 작업 감지.
+
+        기준:
+          HELD       → 7일 이상
+          READY_TO_SHIP → 3일 이상
+          ADOPTED    → 5일 이상
+        """
+        from datetime import timedelta
+
+        stale: list[dict] = []
+        now = datetime.now()
+
+        thresholds = {
+            "HELD":          timedelta(days=7),
+            "READY_TO_SHIP": timedelta(days=3),
+            "ADOPTED":       timedelta(days=5),
+        }
+
+        def _elapsed_days(iso_str: str) -> float:
+            try:
+                return (now - datetime.fromisoformat(iso_str)).total_seconds() / 86_400
+            except Exception:
+                return 0.0
+
+        for tid, info in self._held_tasks.items():
+            days = _elapsed_days(info.get("held_at", ""))
+            if days >= thresholds["HELD"].days:
+                stale.append({
+                    "task_id": self._task_label(tid),
+                    "status": "HELD",
+                    "days": round(days, 1),
+                    "branch": info.get("branch", ""),
+                    "next": [f"/resume {tid}", f"/archive {tid}", f"/cancel {tid}"],
+                })
+
+        for tid, info in self._ready_to_ship.items():
+            days = _elapsed_days(info.get("ready_at", ""))
+            if days >= thresholds["READY_TO_SHIP"].days:
+                stale.append({
+                    "task_id": self._task_label(tid),
+                    "status": "READY_TO_SHIP",
+                    "days": round(days, 1),
+                    "branch": info.get("branch", ""),
+                    "next": [f"/ship {tid}", f"/hold {tid}"],
+                })
+
+        for tid, info in self._adopted_tasks.items():
+            days = _elapsed_days(info.get("adopted_at", ""))
+            if days >= thresholds["ADOPTED"].days:
+                stale.append({
+                    "task_id": self._task_label(tid),
+                    "status": "ADOPTED",
+                    "days": round(days, 1),
+                    "branch": info.get("branch", ""),
+                    "next": [f"/review {tid}", f"/resume {tid}", f"/archive {tid}"],
+                })
+
+        # 경과 일수 내림차순
+        stale.sort(key=lambda x: x["days"], reverse=True)
+        return stale
 
     async def get_doctor_info(self) -> dict:
         """Batch 5: PM Bot 상태 점검 데이터 반환."""
@@ -806,6 +958,15 @@ class Orchestrator:
             tasks.append({
                 "task_id": label_fn(tid),
                 "status": f"FAILED ({cat})",
+                "branch": info.get("branch", ""),
+                "next": f"/resume {tid}",
+            })
+
+        # HELD (Batch 6)
+        for tid, info in self._held_tasks.items():
+            tasks.append({
+                "task_id": label_fn(tid),
+                "status": "HELD",
                 "branch": info.get("branch", ""),
                 "next": f"/resume {tid}",
             })
@@ -1148,6 +1309,7 @@ class Orchestrator:
         self._processed_ids.discard(task_id)
         self._failed_tasks.pop(task_id, None)
         self._ready_to_ship.pop(task_id, None)
+        self._held_tasks.pop(task_id, None)  # Batch 6: HELD 해제
 
         label = self._task_label(task_id)
         return (
@@ -1230,6 +1392,15 @@ class Orchestrator:
         # running_task 초기화
         if self._running_task.get("task_id") == task_id:
             self._running_task = {}
+
+        # Batch 6: HELD 태스크 추적 (stale 감지용)
+        self._held_tasks[task_id] = {
+            "task_id": task_id,
+            "branch": branch,
+            "held_at": datetime.now().isoformat(),
+        }
+        # 통계 기록
+        self._stats.record(task_id, "HELD", self._current_project_id)
 
         branch_str = f"\nbranch: {branch}" if branch else ""
         # Phase 3-C: Handoff 자동 업데이트 (HELD)
@@ -1436,6 +1607,9 @@ class Orchestrator:
         allowed_files: list[str],
     ) -> None:
         """실제 태스크 실행 로직."""
+        # Batch 6: 시작 시각 기록 (통계용)
+        self._task_started_at[task_id] = datetime.now()
+
         # Phase 1: QUEUED 알림
         label = self._task_label(task_id)
         await self._notify(
@@ -1827,6 +2001,25 @@ class Orchestrator:
         )
         print(f"[orchestrator] {task_id} — 배포 완료.")
 
+        # Batch 6: 통계 기록 + 자동 archive
+        started_at = self._task_started_at.pop(task_id, None)
+        elapsed_s = (
+            (datetime.now() - started_at).total_seconds()
+            if isinstance(started_at, datetime) else 0.0
+        )
+        retry_count = self._manual_retry_counts.get(task_id, 0)
+        self._stats.record(
+            task_id, "SHIPPED", self._current_project_id,
+            elapsed_s=elapsed_s, retry_count=retry_count,
+        )
+        try:
+            self._archive_mgr.archive_task(
+                task_id, "SHIPPED",
+                metadata={"commit_sha": commit_sha, "elapsed_s": elapsed_s},
+            )
+        except Exception as exc:
+            print(f"[orchestrator] archive 실패 (무시): {exc}")
+
         # running_task 초기화
         if self._running_task.get("task_id") == task_id:
             self._running_task = {}
@@ -1927,6 +2120,18 @@ class Orchestrator:
                 await self._notify(card_text)
         else:
             await self._notify(card_text)
+
+        # Batch 6: 통계 기록
+        started_at = self._task_started_at.pop(task_id, None)
+        elapsed_s = (
+            (datetime.now() - started_at).total_seconds()
+            if isinstance(started_at, datetime) else 0.0
+        )
+        retry_count = self._manual_retry_counts.get(task_id, 0)
+        self._stats.record(
+            task_id, "FAILED", self._current_project_id,
+            elapsed_s=elapsed_s, retry_count=retry_count,
+        )
 
         # processed_ids 제거 → 수동 수정 후 재처리 가능
         self._processed_ids.discard(task_id)

@@ -199,6 +199,8 @@ async def main() -> None:
             orchestrator=orchestrator,
             notification_level=config.notification_level,
             project_manager=project_manager,
+            daily_report=config.daily_report,
+            daily_report_hour=config.daily_report_hour,
         )
 
         # Orchestrator → Telegram 알림 연결

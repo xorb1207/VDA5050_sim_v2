@@ -23,6 +23,12 @@ class Config:
     anthropic_model: str = "claude-haiku-4-5-20251001"
     pm_dialog_model: str = "claude-sonnet-4-6"
     cli_model: str = "claude-opus-4-7"
+    # Batch 6: 보존 정책
+    log_retention_days: int = 30
+    archive_retention_days: int = 90
+    # Batch 6: Daily Report
+    daily_report: bool = False
+    daily_report_hour: int = 9   # 0-23
 
 
 def load_config() -> Config:
@@ -43,6 +49,12 @@ def load_config() -> Config:
             return default
         return value.strip().lower() in ("1", "true", "yes")
 
+    def parse_int(value: str, default: int) -> int:
+        try:
+            return int(value.strip()) if value.strip() else default
+        except ValueError:
+            return default
+
     return Config(
         anthropic_api_key=anthropic_api_key,
         repo_path=repo_path,
@@ -60,4 +72,8 @@ def load_config() -> Config:
         anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
         pm_dialog_model=os.environ.get("PM_DIALOG_MODEL", "claude-sonnet-4-6"),
         cli_model=os.environ.get("CLI_MODEL", "claude-opus-4-7"),
+        log_retention_days=parse_int(os.environ.get("LOG_RETENTION_DAYS", ""), default=30),
+        archive_retention_days=parse_int(os.environ.get("ARCHIVE_RETENTION_DAYS", ""), default=90),
+        daily_report=parse_bool(os.environ.get("DAILY_REPORT", ""), default=False),
+        daily_report_hour=parse_int(os.environ.get("DAILY_REPORT_HOUR", ""), default=9),
     )

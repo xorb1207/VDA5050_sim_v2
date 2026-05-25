@@ -72,6 +72,12 @@ HELP_TEXT = """\
 [Handoff]
   /handoff T-ID     — 태스크 Handoff 파일 생성/업데이트
 
+[기록/통계/관리]
+  /archive T-ID — 태스크 archive에 보관
+  /history      — 최근 완료/실패 이력
+  /stats        — 작업 통계 (전체/프로젝트별)
+  /stale        — 오래된 작업 감지 (HELD 7일+, RTS 3일+, ADOPTED 5일+)
+
 알림 레벨:
   VERBOSE — 모든 알림
   NORMAL  — 완료/실패/승인요청만 (기본값)
@@ -93,7 +99,9 @@ class TelegramBot:
         pm_agent: Any,
         orchestrator: Any,
         notification_level: str = "NORMAL",
-        project_manager: Any = None,   # Phase 0.5: ProjectManager (선택)
+        project_manager: Any = None,    # Phase 0.5: ProjectManager (선택)
+        daily_report: bool = False,     # Batch 6: daily summary 활성화
+        daily_report_hour: int = 9,     # Batch 6: 전송 시각 (0-23)
     ) -> None:
         self.token = token
         self.chat_id = str(chat_id)
@@ -103,6 +111,9 @@ class TelegramBot:
         self.notification_level = notification_level.upper()
         if self.notification_level not in NOTIFICATION_LEVELS:
             self.notification_level = "NORMAL"
+        # Batch 6: daily report
+        self._daily_report = daily_report
+        self._daily_report_hour = max(0, min(23, daily_report_hour))
 
         self._app: Application | None = None
 
@@ -139,8 +150,14 @@ class TelegramBot:
         self._app.add_handler(CommandHandler("diff", self._handle_diff))
 
         # Batch 5 명령
-        self._app.add_handler(CommandHandler("doctor", self._handle_doctor))
-        self._app.add_handler(CommandHandler("queue",  self._handle_queue))
+        self._app.add_handler(CommandHandler("doctor",   self._handle_doctor))
+        self._app.add_handler(CommandHandler("queue",    self._handle_queue))
+
+        # Batch 6 명령
+        self._app.add_handler(CommandHandler("archive",  self._handle_archive))
+        self._app.add_handler(CommandHandler("history",  self._handle_history))
+        self._app.add_handler(CommandHandler("stats",    self._handle_stats))
+        self._app.add_handler(CommandHandler("stale",    self._handle_stale))
 
         # Phase 0.5 — 멀티 프로젝트
         self._app.add_handler(CommandHandler("projects", self._handle_projects))
@@ -179,12 +196,28 @@ class TelegramBot:
                 BotCommand("status",   "시스템 상태"),
                 BotCommand("reload",   "태스크 큐 재스캔"),
                 BotCommand("level",    "알림 레벨 변경"),
+                BotCommand("archive",  "태스크 archive  예: /archive T-91"),
+                BotCommand("history",  "최근 완료/실패 이력"),
+                BotCommand("stats",    "작업 통계"),
+                BotCommand("stale",    "오래된 작업 감지"),
             ])
             await self._app.start()
             await self._app.updater.start_polling()
             try:
+                # Batch 6: Daily summary background task
+                _daily_task = None
+                if self._daily_report:
+                    _daily_task = asyncio.create_task(self._daily_summary_loop())
+                    logger.info(f"Daily report 활성화: 매일 {self._daily_report_hour:02d}:00")
+
                 await asyncio.Event().wait()
             finally:
+                if _daily_task is not None:
+                    _daily_task.cancel()
+                    try:
+                        await _daily_task
+                    except asyncio.CancelledError:
+                        pass
                 await self._app.updater.stop()
                 await self._app.stop()
 
@@ -733,6 +766,245 @@ class TelegramBot:
             lines.append(f"{icon} {tid} — {st}{branch_str}\n   다음: {nxt}")
 
         await self._reply(update, "\n\n".join(lines))
+
+    # ── Batch 6 명령 핸들러 ───────────────────────────────────────────
+
+    async def _handle_archive(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/archive T-ID — 태스크를 archive에 보관."""
+        if self.orchestrator is None:
+            await self._reply(update, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        args = context.args or []
+        if not args:
+            await self._reply(update, "사용법: /archive T-ID\n예: /archive T-91")
+            return
+
+        task_id = args[0].strip()
+        if not task_id:
+            await self._reply(update, "태스크 ID를 입력하세요.")
+            return
+
+        await self._reply(update, f"📦 {task_id} archive 처리 중...")
+        try:
+            result = await self.orchestrator.archive_task_manual(task_id)
+            await self._reply(update, result)
+        except Exception as exc:
+            await self._reply(update, f"❌ archive 실패: {exc}")
+
+    async def _handle_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/history — 최근 완료/실패 이력."""
+        if self.orchestrator is None:
+            await self._reply(update, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        try:
+            history = self.orchestrator.get_history(limit=20)
+        except Exception as exc:
+            await self._reply(update, f"❌ 이력 조회 실패: {exc}")
+            return
+
+        if not history:
+            await self._reply(
+                update,
+                "📚 이력 없음\n\n"
+                "SHIPPED / FAILED 태스크가 아직 없거나\n"
+                "archive에 저장된 항목이 없습니다."
+            )
+            return
+
+        shipped = [h for h in history if h.get("status") == "SHIPPED"]
+        failed  = [h for h in history if h.get("status") == "FAILED"]
+        others  = [h for h in history if h.get("status") not in ("SHIPPED", "FAILED")]
+
+        def _fmt(items: list[dict], n: int = 5) -> str:
+            lines = []
+            for h in items[:n]:
+                tid = h.get("task_id", "?")
+                arc_at = h.get("archived_at", "")[:10]
+                lines.append(f"  - {tid}  ({arc_at})")
+            return "\n".join(lines) if lines else "  없음"
+
+        lines = ["📚 최근 이력\n"]
+        lines.append(f"최근 완료 ({len(shipped)}개):\n{_fmt(shipped)}")
+        if failed:
+            lines.append(f"\n최근 실패 ({len(failed)}개):\n{_fmt(failed)}")
+        if others:
+            lines.append(f"\n기타 ({len(others)}개):\n{_fmt(others, 3)}")
+
+        await self._reply(update, "\n".join(lines))
+
+    async def _handle_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/stats — 작업 통계."""
+        if self.orchestrator is None:
+            await self._reply(update, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        try:
+            summary = self.orchestrator.get_stats_summary()
+        except Exception as exc:
+            await self._reply(update, f"❌ 통계 조회 실패: {exc}")
+            return
+
+        g = summary.get("global", {})
+        proj = summary.get("projects", {})
+
+        total_shipped = g.get("shipped", 0)
+        total_failed  = g.get("failed", 0)
+        total_held    = g.get("held", 0)
+        total_adopted = g.get("adopted", 0)
+
+        avg_elapsed = summary.get("avg_elapsed_s", 0.0)
+        elapsed_str = ""
+        if avg_elapsed > 0:
+            mins = int(avg_elapsed // 60)
+            secs = int(avg_elapsed % 60)
+            elapsed_str = f"{mins}분 {secs}초" if mins else f"{secs}초"
+
+        lines = [
+            "📊 작업 통계\n",
+            "전체:",
+            f"  SHIPPED: {total_shipped}",
+            f"  FAILED:  {total_failed}",
+            f"  HELD:    {total_held}",
+            f"  ADOPTED: {total_adopted}",
+        ]
+
+        if total_shipped + total_failed > 0:
+            lines.append(f"\n평균:")
+            lines.append(f"  review 통과율: {summary.get('pass_rate', 0):.1f}%")
+            if elapsed_str:
+                lines.append(f"  평균 작업 시간: {elapsed_str}")
+            lines.append(f"  평균 재시도: {summary.get('avg_retries', 0):.1f}회")
+
+        if proj:
+            lines.append("\n프로젝트별:")
+            for pid, pcnt in sorted(proj.items()):
+                shipped_n = pcnt.get("shipped", 0)
+                failed_n  = pcnt.get("failed", 0)
+                lines.append(f"  {pid}: SHIPPED {shipped_n} / FAILED {failed_n}")
+
+        recent_shipped = summary.get("recent_shipped", [])
+        recent_failed  = summary.get("recent_failed", [])
+        if recent_shipped:
+            lines.append(f"\n최근 완료:\n  " + "\n  ".join(f"- {t}" for t in recent_shipped))
+        if recent_failed:
+            lines.append(f"\n최근 실패:\n  " + "\n  ".join(f"- {t}" for t in recent_failed))
+
+        await self._reply(update, "\n".join(lines))
+
+    async def _handle_stale(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/stale — 오래된 작업 감지 (HELD 7일+, READY_TO_SHIP 3일+, ADOPTED 5일+)."""
+        if self.orchestrator is None:
+            await self._reply(update, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        try:
+            stale = self.orchestrator.get_stale_tasks()
+        except Exception as exc:
+            await self._reply(update, f"❌ stale 감지 실패: {exc}")
+            return
+
+        if not stale:
+            await self._reply(
+                update,
+                "✅ 오래된 작업 없음\n\n"
+                "HELD 7일+ / READY_TO_SHIP 3일+ / ADOPTED 5일+ 기준으로 감지합니다."
+            )
+            return
+
+        status_icon = {
+            "HELD":          "⏸️",
+            "READY_TO_SHIP": "✅",
+            "ADOPTED":       "📥",
+        }
+        lines = [f"⚠️ 오래된 작업 ({len(stale)}개)\n"]
+        for s in stale:
+            tid = s.get("task_id", "?")
+            st  = s.get("status", "?")
+            days = s.get("days", 0)
+            branch = s.get("branch", "")
+            nxt = s.get("next", [])
+            icon = status_icon.get(st, "🔴")
+            branch_str = f"\n   branch: {branch}" if branch else ""
+            nxt_str = "\n   ".join(nxt[:2])
+            lines.append(
+                f"{icon} {tid}\n"
+                f"   {st} — {days:.0f}일 경과{branch_str}\n"
+                f"   추천: {nxt_str}"
+            )
+
+        await self._reply(update, "\n\n".join(lines))
+
+    # ── Batch 6: Daily Summary ────────────────────────────────────────
+
+    async def _daily_summary_loop(self) -> None:
+        """매일 지정 시각에 daily summary 전송하는 background loop."""
+        from datetime import datetime, timedelta
+        while True:
+            try:
+                now = datetime.now()
+                target = now.replace(
+                    hour=self._daily_report_hour, minute=0, second=0, microsecond=0
+                )
+                if target <= now:
+                    target += timedelta(days=1)
+                sleep_secs = (target - now).total_seconds()
+                logger.info(f"Daily report 대기: {sleep_secs/3600:.1f}시간 후")
+                await asyncio.sleep(sleep_secs)
+                await self._send_daily_summary()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.error("daily_summary_loop 오류: %s", exc)
+                await asyncio.sleep(3600)  # 오류 시 1시간 후 재시도
+
+    async def _send_daily_summary(self) -> None:
+        """Daily summary 메시지 생성 및 전송."""
+        from datetime import datetime
+        if self.orchestrator is None:
+            return
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        try:
+            today_stats = self.orchestrator.get_today_stats()
+            queue = self.orchestrator.get_queue_summary()
+            stale = self.orchestrator.get_stale_tasks()
+        except Exception as exc:
+            logger.error("daily summary 생성 실패: %s", exc)
+            return
+
+        shipped_n = today_stats.get("shipped", 0)
+        failed_n  = today_stats.get("failed", 0)
+        running = self.orchestrator.get_running_task()
+        running_str = f"{running.get('task_id')} ({running.get('phase')})" if running else "없음"
+
+        rts   = [t for t in queue if t.get("status") == "READY_TO_SHIP"]
+        held  = [t for t in queue if t.get("status") == "HELD"]
+
+        lines = [
+            f"📊 PM Bot Daily — {today}\n",
+            "오늘:",
+            f"  SHIPPED: {shipped_n}",
+            f"  FAILED:  {failed_n}",
+            f"  RUNNING: {running_str}",
+        ]
+
+        if rts:
+            rts_ids = "\n".join(f"  - {t['task_id']}" for t in rts)
+            lines.append(f"\nREADY_TO_SHIP:\n{rts_ids}")
+
+        if held:
+            held_ids = "\n".join(f"  - {t['task_id']}" for t in held)
+            lines.append(f"\nHELD:\n{held_ids}")
+
+        if stale:
+            stale_ids = "\n".join(f"  - {s['task_id']} ({s['status']} {s['days']:.0f}일)" for s in stale[:5])
+            lines.append(f"\n⚠️ stale:\n{stale_ids}")
+        else:
+            lines.append("\n✅ stale 없음")
+
+        await self.send_message("\n".join(lines))
 
     # ── Phase 0.5: 멀티 프로젝트 명령 핸들러 ─────────────────────────
 
