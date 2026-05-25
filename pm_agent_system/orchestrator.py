@@ -860,7 +860,19 @@ class Orchestrator:
                 succeeded = True
                 break
 
-            # FAIL / NEEDS_REVISION
+            # 구조적 실패 — 재시도해도 통과 불가, 즉시 중단
+            _NO_RETRY_RULES = frozenset({
+                "scope.files_outside_task",
+                "scope.sensitive_file_changed",
+                "scope.file_deleted",
+                "correctness.no_changes",
+            })
+            violated_rules = {getattr(v, "rule", "") for v in verdict.violations}
+            if violated_rules & _NO_RETRY_RULES:
+                print(f"[orchestrator] {task_id} — 구조적 실패 감지, retry 생략: {violated_rules & _NO_RETRY_RULES}")
+                break
+
+            # FAIL / NEEDS_REVISION — 일시적 실패, retry 가능
             reason = _short_reason(verdict)
             if attempt < MAX_RETRIES:
                 self._running_task["phase"] = "RUNNING"
@@ -1116,18 +1128,33 @@ class Orchestrator:
             "failed_at": datetime.now().isoformat(),
         }
 
+        # 구조적 실패 여부 판단 (retry 불가 유형)
+        _NO_RETRY_RULES = frozenset({
+            "scope.files_outside_task",
+            "scope.sensitive_file_changed",
+            "scope.file_deleted",
+            "correctness.no_changes",
+        })
+        violated_rules = {getattr(v, "rule", "") for v in (verdict.violations if verdict else [])}
+        is_structural = bool(violated_rules & _NO_RETRY_RULES)
+
         # 실패 카드 텍스트
+        structural_note = (
+            "\n⚠️ 구조적 차단 — 자동 재시도하지 않음\n태스크 범위를 수정해 새 태스크로 요청하세요."
+            if is_structural else ""
+        )
         card_text = (
             f"❌ {task_id} 실패\n\n"
             f"분류:\n- {category}\n\n"
             f"요약:\n- {reason}\n\n"
             f"추천:\n- {action}"
+            f"{structural_note}"
         )
 
         # Phase 3: notify_failure_card_fn 우선, fallback → _notify
         if self.notify_failure_card_fn is not None:
             try:
-                await self.notify_failure_card_fn(card_text, task_id)
+                await self.notify_failure_card_fn(card_text, task_id, no_retry=is_structural)
             except Exception as e:
                 print(f"[orchestrator] notify_failure_card_fn 실패, fallback: {e}")
                 await self._notify(card_text)

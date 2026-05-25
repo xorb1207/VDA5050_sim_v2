@@ -152,22 +152,38 @@ class TelegramBot:
         except Exception as exc:
             logger.error("send_message 실패: %s", exc)
 
-    async def send_failure_card(self, text: str, task_id: str) -> None:
-        """Phase 3: 실패 카드를 inline keyboard와 함께 전송."""
+    async def send_failure_card(self, text: str, task_id: str, no_retry: bool = False) -> None:
+        """Phase 3: 실패 카드를 inline keyboard와 함께 전송.
+
+        no_retry=True: 구조적 실패 — 재시도 버튼 대신 안내 버튼 표시.
+        """
         if self._app is None:
             logger.warning("send_failure_card: Application이 초기화되지 않았습니다.")
             return
 
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("🔁 재시도", callback_data=f"retry_task:{task_id}"),
-                InlineKeyboardButton("🛑 중단", callback_data=f"cancel_task:{task_id}"),
-            ],
-            [
-                InlineKeyboardButton("📌 브랜치 유지", callback_data=f"hold_branch:{task_id}"),
-                InlineKeyboardButton("📄 로그 보기", callback_data=f"show_log:{task_id}"),
-            ],
-        ])
+        if no_retry:
+            # 구조적 실패: 재시도 버튼 제거, 안내 버튼으로 대체
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("🚫 재시도 불가", callback_data=f"no_retry_info:{task_id}"),
+                    InlineKeyboardButton("🛑 중단", callback_data=f"cancel_task:{task_id}"),
+                ],
+                [
+                    InlineKeyboardButton("📌 브랜치 유지", callback_data=f"hold_branch:{task_id}"),
+                    InlineKeyboardButton("📄 로그 보기", callback_data=f"show_log:{task_id}"),
+                ],
+            ])
+        else:
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("🔁 재시도", callback_data=f"retry_task:{task_id}"),
+                    InlineKeyboardButton("🛑 중단", callback_data=f"cancel_task:{task_id}"),
+                ],
+                [
+                    InlineKeyboardButton("📌 브랜치 유지", callback_data=f"hold_branch:{task_id}"),
+                    InlineKeyboardButton("📄 로그 보기", callback_data=f"show_log:{task_id}"),
+                ],
+            ])
 
         try:
             await self._app.bot.send_message(
@@ -543,6 +559,14 @@ class TelegramBot:
                     await query.edit_message_reply_markup(reply_markup=None)
                 except Exception:
                     pass
+
+            elif action == "no_retry_info":
+                await self._cb_reply(
+                    query,
+                    "🚫 이 실패 유형은 자동 재시도 대상이 아닙니다.\n\n"
+                    "태스크 범위(allowed_files)를 수정하거나\n"
+                    "새 태스크로 다시 요청해주세요."
+                )
 
             elif action == "cancel_task":
                 result = self.orchestrator.cancel_task(task_id)
