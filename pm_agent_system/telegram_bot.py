@@ -48,7 +48,9 @@ HELP_TEXT = """\
   /level VERBOSE|NORMAL|QUIET — 알림 레벨 변경
   /help       — 이 도움말
 
-[실행 가시성]
+[점검/조회]
+  /doctor     — PM Bot 상태 점검 (health check)
+  /queue      — 전체 작업 대기열 요약
   /running    — 현재 실행 중인 태스크 확인
   /log T-ID   — 태스크 최근 로그 출력 (최대 50줄)
   /diff T-ID  — 태스크 git diff 요약 출력
@@ -136,6 +138,10 @@ class TelegramBot:
         # Phase 4 명령
         self._app.add_handler(CommandHandler("diff", self._handle_diff))
 
+        # Batch 5 명령
+        self._app.add_handler(CommandHandler("doctor", self._handle_doctor))
+        self._app.add_handler(CommandHandler("queue",  self._handle_queue))
+
         # Phase 0.5 — 멀티 프로젝트
         self._app.add_handler(CommandHandler("projects", self._handle_projects))
         self._app.add_handler(CommandHandler("project", self._handle_project))
@@ -156,6 +162,8 @@ class TelegramBot:
             # Telegram 명령 메뉴 등록 (/ 눌렀을 때 자동완성)
             await self._app.bot.set_my_commands([
                 BotCommand("help",     "도움말"),
+                BotCommand("doctor",   "PM Bot 상태 점검 (health check)"),
+                BotCommand("queue",    "전체 작업 대기열 요약"),
                 BotCommand("running",  "현재 실행 중인 태스크 확인"),
                 BotCommand("log",      "태스크 로그 출력  예: /log T-73"),
                 BotCommand("ship",     "배포 승인  예: /ship T-73"),
@@ -618,6 +626,114 @@ class TelegramBot:
 
         await self._reply(update, summary)
 
+    # ── Batch 5 명령 핸들러 ───────────────────────────────────────────
+
+    async def _handle_doctor(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/doctor — PM Bot 상태 점검 (health check)."""
+        if self.orchestrator is None:
+            await self._reply(update, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        await self._reply(update, "🩺 PM Bot 상태 점검 중...")
+
+        try:
+            info = await self.orchestrator.get_doctor_info()
+        except Exception as exc:
+            await self._reply(update, f"❌ 상태 점검 실패: {exc}")
+            return
+
+        ok = "✅"
+        ng = "❌"
+        warn = "⚠️"
+
+        repo_icon = ok if info["repo_exists"] else ng
+        queue_icon = ok if info["task_queue_exists"] else ng
+        spec_icon = ok if info["spec_exists"] else warn
+
+        running = info.get("running_task_id")
+        running_str = f"✅ {running} ({info.get('running_phase', '?')})" if running else "— (없음)"
+
+        rts = info.get("ready_to_ship_ids", [])
+        adopted = info.get("adopted_ids", [])
+        failed = info.get("failed_ids", [])
+
+        rts_str = ", ".join(rts) if rts else "없음"
+        adopted_str = ", ".join(adopted) if adopted else "없음"
+        failed_str = ", ".join(failed) if failed else "없음"
+
+        queued_md = info.get("queued_md", [])
+        queued_str = f"{len(queued_md)}개" + (f" ({', '.join(queued_md[:3])})" if queued_md else "")
+
+        git_clean = info.get("git_status_short", "").strip() in ("(clean)", "")
+        git_icon = ok if git_clean else warn
+        git_branch = info.get("git_branch", "?")
+        git_status = info.get("git_status_short", "(조회 실패)")
+
+        auto_ship = info.get("auto_ship_after_review", False)
+        auto_ship_str = "true (자동 머지 활성화)" if auto_ship else "false (수동 /ship 필요)"
+
+        lines = [
+            "🩺 PM Bot 상태 점검 결과\n",
+            f"프로젝트: {info.get('project_id', '?')}",
+            f"{repo_icon} repo:  {info.get('repo_path', '?')}",
+            f"{queue_icon} task_queue:  {info.get('task_queue', '?')}",
+            f"   대기 파일: {queued_str}",
+            f"{spec_icon} spec:  {info.get('spec_path', '?')}",
+            "",
+            f"실행 중: {running_str}",
+            f"READY_TO_SHIP: {rts_str}",
+            f"ADOPTED:       {adopted_str}",
+            f"FAILED:        {failed_str}",
+            "",
+            f"{git_icon} git branch: {git_branch}",
+            f"   status: {git_status[:200]}",
+            "",
+            f"AUTO_SHIP_AFTER_REVIEW: {auto_ship_str}",
+            f"알림 레벨: {self.notification_level}",
+        ]
+
+        await self._reply(update, "\n".join(lines))
+
+    async def _handle_queue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/queue — 전체 작업 대기열 요약."""
+        if self.orchestrator is None:
+            await self._reply(update, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        try:
+            tasks = self.orchestrator.get_queue_summary()
+        except Exception as exc:
+            await self._reply(update, f"❌ 대기열 조회 실패: {exc}")
+            return
+
+        if not tasks:
+            await self._reply(
+                update,
+                "📭 현재 대기 중인 작업 없음\n\n"
+                "task_queue/ 디렉토리에 .md 파일을 추가하면 자동 처리됩니다."
+            )
+            return
+
+        status_icon = {
+            "RUNNING": "⏳",
+            "REVIEWING": "🧪",
+            "QUEUED": "📋",
+            "READY_TO_SHIP": "✅",
+            "ADOPTED": "📥",
+        }
+
+        lines = [f"📋 작업 대기열 ({len(tasks)}개)\n"]
+        for t in tasks:
+            st = t.get("status", "?")
+            icon = status_icon.get(st.split(" ")[0], "🔴")
+            tid = t.get("task_id", "?")
+            branch = t.get("branch", "")
+            nxt = t.get("next", "")
+            branch_str = f"\n   branch: {branch}" if branch else ""
+            lines.append(f"{icon} {tid} — {st}{branch_str}\n   다음: {nxt}")
+
+        await self._reply(update, "\n\n".join(lines))
+
     # ── Phase 0.5: 멀티 프로젝트 명령 핸들러 ─────────────────────────
 
     async def _handle_projects(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -808,6 +924,15 @@ class TelegramBot:
         action, task_id = data.split(":", 1)
         task_id = task_id.strip()
 
+        # Batch 5: task_id 빈값 안전 처리
+        if not task_id:
+            await self._cb_reply(query, "❌ 버튼 데이터 오류: task_id가 비어 있습니다.")
+            return
+
+        if self.orchestrator is None:
+            await self._cb_reply(query, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
         try:
             if action == "ship_task":
                 await self._cb_reply(query, f"🚢 {task_id} 배포 처리 중...")
@@ -914,7 +1039,17 @@ class TelegramBot:
         except Exception as exc:
             logger.error("callback_query 처리 오류 [%s]: %s", data, exc)
             try:
-                await self._cb_reply(query, f"❌ 처리 중 오류 발생\n{str(exc)[:200]}")
+                # 사용자 친화적 오류 메시지 (내부 traceback 노출 없음)
+                err_msg = str(exc)
+                if len(err_msg) > 300:
+                    err_msg = err_msg[:300] + "..."
+                await self._cb_reply(
+                    query,
+                    f"❌ 처리 중 오류 발생\n"
+                    f"task: {task_id} / action: {action}\n"
+                    f"{err_msg}\n\n"
+                    f"/status 로 현재 상태를 확인하세요."
+                )
             except Exception:
                 pass
 

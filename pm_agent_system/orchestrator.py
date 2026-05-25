@@ -706,6 +706,112 @@ class Orchestrator:
             return None
         return dict(self._running_task)
 
+    async def get_doctor_info(self) -> dict:
+        """Batch 5: PM Bot 상태 점검 데이터 반환."""
+        repo = str(self.config.repo_path)
+        from pathlib import Path as _Path
+
+        repo_exists = _Path(repo).is_dir()
+        task_queue_exists = self.task_queue_dir.is_dir()
+        handoffs_exists = self._handoffs_dir.is_dir()
+
+        # queued .md 파일 수 (ready/ 하위 제외)
+        queued_md = []
+        if task_queue_exists:
+            queued_md = [
+                f.name for f in self.task_queue_dir.glob("*.md")
+                if not f.name.endswith(".cancelled.md")
+            ]
+
+        # git 상태
+        git_branch = ""
+        git_status_short = "(git 조회 실패)"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            git_branch = out.decode("utf-8", errors="replace").strip()
+
+            proc2 = await asyncio.create_subprocess_exec(
+                "git", "-C", repo, "status", "--short",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            out2, _ = await asyncio.wait_for(proc2.communicate(), timeout=10)
+            git_status_short = out2.decode("utf-8", errors="replace").strip() or "(clean)"
+        except Exception:
+            pass
+
+        return {
+            "project_id": self._current_project_id or "(single)",
+            "repo_path": repo,
+            "repo_exists": repo_exists,
+            "task_queue": str(self.task_queue_dir),
+            "task_queue_exists": task_queue_exists,
+            "queued_md": queued_md,
+            "handoffs_dir": str(self._handoffs_dir),
+            "handoffs_exists": handoffs_exists,
+            "running_task_id": self._running_task.get("task_id") if self._running_task else None,
+            "running_phase": self._running_task.get("phase") if self._running_task else None,
+            "ready_to_ship_ids": list(self._ready_to_ship.keys()),
+            "adopted_ids": list(self._adopted_tasks.keys()),
+            "failed_ids": list(self._failed_tasks.keys()),
+            "git_branch": git_branch,
+            "git_status_short": git_status_short,
+            "auto_ship_after_review": self.config.auto_ship_after_review,
+            "spec_path": str(self.spec_path),
+            "spec_exists": self.spec_path.exists(),
+        }
+
+    def get_queue_summary(self) -> list[dict]:
+        """Batch 5: 모든 상태 태스크의 대기열 요약 반환."""
+        tasks: list[dict] = []
+        label_fn = self._task_label
+
+        # RUNNING / REVIEWING / QUEUED (active)
+        if self._running_task:
+            tid = self._running_task.get("task_id", "")
+            if tid:
+                tasks.append({
+                    "task_id": label_fn(tid),
+                    "status": self._running_task.get("phase", "RUNNING"),
+                    "branch": self._running_task.get("branch", ""),
+                    "next": f"/log {tid}",
+                })
+
+        # ADOPTED
+        for tid, info in self._adopted_tasks.items():
+            tasks.append({
+                "task_id": label_fn(tid),
+                "status": "ADOPTED",
+                "branch": info.get("branch", ""),
+                "next": f"/review {tid}",
+            })
+
+        # READY_TO_SHIP
+        for tid, info in self._ready_to_ship.items():
+            tasks.append({
+                "task_id": label_fn(tid),
+                "status": "READY_TO_SHIP",
+                "branch": info.get("branch", ""),
+                "next": f"/ship {tid}",
+            })
+
+        # FAILED
+        for tid, info in self._failed_tasks.items():
+            cat = info.get("failure_category", "?")
+            tasks.append({
+                "task_id": label_fn(tid),
+                "status": f"FAILED ({cat})",
+                "branch": info.get("branch", ""),
+                "next": f"/resume {tid}",
+            })
+
+        return tasks
+
     def get_task_log(self, task_id: str, lines: int = _LOG_TAIL_LINES) -> str | None:
         """Phase 0: 태스크 combined 로그의 최근 N 줄 반환. 파일 없으면 None."""
         log_path = self._log_dir / f"{task_id}.combined.log"
@@ -1066,8 +1172,21 @@ class Orchestrator:
                 f"- /review {task_id}\n"
                 f"- /resume {task_id}"
             )
+
+        # Batch 5: 이미 SHIPPED인 태스크 체크 (오래된 버튼 클릭 방지)
         if task_id not in self._ready_to_ship:
-            return f"❌ {task_id}은(는) READY_TO_SHIP 상태가 아닙니다.\n현재 READY_TO_SHIP: {list(self._ready_to_ship.keys()) or '없음'}"
+            if self.git_manager is not None:
+                completed = self.git_manager.get_state().get("completed_tasks", [])
+                if any(t.get("task_id") == task_id for t in completed):
+                    return (
+                        f"ℹ️ {task_id}은(는) 이미 배포 완료되었습니다.\n\n"
+                        f"/status 로 확인하세요."
+                    )
+            rts_ids = list(self._ready_to_ship.keys()) or ["없음"]
+            return (
+                f"❌ {task_id}은(는) READY_TO_SHIP 상태가 아닙니다.\n"
+                f"현재 READY_TO_SHIP: {rts_ids}"
+            )
 
         info = self._ready_to_ship.pop(task_id)
         await self._execute_ship(
@@ -1085,6 +1204,14 @@ class Orchestrator:
         Returns: 결과 메시지 문자열
         """
         if task_id not in self._ready_to_ship:
+            # Batch 5: 이미 배포 완료된 경우 안내
+            if self.git_manager is not None:
+                completed = self.git_manager.get_state().get("completed_tasks", [])
+                if any(t.get("task_id") == task_id for t in completed):
+                    return (
+                        f"ℹ️ {task_id}은(는) 이미 배포 완료되어 보류 불가합니다.\n"
+                        f"/status 로 확인하세요."
+                    )
             return (
                 f"❌ {task_id}은(는) READY_TO_SHIP 상태가 아닙니다.\n"
                 f"현재 READY_TO_SHIP: {list(self._ready_to_ship.keys()) or '없음'}"
@@ -2008,14 +2135,15 @@ class Orchestrator:
                     f"{current_status}\n\n(업데이트: {now})"
                 )
 
-            # Done 항목 추가 (append, 교체 아님)
+            # Done 항목 추가 (append, 교체 아님) — 중복 방지
             if done_item:
                 existing_done = _extract_handoff_section(content, "Done").strip()
-                if existing_done in ("-", "", "<!-- 완료된 항목을 여기에 기입 -->"):
-                    new_done = f"- {done_item}"
-                else:
-                    new_done = f"{existing_done}\n- {done_item}"
-                content = _replace_handoff_section(content, "Done", new_done)
+                if done_item not in existing_done:  # dedup: 이미 있으면 추가 안 함
+                    if existing_done in ("-", "", "<!-- 완료된 항목을 여기에 기입 -->"):
+                        new_done = f"- {done_item}"
+                    else:
+                        new_done = f"{existing_done}\n- {done_item}"
+                    content = _replace_handoff_section(content, "Done", new_done)
 
             # Remaining 교체
             if remaining:
@@ -2036,6 +2164,13 @@ class Orchestrator:
                     or "변경 파일 없음"
                 )
                 content = _replace_handoff_section(content, "Changed Files", files_text)
+
+            # Batch 5: 전체 handoff 최대 길이 제한 (8,000자 — LLM 컨텍스트 절약)
+            _HANDOFF_MAX_CHARS = 8000
+            if len(content) > _HANDOFF_MAX_CHARS:
+                # 말미 초과분 제거 후 안내 주석 추가
+                content = content[:_HANDOFF_MAX_CHARS].rstrip()
+                content += "\n\n<!-- [자동 trim: handoff가 너무 길어 잘렸습니다] -->\n"
 
             handoff_path.write_text(content, encoding="utf-8")
         except Exception as exc:
