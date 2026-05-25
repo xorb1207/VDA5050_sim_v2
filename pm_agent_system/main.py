@@ -107,9 +107,27 @@ async def main() -> None:
         if args.dry_run:
             config.dry_run = True
 
+        # ── ProjectManager (Phase 0.5) ────────────────────────────────────
+        project_manager = None
+        pm_paths = None
+        try:
+            from project_manager import ProjectManager
+            _yaml_path = _HERE / "projects.yaml"
+            project_manager = ProjectManager(_yaml_path)
+            pm_paths = project_manager.current_paths
+            if pm_paths:
+                print(f"[startup] 프로젝트 로드: {project_manager.current_project_id} → {pm_paths.repo_path}")
+        except Exception as exc:
+            print(f"[warn] ProjectManager 초기화 실패 ({exc}) — 단일 프로젝트 모드로 계속")
+
+        # ── GitManager ────────────────────────────────────────────────────
+        # projects.yaml 로드 성공 시 해당 repo/state 경로 사용, 아니면 config 기본값
+        repo_path_eff = str(pm_paths.repo_path) if pm_paths else config.repo_path
+        state_path_eff = str(pm_paths.state_path) if pm_paths else config.state_path
+
         git_manager = GitManager(
-            repo_path=config.repo_path,
-            state_path=config.state_path,
+            repo_path=repo_path_eff,
+            state_path=state_path_eff,
             github_token=config.github_token or None,
             github_repo=config.github_repo or None,
             dry_run=config.dry_run,
@@ -163,6 +181,10 @@ async def main() -> None:
         orchestrator = Orchestrator(config=config, git_manager=git_manager, review_agent=review_agent) if Orchestrator else None
         pm_agent = PMAgent(config=config, git_manager=git_manager, orchestrator=orchestrator) if PMAgent else None
 
+        # projects.yaml 기반 초기 경로를 Orchestrator에 주입 (Phase 0.5)
+        if orchestrator is not None and pm_paths is not None:
+            orchestrator._apply_project_paths(pm_paths)
+
         # 시작 시 완료 이력 주입
         if pm_agent is not None:
             state = git_manager.get_state()
@@ -176,6 +198,7 @@ async def main() -> None:
             pm_agent=pm_agent,
             orchestrator=orchestrator,
             notification_level=config.notification_level,
+            project_manager=project_manager,
         )
 
         # Orchestrator → Telegram 알림 연결

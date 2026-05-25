@@ -30,6 +30,11 @@ CLI_TIMEOUT_S = 3600   # 1시간 (subscription 모드)
 MAX_RETRIES = 3
 _LOG_TAIL_LINES = 50   # /log 명령 기본 출력 줄 수
 
+# TYPE_CHECKING 전용 import (런타임 순환 의존 방지)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from project_manager import ProjectPaths
+
 
 class _TaskQueueHandler(FileSystemEventHandler):
     """task_queue 디렉토리 파일 변경 감지 → asyncio 큐에 푸시."""
@@ -373,6 +378,18 @@ class Orchestrator:
         # Phase 4: 태스크별 git diff 정보 (/diff T-ID 및 리뷰용)
         self._task_diffs: dict[str, dict] = {}
 
+        # Phase 0.5: 프로젝트 전환 지원
+        self._current_project_id: str = ""
+        self._pending_paths: "ProjectPaths | None" = None
+        self._switch_event: asyncio.Event | None = None
+        # handoffs 디렉토리 (ProjectPaths 없으면 pm_agent_system/handoffs/)
+        self._handoffs_dir: Path = (
+            Path(cfg.logs_dir).parent / "handoffs"
+            if Path(cfg.logs_dir).is_absolute()
+            else base / "handoffs"
+        )
+        self._handoffs_dir.mkdir(parents=True, exist_ok=True)
+
         # Stale lock pre-populate — 중복 실행 방지
         for f in self.completed_dir.glob("*_completed.json"):
             stem = f.stem
@@ -388,41 +405,100 @@ class Orchestrator:
     # ── Public interface ─────────────────────────────────────────────────
 
     async def start(self) -> None:
-        """watchdog으로 task_queue 감시 + 기존 파일 초기 스캔."""
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[Path] = asyncio.Queue()
+        """watchdog으로 task_queue 감시 + 기존 파일 초기 스캔.
 
-        handler = _TaskQueueHandler(queue, loop)
-        observer = Observer()
-        observer.schedule(handler, str(self.task_queue_dir), recursive=False)
-        observer.start()
+        Phase 0.5: switch_project() 호출 시 observer를 재시작해
+        새 프로젝트의 task_queue 디렉토리를 감시.
+        """
+        while True:  # 프로젝트 전환 시 재시작
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue[Path] = asyncio.Queue()
+            self._switch_event = asyncio.Event()
 
-        print(f"[orchestrator] task_queue 감시 시작: {self.task_queue_dir}")
+            handler = _TaskQueueHandler(queue, loop)
+            observer = Observer()
+            observer.schedule(handler, str(self.task_queue_dir), recursive=False)
+            observer.start()
 
-        # 기존 .md 파일 초기 스캔
-        for existing_md in sorted(self.task_queue_dir.glob("*.md")):
-            await queue.put(existing_md)
+            print(f"[orchestrator] task_queue 감시 시작: {self.task_queue_dir}"
+                  + (f" (project: {self._current_project_id})" if self._current_project_id else ""))
 
-        try:
-            while True:
-                try:
-                    task_path = await asyncio.wait_for(queue.get(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    continue
+            # 기존 .md 파일 초기 스캔
+            for existing_md in sorted(self.task_queue_dir.glob("*.md")):
+                await queue.put(existing_md)
 
-                task_id = _parse_task_id(task_path)
-                if task_id in self._active_tasks or task_id in self._processed_ids:
-                    continue
+            try:
+                while not self._switch_event.is_set():
+                    try:
+                        task_path = await asyncio.wait_for(queue.get(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        continue
 
-                # ★ 직렬 실행
-                self._active_tasks[task_id] = True
-                try:
-                    await self._process_task(task_path)
-                finally:
-                    self._active_tasks.pop(task_id, None)
-        finally:
-            observer.stop()
-            observer.join()
+                    task_id = _parse_task_id(task_path)
+                    if task_id in self._active_tasks or task_id in self._processed_ids:
+                        continue
+
+                    # ★ 직렬 실행
+                    self._active_tasks[task_id] = True
+                    try:
+                        await self._process_task(task_path)
+                    finally:
+                        self._active_tasks.pop(task_id, None)
+            finally:
+                observer.stop()
+                observer.join()
+
+            # 전환 요청이 있으면 새 paths 적용 후 재시작
+            if self._pending_paths is not None:
+                self._apply_project_paths(self._pending_paths)
+                self._pending_paths = None
+            else:
+                break  # 정상 종료
+
+    # ── Phase 0.5: 프로젝트 전환 ─────────────────────────────────────────
+
+    @property
+    def current_project_id(self) -> str:
+        return self._current_project_id
+
+    @property
+    def handoffs_dir(self) -> Path:
+        return self._handoffs_dir
+
+    def switch_project(self, paths: "ProjectPaths") -> None:
+        """프로젝트 전환 요청.
+
+        현재 task가 실행 중이면 완료 후 전환됨.
+        start() 루프가 _switch_event를 감지해 observer를 재시작.
+        """
+        self._pending_paths = paths
+        if self._switch_event is not None:
+            self._switch_event.set()
+        print(f"[orchestrator] 프로젝트 전환 요청: {paths.project_id}")
+
+    def _apply_project_paths(self, paths: "ProjectPaths") -> None:
+        """새 프로젝트 경로를 실제로 적용한다 (observer 재시작 전에 호출)."""
+        self.task_queue_dir = paths.task_queue_dir
+        self.completed_dir = paths.completed_dir
+        self._log_dir = paths.task_logs_dir
+        self.spec_path = paths.spec_path
+        self._handoffs_dir = paths.handoffs_dir
+        self._current_project_id = paths.project_id
+
+        # GitManager 경로도 업데이트
+        if self.git_manager is not None:
+            self.git_manager.repo_path = paths.repo_path  # type: ignore[assignment]
+
+        # 디렉토리 생성
+        paths.ensure_dirs()
+
+        # 새 프로젝트의 completed/ 파일로 processed_ids 보강
+        for f in self.completed_dir.glob("*_completed.json"):
+            stem = f.stem
+            if stem.endswith("_completed"):
+                self._processed_ids.add(stem[: -len("_completed")])
+
+        print(f"[orchestrator] 프로젝트 적용 완료: {paths.project_id} → {paths.task_queue_dir}")
 
     def get_status(self) -> dict:
         """현재 시스템 상태 딕셔너리 반환."""

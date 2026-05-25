@@ -56,6 +56,14 @@ HELP_TEXT = """\
 [배포 제어]
   /ship T-ID  — READY_TO_SHIP 태스크 main 배포 승인
 
+[멀티 프로젝트]
+  /projects         — 등록된 프로젝트 목록
+  /project ID       — 프로젝트 전환  예: /project ios_capture
+  /current          — 현재 활성 프로젝트 확인
+
+[Handoff]
+  /handoff T-ID     — 태스크 Handoff 파일 생성/업데이트
+
 알림 레벨:
   VERBOSE — 모든 알림
   NORMAL  — 완료/실패/승인요청만 (기본값)
@@ -77,11 +85,13 @@ class TelegramBot:
         pm_agent: Any,
         orchestrator: Any,
         notification_level: str = "NORMAL",
+        project_manager: Any = None,   # Phase 0.5: ProjectManager (선택)
     ) -> None:
         self.token = token
         self.chat_id = str(chat_id)
         self.pm_agent = pm_agent
         self.orchestrator = orchestrator
+        self.project_manager = project_manager  # Phase 0.5
         self.notification_level = notification_level.upper()
         if self.notification_level not in NOTIFICATION_LEVELS:
             self.notification_level = "NORMAL"
@@ -114,6 +124,14 @@ class TelegramBot:
         # Phase 4 명령
         self._app.add_handler(CommandHandler("diff", self._handle_diff))
 
+        # Phase 0.5 — 멀티 프로젝트
+        self._app.add_handler(CommandHandler("projects", self._handle_projects))
+        self._app.add_handler(CommandHandler("project", self._handle_project))
+        self._app.add_handler(CommandHandler("current", self._handle_current))
+
+        # Phase 0.7 — Handoff
+        self._app.add_handler(CommandHandler("handoff", self._handle_handoff))
+
         # Phase 2 — inline button callbacks
         self._app.add_handler(CallbackQueryHandler(self._handle_callback_query))
 
@@ -125,14 +143,18 @@ class TelegramBot:
         async with self._app:
             # Telegram 명령 메뉴 등록 (/ 눌렀을 때 자동완성)
             await self._app.bot.set_my_commands([
-                BotCommand("help",    "도움말"),
-                BotCommand("running", "현재 실행 중인 태스크 확인"),
-                BotCommand("log",     "태스크 로그 출력  예: /log T-73"),
-                BotCommand("ship",    "배포 승인  예: /ship T-73"),
-                BotCommand("diff",    "Diff 요약  예: /diff T-73"),
-                BotCommand("status",  "시스템 상태"),
-                BotCommand("reload",  "태스크 큐 재스캔"),
-                BotCommand("level",   "알림 레벨 변경"),
+                BotCommand("help",     "도움말"),
+                BotCommand("running",  "현재 실행 중인 태스크 확인"),
+                BotCommand("log",      "태스크 로그 출력  예: /log T-73"),
+                BotCommand("ship",     "배포 승인  예: /ship T-73"),
+                BotCommand("diff",     "Diff 요약  예: /diff T-73"),
+                BotCommand("projects", "프로젝트 목록"),
+                BotCommand("project",  "프로젝트 전환  예: /project ios_capture"),
+                BotCommand("current",  "현재 프로젝트 확인"),
+                BotCommand("handoff",  "Handoff 생성  예: /handoff T-91"),
+                BotCommand("status",   "시스템 상태"),
+                BotCommand("reload",   "태스크 큐 재스캔"),
+                BotCommand("level",    "알림 레벨 변경"),
             ])
             await self._app.start()
             await self._app.updater.start_polling()
@@ -483,6 +505,169 @@ class TelegramBot:
             summary = summary[:4000] + "\n...(이하 생략)"
 
         await self._reply(update, summary)
+
+    # ── Phase 0.5: 멀티 프로젝트 명령 핸들러 ─────────────────────────
+
+    async def _handle_projects(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/projects — 등록된 프로젝트 목록 표시."""
+        if self.project_manager is None:
+            await self._reply(update, "멀티 프로젝트 기능이 비활성화되어 있습니다.\n(projects.yaml 확인)")
+            return
+        text = self.project_manager.format_project_list()
+        await self._reply(update, text)
+
+    async def _handle_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/project PROJECT_ID — 프로젝트 전환."""
+        if self.project_manager is None:
+            await self._reply(update, "멀티 프로젝트 기능이 비활성화되어 있습니다.")
+            return
+
+        args = context.args or []
+        if not args:
+            await self._reply(update, "사용법: /project PROJECT_ID\n예: /project ios_capture")
+            return
+
+        project_id = args[0].strip()
+        if not self.project_manager.switch(project_id):
+            available = ", ".join(self.project_manager.list_projects())
+            await self._reply(
+                update,
+                f"❌ 프로젝트 '{project_id}'를 찾을 수 없습니다.\n"
+                f"등록된 프로젝트: {available}\n"
+                f"(/projects 로 목록 확인)"
+            )
+            return
+
+        paths = self.project_manager.current_paths
+        if paths is None:
+            await self._reply(update, f"❌ 프로젝트 경로 로드 실패: {project_id}")
+            return
+
+        # Orchestrator 에 전환 요청
+        if self.orchestrator is not None and hasattr(self.orchestrator, "switch_project"):
+            self.orchestrator.switch_project(paths)
+            await self._reply(
+                update,
+                f"✅ 프로젝트 전환 요청\n\n"
+                f"프로젝트: {project_id}\n"
+                f"repo: {paths.repo_path}\n"
+                f"task_queue: {paths.task_queue_dir}\n\n"
+                f"현재 task 완료 후 적용됩니다."
+            )
+        else:
+            await self._reply(
+                update,
+                f"✅ 프로젝트 선택: {project_id}\n"
+                f"(Orchestrator 없음 — 경로 반영 불가)"
+            )
+
+    async def _handle_current(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/current — 현재 활성 프로젝트 표시."""
+        if self.project_manager is None:
+            # 단일 프로젝트 모드 — orchestrator에서 repo_path 가져오기
+            if self.orchestrator is not None and hasattr(self.orchestrator, "config"):
+                repo = getattr(self.orchestrator.config, "repo_path", "?")
+                await self._reply(update, f"📌 현재 프로젝트: (단일)\nrepo: {repo}")
+            else:
+                await self._reply(update, "현재 프로젝트 정보 없음")
+            return
+        text = self.project_manager.format_current()
+        await self._reply(update, text)
+
+    # ── Phase 0.7: Handoff 명령 핸들러 ──────────────────────────────
+
+    async def _handle_handoff(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/handoff T-ID — 태스크 Handoff 파일 생성/업데이트."""
+        args = context.args or []
+        if not args:
+            await self._reply(update, "사용법: /handoff T-ID\n예: /handoff T-91")
+            return
+
+        task_id = args[0].strip()
+        if not task_id:
+            await self._reply(update, "태스크 ID를 입력하세요.")
+            return
+
+        # handoff 경로 결정 (ProjectManager > Orchestrator > fallback)
+        try:
+            from project_manager import ProjectPaths, generate_handoff
+        except ImportError:
+            await self._reply(update, "❌ project_manager 모듈 로드 실패")
+            return
+
+        # 현재 프로젝트 paths 결정
+        paths: ProjectPaths | None = None
+        if self.project_manager is not None:
+            paths = self.project_manager.current_paths
+        elif self.orchestrator is not None:
+            # Orchestrator에서 현재 경로 가져오기 (단일 프로젝트 모드)
+            try:
+                repo = getattr(self.orchestrator, "config", None)
+                repo_path = getattr(repo, "repo_path", None)
+                if repo_path:
+                    from pathlib import Path as _Path
+                    handoffs_dir = getattr(self.orchestrator, "handoffs_dir", None)
+                    if handoffs_dir is None:
+                        handoffs_dir = _Path(repo_path) / "pm_agent_system" / "handoffs"
+                    # 임시 ProjectPaths 생성
+                    paths = ProjectPaths(
+                        project_id="default",
+                        repo_path=_Path(repo_path),
+                        spec_path=_Path(getattr(repo, "spec_path", repo_path)),
+                        pmbot_dir=_Path(repo_path) / "pm_agent_system",
+                    )
+            except Exception:
+                pass
+
+        if paths is None:
+            await self._reply(update, "❌ 현재 프로젝트 경로를 확인할 수 없습니다.")
+            return
+
+        # 태스크 파일에서 goal 추출
+        goal = ""
+        task_file = paths.task_queue_dir / f"{task_id}.md"
+        if not task_file.exists():
+            # 완료된 태스크 파일 탐색
+            for candidate in paths.task_queue_dir.glob(f"*{task_id}*.md"):
+                task_file = candidate
+                break
+        if task_file.exists():
+            content = task_file.read_text(encoding="utf-8", errors="replace")
+            for line in content.splitlines():
+                stripped = line.strip().lstrip("#").strip()
+                if stripped and len(stripped) > 5:
+                    goal = stripped[:200]
+                    break
+
+        # 현재 실행 상태
+        current_status = ""
+        if self.orchestrator is not None and hasattr(self.orchestrator, "get_running_task"):
+            running = self.orchestrator.get_running_task()
+            if running and running.get("task_id") == task_id:
+                phase = running.get("phase", "RUNNING")
+                current_status = f"{phase} (실행 중)"
+
+        # Handoff 생성
+        try:
+            content = generate_handoff(
+                task_id=task_id,
+                paths=paths,
+                goal=goal,
+                current_status=current_status,
+            )
+            handoff_path = paths.handoff_path(task_id)
+            handoff_path.write_text(content, encoding="utf-8")
+        except Exception as exc:
+            await self._reply(update, f"❌ Handoff 생성 실패\n{exc}")
+            return
+
+        await self._reply(
+            update,
+            f"📎 Handoff 생성 완료\n\n"
+            f"태스크: {task_id}\n"
+            f"파일: {handoff_path}\n\n"
+            f"Done / Remaining / Risks / Next Prompt 섹션을 직접 편집하세요."
+        )
 
     # ── Phase 2: Inline button callback ──────────────────────────────
 
