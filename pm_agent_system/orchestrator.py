@@ -20,7 +20,7 @@ from typing import Any, Callable, Coroutine
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from schemas import TaskPacket, CompletedPacket, ReviewVerdict
+from schemas import TaskPacket, CompletedPacket, ReviewVerdict, FileFinding
 from git_manager import GitManager
 from review_agent import ReviewAgent
 from config import Config
@@ -169,7 +169,59 @@ def _short_reason(verdict: ReviewVerdict) -> str:
     return verdict.notes[:100] if verdict.notes else "리뷰 실패"
 
 
+def _format_file_findings(findings: list[FileFinding], max_items: int = 5) -> str:
+    """FileFinding 목록을 Telegram 친화적 문자열로 변환."""
+    if not findings:
+        return ""
+    icons = {"ERROR": "🔴", "WARN": "🟡", "INFO": "🔵"}
+    lines = []
+    for f in findings[:max_items]:
+        icon = icons.get(f.severity, "⚪")
+        loc = f"{f.file}:{f.line}" if f.line else f.file
+        lines.append(f"{icon} {loc}\n   {f.finding[:120]}")
+    if len(findings) > max_items:
+        lines.append(f"... 외 {len(findings) - max_items}개")
+    return "\n".join(lines)
+
+
 # Phase 4: Diff 유틸리티 ────────────────────────────────────────────────
+
+def _smart_truncate_diff(diff_text: str, max_chars: int = 12000) -> str:
+    """diff를 파일 섹션별로 균등하게 truncate.
+
+    파일 헤더(diff --git a/... b/...) 기준으로 섹션 분리.
+    각 파일 섹션에서 앞부분을 우선 유지.
+    전체 max_chars 내에서 최대한 많은 파일을 포함한다.
+    """
+    if not diff_text or len(diff_text) <= max_chars:
+        return diff_text
+
+    # diff --git 헤더로 파일 섹션 분리
+    sections = re.split(r"(?=^diff --git )", diff_text, flags=re.MULTILINE)
+    if len(sections) <= 1:
+        return diff_text[:max_chars] + "\n... [truncated]"
+
+    # 섹션 수에 따라 파일당 할당 크기 계산 (헤더 포함 최소 800)
+    per_file_budget = max(800, max_chars // len(sections))
+    result_parts: list[str] = []
+    used = 0
+
+    for sec in sections:
+        if not sec.strip():
+            continue
+        remaining_budget = max_chars - used
+        if remaining_budget <= 0:
+            break
+        budget = min(per_file_budget, remaining_budget)
+        if len(sec) <= budget:
+            result_parts.append(sec)
+            used += len(sec)
+        else:
+            result_parts.append(sec[:budget] + "\n... [file diff truncated]\n")
+            used += budget
+
+    return "".join(result_parts)
+
 
 _SENSITIVE_FILE_PATTERNS = frozenset([
     ".env", "secret", "credential", "token", "password", "private_key",
@@ -668,7 +720,10 @@ class Orchestrator:
             return None
 
     def get_task_diff_summary(self, task_id: str) -> str:
-        """Phase 4: /diff T-ID 명령용 모바일 친화적 diff 요약 반환."""
+        """Phase 4: /diff T-ID 명령용 모바일 친화적 diff 요약 반환.
+
+        메타데이터(파일 목록/통계) + actual diff 앞부분 스니펫을 함께 표시.
+        """
         diff_info = self._task_diffs.get(task_id)
         if diff_info is None:
             # 로그 디렉토리에서 저장된 diff 파일 시도
@@ -687,7 +742,25 @@ class Orchestrator:
                 f"태스크가 실행된 적이 없거나 아직 CLI 실행 전입니다."
             )
 
-        return _format_diff_summary(task_id, diff_info)
+        # 기본 요약 (파일 목록 + 통계 + 위험 요소)
+        summary = _format_diff_summary(task_id, diff_info)
+
+        # actual diff 스니펫 (앞 1500자) — .actual.diff 파일 우선, 메모리 fallback
+        actual_diff = ""
+        actual_file = self._log_dir / f"{task_id}.actual.diff"
+        if actual_file.exists():
+            try:
+                actual_diff = actual_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                pass
+        if not actual_diff:
+            actual_diff = diff_info.get("actual_diff", "")
+
+        if actual_diff.strip():
+            snippet = _smart_truncate_diff(actual_diff, max_chars=1500)
+            summary += f"\n\n--- diff snippet ---\n```diff\n{snippet}\n```"
+
+        return summary
 
     def get_handoff_summary(self, task_id: str) -> str:
         """Phase 3-E: 태스크 Handoff 파일의 Telegram 친화적 요약 반환."""
@@ -824,7 +897,7 @@ class Orchestrator:
             test_result="(Adopted task 리뷰 — git diff 기반)",
             agent_notes=f"branch: {branch or 'main'}",
             timestamp=datetime.now().isoformat(),
-            actual_diff=diff_info.get("actual_diff", "")[:12000],
+            actual_diff=_smart_truncate_diff(diff_info.get("actual_diff", ""), max_chars=12000),
             git_status=diff_info.get("git_status", ""),
             diff_stat=diff_info.get("diff_stat", ""),
             diff_numstat=diff_info.get("diff_numstat", ""),
@@ -910,11 +983,18 @@ class Orchestrator:
                 next_prompt=f"/resume {task_id} 로 수정 후 재시도",
             )
 
+            # Phase 4: file_findings 표시
+            _ff_text_adopted = ""
+            if verdict.file_findings:
+                _ff_str = _format_file_findings(verdict.file_findings)
+                if _ff_str:
+                    _ff_text_adopted = f"\n\n파일별 피드백:\n{_ff_str}"
             card_text = (
                 f"❌ {label} 리뷰 실패 (Adopted)\n\n"
                 f"분류:\n- {category}\n\n"
                 f"요약:\n- {reason}\n\n"
                 f"추천:\n- {action}"
+                f"{_ff_text_adopted}"
             )
             if self.notify_failure_card_fn is not None:
                 try:
@@ -1316,8 +1396,8 @@ class Orchestrator:
                 test_result="(CLI stdout — 별도 테스트 없음)",
                 agent_notes=stdout_text[-2000:] if len(stdout_text) > 2000 else "",
                 timestamp=datetime.now().isoformat(),
-                # Phase 4 필드
-                actual_diff=diff_info.get("actual_diff", "")[:12000],
+                # Phase 4 필드 — smart truncate로 파일별 균등 보존
+                actual_diff=_smart_truncate_diff(diff_info.get("actual_diff", ""), max_chars=12000),
                 git_status=diff_info.get("git_status", ""),
                 diff_stat=diff_info.get("diff_stat", ""),
                 diff_numstat=diff_info.get("diff_numstat", ""),
@@ -1385,7 +1465,7 @@ class Orchestrator:
 
         # 최종 처리
         if succeeded and last_verdict is not None:
-            await self._on_pass(task_id, task_path, task_content, packet)
+            await self._on_pass(task_id, task_path, task_content, packet, verdict=last_verdict)
         else:
             await self._on_fail(
                 task_id=task_id,
@@ -1500,6 +1580,7 @@ class Orchestrator:
         task_path: Path,
         task_content: str,
         packet: CompletedPacket,
+        verdict: ReviewVerdict | None = None,
     ) -> None:
         """PASS 판정 처리."""
         commit_message = _build_commit_message(task_id, task_content)
@@ -1534,10 +1615,18 @@ class Orchestrator:
             self._running_task["phase"] = "READY_TO_SHIP"
 
             label = self._task_label(task_id)
+            # Phase 4: PASS라도 INFO/WARN file_findings가 있으면 advisory로 표시
+            _advisory = ""
+            if verdict is not None and verdict.file_findings:
+                _info_findings = [f for f in verdict.file_findings if f.severity in ("INFO", "WARN")]
+                if _info_findings:
+                    _ff_str = _format_file_findings(_info_findings, max_items=3)
+                    _advisory = f"\n\n💬 리뷰 제안:\n{_ff_str}"
             card_text = (
                 f"✅ {label} 리뷰 통과\n\n"
                 f"main에는 아직 반영하지 않았습니다.\n"
-                f"Ship 승인이 필요합니다.\n\n"
+                f"Ship 승인이 필요합니다."
+                f"{_advisory}\n\n"
                 f"명령:\n"
                 f"- /ship {task_id}\n"
                 f"- /diff {task_id}\n"
@@ -1675,11 +1764,18 @@ class Orchestrator:
         # Phase 3-D: handoff 존재 여부 확인
         _hf_path = self._handoffs_dir / f"{task_id}.md"
         _hf_note = f"\n\nhandoff:\n{task_id}.md 존재" if _hf_path.exists() else ""
+        # Phase 4: file_findings 표시
+        _ff_text = ""
+        if verdict is not None and verdict.file_findings:
+            _ff_str = _format_file_findings(verdict.file_findings)
+            if _ff_str:
+                _ff_text = f"\n\n파일별 피드백:\n{_ff_str}"
         card_text = (
             f"❌ {label} 실패\n\n"
             f"분류:\n- {category}\n\n"
             f"요약:\n- {reason}\n\n"
             f"추천:\n- {action}"
+            f"{_ff_text}"
             f"{structural_note}"
             f"{_hf_note}"
         )
@@ -1716,8 +1812,11 @@ class Orchestrator:
     async def _collect_git_diff(self, branch: str) -> dict:
         """Phase 4: Claude CLI 실행 후 실제 git diff 수집.
 
-        Review 시점에는 변경이 아직 unstaged 상태이므로
-        'git diff HEAD' (unstaged) + 'git diff --cached HEAD' (staged) 조합 사용.
+        수집 전략:
+        1. git diff main..HEAD — 브랜치에서 커밋된 변경 (adopt/commit workflow)
+        2. git diff HEAD — 미커밋 unstaged 변경
+        3. git diff --cached HEAD — 미커밋 staged 변경
+        세 가지를 합산하여 완전한 변경 그림을 제공.
         """
         repo = str(self.config.repo_path)
 
@@ -1734,25 +1833,39 @@ class Orchestrator:
                 print(f"[orchestrator] git {' '.join(args)} 실패: {exc}")
                 return ""
 
-        # unstaged + staged 변경 모두 수집
-        diff_unstaged = await _git("diff", "HEAD")
-        diff_staged = await _git("diff", "--cached", "HEAD")
-        actual_diff = (diff_staged + diff_unstaged).strip()
+        # 1. main..HEAD: 브랜치에서 커밋된 변경 (commit 기반 workflow 포착)
+        diff_vs_main = await _git("diff", "main..HEAD")
 
-        # 통계 (staged+unstaged 합산)
+        # 2. HEAD: 미커밋 unstaged 변경 (Claude Code CLI가 파일 수정만 한 경우)
+        diff_unstaged = await _git("diff", "HEAD")
+
+        # 3. --cached HEAD: 스테이지된 변경
+        diff_staged = await _git("diff", "--cached", "HEAD")
+
+        # 합산: main..HEAD 먼저 (커밋 기반 우선), 이후 uncommitted
+        _parts = [p.strip() for p in [diff_vs_main, diff_staged, diff_unstaged] if p.strip()]
+        actual_diff = "\n".join(_parts)
+
+        # 통계
+        stat_vs_main = await _git("diff", "--stat", "main..HEAD")
         stat_unstaged = await _git("diff", "--stat", "HEAD")
         stat_staged = await _git("diff", "--stat", "--cached", "HEAD")
-        diff_stat = (stat_staged + stat_unstaged).strip()
+        _stat_parts = [p.strip() for p in [stat_vs_main, stat_staged, stat_unstaged] if p.strip()]
+        diff_stat = "\n".join(_stat_parts)
 
         # numstat — per-file +/-
+        num_vs_main = await _git("diff", "--numstat", "main..HEAD")
         num_unstaged = await _git("diff", "--numstat", "HEAD")
         num_staged = await _git("diff", "--numstat", "--cached", "HEAD")
-        diff_numstat = (num_staged + num_unstaged).strip()
+        _num_parts = [p.strip() for p in [num_vs_main, num_staged, num_unstaged] if p.strip()]
+        diff_numstat = "\n".join(_num_parts)
 
         # name-status (M/A/D per file)
+        ns_vs_main = await _git("diff", "--name-status", "main..HEAD")
         ns_unstaged = await _git("diff", "--name-status", "HEAD")
         ns_staged = await _git("diff", "--name-status", "--cached", "HEAD")
-        name_status_raw = (ns_staged + ns_unstaged).strip()
+        _ns_parts = [p.strip() for p in [ns_vs_main, ns_staged, ns_unstaged] if p.strip()]
+        name_status_raw = "\n".join(_ns_parts)
 
         # git status --short (untracked 포함 전체 상태)
         git_status = await _git("status", "--short")

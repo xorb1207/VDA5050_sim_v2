@@ -20,7 +20,7 @@ import re
 
 import anthropic
 
-from schemas import CompletedPacket, ReviewVerdict, Violation
+from schemas import CompletedPacket, ReviewVerdict, Violation, FileFinding
 
 
 # ── Sensitive file patterns ───────────────────────────────────────────────
@@ -91,20 +91,28 @@ evaluate whether the changes are correct, complete, and within scope.
 IMPORTANT: Base your verdict primarily on the actual_diff (real git changes),
 NOT on stdout summaries or agent notes.
 
-Respond ONLY with a valid JSON object:
+Respond ONLY with a valid JSON object (no markdown fences):
 {
   "verdict": "PASS" | "FAIL" | "NEEDS_REVISION",
   "violations": [
     {"rule": "<rule_id>", "description": "<what went wrong>", "severity": "ERROR" | "WARN"}
   ],
-  "notes": "<one-line summary>"
+  "file_findings": [
+    {"file": "<filename>", "line": <int or 0>, "finding": "<specific issue>", "severity": "ERROR" | "WARN" | "INFO"}
+  ],
+  "notes": "<one-line summary for the developer>"
 }
 
-Rules:
-- correctness.logic: Does the actual diff match the task spec?
-- correctness.tests: Do tests cover the changes?
-- scope.unrelated_changes: Are there changes unrelated to the task?
-- scope.files_outside_task: Are changed files within the expected set?
+Rules for violations:
+- correctness.logic: Does the actual diff implement what the task spec requires?
+- correctness.tests: Are new/changed behaviors covered by tests?
+- scope.unrelated_changes: Are there changes clearly unrelated to the task?
+- scope.files_outside_task: Are changed files within the expected scope?
+
+For file_findings:
+- List 1-5 most important findings with specific file names and line numbers when visible in the diff.
+- Use INFO severity for suggestions, WARN for concerns, ERROR for blockers.
+- If PASS, file_findings can be empty or contain INFO-level suggestions only.
 """,
         "cache_control": {"type": "ephemeral"},
     }
@@ -274,6 +282,16 @@ class ReviewAgent:
                         for v in data.get("violations", [])
                     ],
                     notes=data.get("notes", ""),
+                    file_findings=[
+                        FileFinding(
+                            file=f.get("file", ""),
+                            finding=f.get("finding", ""),
+                            severity=f.get("severity", "WARN"),
+                            line=int(f.get("line") or 0),
+                        )
+                        for f in data.get("file_findings", [])
+                        if f.get("file") and f.get("finding")
+                    ],
                 )
 
             except (json.JSONDecodeError, ValueError, KeyError, IndexError) as e:
