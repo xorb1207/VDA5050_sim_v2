@@ -36,18 +36,49 @@ python main.py --status  # 현재 상태만 출력 후 종료
 
 ## Telegram 명령 레퍼런스
 
-### 점검/조회
+> RC1 기준 실제 등록된 커맨드만 수록. 미구현 커맨드(`/retry`, `/cancel`, `/debug`)는 [Post-RC1 Backlog](#post-rc1-backlog-우선순위-순) 참고.
+
+### 상태 확인
 
 | 명령 | 설명 |
 |------|------|
 | `/doctor` | PM Bot 전체 상태 점검 (repo/git/태스크 현황) |
 | `/queue` | 전체 작업 대기열 요약 |
 | `/running` | 현재 실행 중인 태스크 확인 |
+| `/status` | 시스템 상태 요약 |
+
+### 작업 확인
+
+| 명령 | 설명 |
+|------|------|
 | `/log T-ID` | 태스크 최근 로그 (50줄) |
 | `/diff T-ID` | 태스크 git diff 요약 + 스니펫 |
-| `/status` | 시스템 상태 |
+| `/handoff T-ID` | 태스크 Handoff 파일 생성/갱신 |
 
-### 이력 / 통계 (Batch 6)
+### 프로젝트
+
+| 명령 | 설명 |
+|------|------|
+| `/projects` | 등록된 프로젝트 목록 |
+| `/project T-ID` | 특정 태스크의 프로젝트 정보 |
+| `/current` | 현재 활성 프로젝트 확인 |
+
+### 작업 이어받기
+
+| 명령 | 설명 |
+|------|------|
+| `/adopt T-ID` | 직접 작업한 내용을 PM Bot에 편입 → ADOPTED 상태 |
+| `/review T-ID` | ADOPTED 태스크를 Review Agent로 검토 → READY_TO_SHIP |
+| `/resume T-ID` | Handoff 기반 중단 작업 재개 |
+
+### Ship 제어
+
+| 명령 | 설명 |
+|------|------|
+| `/ship T-ID` | READY_TO_SHIP 태스크 main 배포 승인 |
+| `/hold T-ID` | 태스크 보류 (branch 유지, merge 없음) |
+
+### 운영 관리
 
 | 명령 | 설명 |
 |------|------|
@@ -56,26 +87,14 @@ python main.py --status  # 현재 상태만 출력 후 종료
 | `/stale` | 장시간 방치된 작업 감지 (HELD 7일+, RTS 3일+, ADOPTED 5일+) |
 | `/archive T-ID` | 태스크 파일·로그를 압축 archive에 수동 저장 |
 
-### 배포 제어
+### 설정
 
 | 명령 | 설명 |
 |------|------|
-| `/ship T-ID` | READY_TO_SHIP 태스크 main 배포 승인 |
-| `/hold T-ID` | READY_TO_SHIP 태스크 보류 (branch 유지, merge 없음) |
-
-### Adopt / Resume
-
-| 명령 | 설명 |
-|------|------|
-| `/adopt T-ID` | 직접 작업한 내용을 PM Bot에 편입 → ADOPTED 상태 |
-| `/review T-ID` | ADOPTED 태스크를 Review Agent로 검토 → READY_TO_SHIP |
-| `/resume T-ID` | Handoff 기반 중단 작업 재개 |
-
-### Handoff
-
-| 명령 | 설명 |
-|------|------|
-| `/handoff T-ID` | 태스크 Handoff 파일 생성/갱신 |
+| `/level VERBOSE\|NORMAL\|QUIET` | Telegram 알림 레벨 변경 |
+| `/reload` | `.env` 설정 재로드 |
+| `/approve` | 콜백 승인 처리 (인라인 버튼) |
+| `/help` | 명령 목록 출력 |
 
 ---
 
@@ -320,9 +339,19 @@ pm_agent_system/
 
 ## Post-RC1 Backlog (우선순위 순)
 
+### 인프라 / 경로 정리
+
 | 순위 | 항목 | 비고 |
 |------|------|------|
 | 1 | `git_state.json` 경로 통일 | `./state/` vs `pm_agent_system/state/` 혼용 → 운영 혼란 제거 |
 | 2 | archive 경로 멀티프로젝트 재설계 | 프로젝트별 격리 |
 | 3 | untracked 파일 처리 정책 | `git add .` 대신 **감지 → Telegram 승인** 방식 권장 (의도치 않은 파일 포함 방지) |
 | 4 | pytest/hydra conda 환경 충돌 해소 | 현재 `python` 직접 실행으로 우회 중 |
+
+### 미구현 커맨드
+
+| 커맨드 | 우선순위 | 설명 | 비고 |
+|--------|---------|------|------|
+| `/retry T-ID` | 높음 | 실패 태스크 재시도 (원인 반영) | `/resume`과 의미 구분: resume=handoff 기반 이어받기, retry=동일 조건 재실행 |
+| `/cancel T-ID` | 보통 | RUNNING 태스크 graceful stop → FAILED/CANCELLED | 2단계: cancel_requested 표시 → subprocess 종료. 급할 땐 `/hold` 우회 가능 |
+| `/debug` | 보류 | 내부 상태 덤프 | `DEBUG_MODE=true` 환경일 때만 활성화 고려. 일반 운영에서는 `/doctor`+`/log`로 충분 |
