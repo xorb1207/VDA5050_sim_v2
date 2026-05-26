@@ -29,6 +29,8 @@ class Config:
     # Batch 6: Daily Report
     daily_report: bool = False
     daily_report_hour: int = 9   # 0-23
+    # RC Hotfix 1: ReviewAgent 타임아웃
+    review_timeout_seconds: int = 120
 
 
 def load_config() -> Config:
@@ -76,4 +78,5 @@ def load_config() -> Config:
         archive_retention_days=parse_int(os.environ.get("ARCHIVE_RETENTION_DAYS", ""), default=90),
         daily_report=parse_bool(os.environ.get("DAILY_REPORT", ""), default=False),
         daily_report_hour=parse_int(os.environ.get("DAILY_REPORT_HOUR", ""), default=9),
+        review_timeout_seconds=parse_int(os.environ.get("REVIEW_TIMEOUT_SECONDS", ""), default=120),
     )

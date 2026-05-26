@@ -324,7 +324,7 @@ def _format_diff_summary(task_id: str, diff_info: dict) -> str:
 
 _FAILURE_CATEGORIES = (
     "CLI_ERROR", "TEST_FAILED", "SCOPE_VIOLATION",
-    "REVIEW_FAILED", "GIT_FAILED", "TIMEOUT", "UNKNOWN",
+    "REVIEW_FAILED", "REVIEW_TIMEOUT", "GIT_FAILED", "TIMEOUT", "UNKNOWN",
 )
 
 
@@ -341,6 +341,8 @@ def _classify_failure(
         if verdict.violations:
             for v in verdict.violations:
                 rule_lower = getattr(v, "rule", "").lower()
+                if "timeout" in rule_lower and "review" in rule_lower:
+                    return "REVIEW_TIMEOUT"
                 if "scope" in rule_lower or "file" in rule_lower:
                     return "SCOPE_VIOLATION"
             return "REVIEW_FAILED"
@@ -358,6 +360,7 @@ def _recommended_action(category: str) -> str:
         "TEST_FAILED":     "테스트 실패 원인을 확인하고 재시도하세요.",
         "SCOPE_VIOLATION": "allowed_files 목록을 확인하고 범위 내에서 재시도하세요.",
         "REVIEW_FAILED":   "리뷰 결과를 확인하고 수정 후 재시도하세요.",
+        "REVIEW_TIMEOUT":  "Review Agent가 응답하지 않았습니다. /resume 또는 /retry로 재시도하세요.",
         "GIT_FAILED":      "git 상태를 확인하고 branch를 정리하세요.",
         "TIMEOUT":         "태스크 복잡도를 줄이거나 분할하여 재시도하세요.",
         "UNKNOWN":         "로그를 확인하고 재시도하세요.",
@@ -1723,14 +1726,37 @@ class Orchestrator:
                 changed_files=changed_files or None,
             )
 
-            # ReviewAgent 검토
+            # ReviewAgent 검토 (RC Hotfix 1: timeout 보호)
+            _review_timeout = getattr(self.config, "review_timeout_seconds", 120)
             if self.review_agent is not None:
                 spec_context = self._load_spec_context()
-                verdict = await self.review_agent.review(
-                    spec_context=spec_context,
-                    completed_packet=packet,
-                    allowed_files=allowed_files if allowed_files else None,
-                )
+                try:
+                    verdict = await asyncio.wait_for(
+                        self.review_agent.review(
+                            spec_context=spec_context,
+                            completed_packet=packet,
+                            allowed_files=allowed_files if allowed_files else None,
+                        ),
+                        timeout=float(_review_timeout),
+                    )
+                except asyncio.TimeoutError:
+                    print(
+                        f"[orchestrator] {task_id} — Review Agent {_review_timeout}초 타임아웃"
+                    )
+                    from schemas import ReviewVerdict as RV, Violation as V
+                    verdict = RV(
+                        verdict="FAIL",
+                        task_id=task_id,
+                        violations=[V(
+                            rule="review.timeout",
+                            description=(
+                                f"Review Agent가 {_review_timeout}초 내 응답하지 않았습니다. "
+                                "API 네트워크 상태를 확인하세요."
+                            ),
+                            severity="ERROR",
+                        )],
+                        notes=f"REVIEW_TIMEOUT after {_review_timeout}s",
+                    )
             else:
                 from schemas import ReviewVerdict as RV
                 verdict = RV(verdict="PASS", task_id=task_id, notes="review_agent 없음 — 자동 PASS")
@@ -1742,16 +1768,17 @@ class Orchestrator:
                 succeeded = True
                 break
 
-            # 구조적 실패 — 재시도해도 통과 불가, 즉시 중단
+            # 구조적 실패 또는 타임아웃 — 재시도하지 않음
             _NO_RETRY_RULES = frozenset({
                 "scope.files_outside_task",
                 "scope.sensitive_file_changed",
                 "scope.file_deleted",
                 "correctness.no_changes",
+                "review.timeout",          # RC Hotfix 1: 타임아웃 재시도 금지
             })
             violated_rules = {getattr(v, "rule", "") for v in verdict.violations}
             if violated_rules & _NO_RETRY_RULES:
-                print(f"[orchestrator] {task_id} — 구조적 실패 감지, retry 생략: {violated_rules & _NO_RETRY_RULES}")
+                print(f"[orchestrator] {task_id} — 재시도 불가 실패: {violated_rules & _NO_RETRY_RULES}")
                 break
 
             # FAIL / NEEDS_REVISION — 일시적 실패, retry 가능
@@ -2073,6 +2100,7 @@ class Orchestrator:
             "correctness.no_changes",
         })
         violated_rules = {getattr(v, "rule", "") for v in (verdict.violations if verdict else [])}
+        # REVIEW_TIMEOUT은 구조적이지 않음 — /resume 으로 재시도 가능
         is_structural = bool(violated_rules & _NO_RETRY_RULES)
 
         # 실패 카드 텍스트
@@ -2090,12 +2118,18 @@ class Orchestrator:
             _ff_str = _format_file_findings(verdict.file_findings)
             if _ff_str:
                 _ff_text = f"\n\n파일별 피드백:\n{_ff_str}"
+        # RC Hotfix 1: REVIEW_TIMEOUT 전용 카드 형식
+        _timeout_next = (
+            f"\n\n다음:\n- /resume {task_id}\n- /log {task_id}\n- /handoff {task_id}"
+            if category == "REVIEW_TIMEOUT" else ""
+        )
         card_text = (
             f"❌ {label} 실패\n\n"
             f"분류:\n- {category}\n\n"
             f"요약:\n- {reason}\n\n"
             f"추천:\n- {action}"
             f"{_ff_text}"
+            f"{_timeout_next}"
             f"{structural_note}"
             f"{_hf_note}"
         )
