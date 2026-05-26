@@ -26,6 +26,11 @@ from review_agent import ReviewAgent
 from config import Config
 from archive_manager import ArchiveManager
 from stats_tracker import StatsTracker
+from task_helpers import (
+    make_task_id, build_pending_content, preflight_check,
+    update_task_frontmatter, parse_task_frontmatter,
+    write_atomic, is_safe_queue_file,
+)
 
 
 CLI_TIMEOUT_S = 3600   # 1시간 (subscription 모드)
@@ -47,16 +52,16 @@ class _TaskQueueHandler(FileSystemEventHandler):
         self._loop = loop
 
     def on_created(self, event) -> None:  # type: ignore[override]
-        if not event.is_directory and event.src_path.endswith(".md"):
-            self._loop.call_soon_threadsafe(
-                self._queue.put_nowait, Path(event.src_path)
-            )
+        if not event.is_directory:
+            path = Path(event.src_path)
+            if is_safe_queue_file(path):
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, path)
 
     def on_moved(self, event) -> None:  # type: ignore[override]
-        if not event.is_directory and event.dest_path.endswith(".md"):
-            self._loop.call_soon_threadsafe(
-                self._queue.put_nowait, Path(event.dest_path)
-            )
+        if not event.is_directory:
+            path = Path(event.dest_path)
+            if is_safe_queue_file(path):
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, path)
 
 
 def _parse_task_id(path: Path) -> str:
@@ -513,9 +518,13 @@ class Orchestrator:
             else base / cfg.logs_dir / "tasks"
         )
 
+        # PM Bot V3: task_inbox — 등록됐지만 미승인 태스크 대기 디렉토리
+        self.task_inbox_dir: Path = base / "task_inbox"
+
         self.task_queue_dir.mkdir(parents=True, exist_ok=True)
         self.completed_dir.mkdir(parents=True, exist_ok=True)
         self._log_dir.mkdir(parents=True, exist_ok=True)
+        self.task_inbox_dir.mkdir(parents=True, exist_ok=True)
 
         self._processed_ids: set[str] = set()
         self._active_tasks: dict[str, Any] = {}
@@ -612,9 +621,10 @@ class Orchestrator:
             print(f"[orchestrator] task_queue 감시 시작: {self.task_queue_dir}"
                   + (f" (project: {self._current_project_id})" if self._current_project_id else ""))
 
-            # 기존 .md 파일 초기 스캔
+            # 기존 .md 파일 초기 스캔 (안전 검사 통과한 파일만)
             for existing_md in sorted(self.task_queue_dir.glob("*.md")):
-                await queue.put(existing_md)
+                if is_safe_queue_file(existing_md):
+                    await queue.put(existing_md)
 
             try:
                 while not self._switch_event.is_set():
@@ -673,6 +683,9 @@ class Orchestrator:
         self.spec_path = paths.spec_path
         self._handoffs_dir = paths.handoffs_dir
         self._current_project_id = paths.project_id
+        # PM Bot V3: 프로젝트별 inbox 디렉토리
+        self.task_inbox_dir = paths.task_queue_dir.parent / "task_inbox"
+        self.task_inbox_dir.mkdir(parents=True, exist_ok=True)
 
         # GitManager 경로도 업데이트
         if self.git_manager is not None:
@@ -975,6 +988,115 @@ class Orchestrator:
             })
 
         return tasks
+
+    # ── PM Bot V3: task_inbox ─────────────────────────────────────────────
+
+    def enqueue_task(
+        self,
+        title: str,
+        body: str,
+        priority: str = "medium",
+        created_from: str = "telegram",
+    ) -> dict:
+        """제목 + 본문을 받아 task_inbox/ 에 pending 파일로 저장한다.
+
+        Returns:
+            {"task_id": str, "filename": str, "path": str, "errors": list[str]}
+        """
+        errors = preflight_check(title, body)
+        if errors:
+            return {"task_id": "", "filename": "", "path": "", "errors": errors}
+
+        from datetime import datetime as _dt
+        now = _dt.now()
+        task_id = make_task_id(title, now)
+
+        # task_id 중복 방지 (inbox + queue 동시 확인)
+        if (self.task_inbox_dir / f"{task_id}.md").exists():
+            task_id = f"{task_id}-{now.strftime('%S')}"
+        if (self.task_queue_dir / f"{task_id}.md").exists():
+            task_id = f"{task_id}-q"
+
+        content = build_pending_content(
+            task_id=task_id,
+            title=title,
+            body=body,
+            created_from=created_from,
+            priority=priority,
+            now=now,
+        )
+
+        filename = f"{task_id}.md"
+        dest = self.task_inbox_dir / filename
+        write_atomic(dest, content)
+        print(f"[orchestrator] 태스크 등록(pending): {filename}")
+        return {"task_id": task_id, "filename": filename, "path": str(dest), "errors": []}
+
+    def approve_inbox_task(self, task_id: str) -> dict:
+        """inbox의 pending 태스크를 승인해 task_queue/ 로 이동.
+
+        Returns:
+            {"ok": bool, "task_id": str, "message": str}
+        """
+        # task_id → filename 매핑 (exact match 먼저, prefix match fallback)
+        inbox_file = self.task_inbox_dir / f"{task_id}.md"
+        if not inbox_file.exists():
+            # prefix 매칭 (짧은 id 입력 허용)
+            matches = list(self.task_inbox_dir.glob(f"*{task_id}*.md"))
+            if len(matches) == 1:
+                inbox_file = matches[0]
+                task_id = inbox_file.stem
+            elif len(matches) > 1:
+                names = ", ".join(m.name for m in matches)
+                return {"ok": False, "task_id": task_id,
+                        "message": f"❌ 여러 파일이 매칭됩니다: {names}"}
+            else:
+                return {"ok": False, "task_id": task_id,
+                        "message": f"❌ inbox에서 '{task_id}' 파일을 찾을 수 없습니다."}
+
+        # frontmatter 업데이트
+        from datetime import datetime as _dt
+        updates = {
+            "status": "queued",
+            "approved": True,
+            "approved_at": _dt.now().astimezone().isoformat(),
+        }
+        try:
+            new_content = update_task_frontmatter(inbox_file, updates)
+        except Exception as exc:
+            return {"ok": False, "task_id": task_id,
+                    "message": f"❌ frontmatter 업데이트 실패: {exc}"}
+
+        # task_queue/ 에 원자적으로 이동
+        dest = self.task_queue_dir / inbox_file.name
+        write_atomic(dest, new_content)
+
+        # inbox 파일 삭제
+        try:
+            inbox_file.unlink()
+        except Exception:
+            pass
+
+        print(f"[orchestrator] 태스크 승인: {inbox_file.name} → task_queue/")
+        return {"ok": True, "task_id": task_id,
+                "message": f"▶ 실행 대기열 등록 완료: {inbox_file.name}"}
+
+    def get_inbox_summary(self) -> list[dict]:
+        """task_inbox/ 의 pending 태스크 목록 반환."""
+        result: list[dict] = []
+        for md in sorted(self.task_inbox_dir.glob("*.md")):
+            if not md.name.endswith(".md") or md.name.startswith("."):
+                continue
+            fm = parse_task_frontmatter(md)
+            result.append({
+                "task_id": fm.get("id", md.stem),
+                "title": fm.get("title", md.stem),
+                "status": fm.get("status", "pending"),
+                "priority": fm.get("priority", "medium"),
+                "created_at": fm.get("created_at", ""),
+                "filename": md.name,
+            })
+        return result
 
     def get_task_log(self, task_id: str, lines: int = _LOG_TAIL_LINES) -> str | None:
         """Phase 0: 태스크 combined 로그의 최근 N 줄 반환. 파일 없으면 None."""
