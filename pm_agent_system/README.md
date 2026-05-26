@@ -298,3 +298,31 @@ pm_agent_system/
   stats.json        누적 작업 통계 (최근 500건)
   tests/            자동화 테스트
 ```
+
+---
+
+## RC1 이후 운영 루틴 (첫 1주일)
+
+새 기능 추가 없이 실제 외부 환경에서 3~5개 태스크를 돌리면서 UX 흐름을 검증합니다.
+
+```
+1. tmux에서 PM Bot 실행
+2. /doctor 확인
+3. /queue 확인
+4. 작은 작업 1개 실제 투입
+5. RUNNING → REVIEWING → READY_TO_SHIP 흐름 확인
+6. /diff 확인
+7. /ship 수동 승인
+8. /history, /stats 확인
+```
+
+---
+
+## Post-RC1 Backlog (우선순위 순)
+
+| 순위 | 항목 | 비고 |
+|------|------|------|
+| 1 | `git_state.json` 경로 통일 | `./state/` vs `pm_agent_system/state/` 혼용 → 운영 혼란 제거 |
+| 2 | archive 경로 멀티프로젝트 재설계 | 프로젝트별 격리 |
+| 3 | untracked 파일 처리 정책 | `git add .` 대신 **감지 → Telegram 승인** 방식 권장 (의도치 않은 파일 포함 방지) |
+| 4 | pytest/hydra conda 환경 충돌 해소 | 현재 `python` 직접 실행으로 우회 중 |
