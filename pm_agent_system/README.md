@@ -36,65 +36,54 @@ python main.py --status  # 현재 상태만 출력 후 종료
 
 ## Telegram 명령 레퍼런스
 
-> RC1 기준 실제 등록된 커맨드만 수록. 미구현 커맨드(`/retry`, `/cancel`, `/debug`)는 [Post-RC1 Backlog](#post-rc1-backlog-우선순위-순) 참고.
+> **평소에는 5개만 쓴다.** 나머지는 필요할 때만.
 
-### 상태 확인
-
-| 명령 | 설명 |
-|------|------|
-| `/doctor` | PM Bot 전체 상태 점검 (repo/git/태스크 현황) |
-| `/queue` | 전체 작업 대기열 요약 |
-| `/running` | 현재 실행 중인 태스크 확인 |
-| `/status` | 시스템 상태 요약 |
-
-### 작업 확인
+### 📋 평소 명령 (5개)
 
 | 명령 | 설명 |
 |------|------|
-| `/log T-ID` | 태스크 최근 로그 (50줄) |
-| `/diff T-ID` | 태스크 git diff 요약 + 스니펫 |
-| `/handoff T-ID` | 태스크 Handoff 파일 생성/갱신 |
+| `/menu` | 버튼 메뉴 (시작점) |
+| `/enqueue 제목\n본문` | 작업 등록 → inbox 대기 → 승인 후 실행 |
+| `/queue` | 전체 현황 (pending + 실행 대기, next action 포함) |
+| `/log T-ID` | 실행 중 로그 확인 |
+| `/ship T-ID` | 배포 승인 |
 
-### 프로젝트
+실사용 흐름: **`/enqueue` → `/queue` → `/log` → `/diff` → `/ship`**
 
-| 명령 | 설명 |
-|------|------|
-| `/projects` | 등록된 프로젝트 목록 |
-| `/project T-ID` | 특정 태스크의 프로젝트 정보 |
-| `/current` | 현재 활성 프로젝트 확인 |
+---
 
-### 작업 이어받기
+### 🔧 고급 명령 (`/help advanced`)
 
 | 명령 | 설명 |
 |------|------|
-| `/adopt T-ID` | 직접 작업한 내용을 PM Bot에 편입 → ADOPTED 상태 |
-| `/review T-ID` | ADOPTED 태스크를 Review Agent로 검토 → READY_TO_SHIP |
+| `/diff T-ID` | git diff 요약 + 스니펫 |
+| `/handoff T-ID` | Handoff 파일 생성/갱신 |
+| `/adopt T-ID` | 직접 작업한 내용 편입 → ADOPTED |
+| `/review T-ID` | ADOPTED → Review Agent → READY_TO_SHIP |
 | `/resume T-ID` | Handoff 기반 중단 작업 재개 |
+| `/hold T-ID` | 배포 보류 (branch 유지) |
+| `/run T-ID` | inbox 작업 승인 → 실행 대기열 이동 |
+| `/run next` | inbox 최우선 작업 승인 |
 
-### Ship 제어
+---
 
-| 명령 | 설명 |
-|------|------|
-| `/ship T-ID` | READY_TO_SHIP 태스크 main 배포 승인 |
-| `/hold T-ID` | 태스크 보류 (branch 유지, merge 없음) |
-
-### 운영 관리
+### ⚙️ 운영자 명령 (`/help admin`)
 
 | 명령 | 설명 |
 |------|------|
-| `/history` | 최근 archive 목록 (SHIPPED/FAILED 최신 5개씩) |
-| `/stats` | 전체 통계 (pass rate, avg 소요시간, 프로젝트별 현황) |
-| `/stale` | 장시간 방치된 작업 감지 (HELD 7일+, RTS 3일+, ADOPTED 5일+) |
-| `/archive T-ID` | 태스크 파일·로그를 압축 archive에 수동 저장 |
-
-### 설정
-
-| 명령 | 설명 |
-|------|------|
-| `/level VERBOSE\|NORMAL\|QUIET` | Telegram 알림 레벨 변경 |
-| `/reload` | `.env` 설정 재로드 |
-| `/approve` | 콜백 승인 처리 (인라인 버튼) |
-| `/help` | 명령 목록 출력 |
+| `/doctor` | PM Bot 전체 상태 점검 |
+| `/running` | 현재 실행 중인 태스크 |
+| `/status` | 시스템 상태 요약 |
+| `/projects` | 등록된 프로젝트 목록 |
+| `/project ID` | 프로젝트 전환 |
+| `/current` | 현재 활성 프로젝트 |
+| `/history` | 최근 완료/실패 이력 |
+| `/stats` | 누적 통계 |
+| `/stale` | 방치 작업 감지 (HELD 7일+, RTS 3일+, ADOPTED 5일+) |
+| `/archive T-ID` | 태스크 archive에 수동 보관 |
+| `/level VERBOSE\|NORMAL\|QUIET` | 알림 레벨 변경 |
+| `/reload` | 큐 재스캔 |
+| `/approve` | 콜백 승인 |
 
 ---
 

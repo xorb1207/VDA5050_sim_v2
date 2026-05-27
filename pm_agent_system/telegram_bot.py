@@ -41,54 +41,49 @@ logger = logging.getLogger(__name__)
 NOTIFICATION_LEVELS = ("VERBOSE", "NORMAL", "QUIET")
 
 HELP_TEXT = """\
-사용 가능한 명령:
+📋 평소 흐름 (5개면 충분)
 
-[작업 등록 (V3)]
-  /enqueue 제목\n본문  — 작업을 inbox에 등록 (승인 후 실행)
-  /run 태스크ID        — inbox 태스크 승인 → 실행 대기열로 이동
-  /run next            — inbox 중 가장 오래된 태스크 승인
+  /enqueue 제목
+  본문...       — 작업 등록 (승인 후 실행)
+  /queue        — 전체 현황 확인
+  /log T-ID     — 실행 중 로그 확인
+  /diff T-ID    — 변경 내용 확인
+  /ship T-ID    — 배포 승인
 
-[점검/조회]
-  /doctor     — PM Bot 상태 점검 (health check)
-  /queue      — 전체 작업 대기열 요약 (pending + queued 포함)
-  /running    — 현재 실행 중인 태스크 확인
-  /log T-ID   — 태스크 최근 로그 출력 (최대 50줄)
-  /diff T-ID  — 태스크 git diff 요약 출력
+─────────────────────────
+  /help advanced  — 고급 명령
+  /help admin     — 운영자 명령
+  /menu           — 버튼 메뉴
+"""
 
-[배포 제어]
-  /ship T-ID  — READY_TO_SHIP 태스크 main 배포 승인
-  /hold T-ID  — READY_TO_SHIP 태스크 보류 (branch 유지)
+HELP_ADVANCED_TEXT = """\
+🔧 고급 명령
 
-[Adopt / Resume]
-  /adopt T-ID  — 직접 작업한 내용을 PM Bot에 편입 (ADOPTED)
-  /review T-ID — ADOPTED 태스크 Review Agent 검토 (→ READY_TO_SHIP)
-  /resume T-ID — Handoff 기반 중단 작업 재개
+  /diff T-ID    — git diff 요약
+  /handoff T-ID — Handoff 파일 생성/조회
+  /adopt T-ID   — 직접 작업 내용 편입 (ADOPTED)
+  /review T-ID  — ADOPTED → Review Agent → READY_TO_SHIP
+  /resume T-ID  — Handoff 기반 중단 작업 재개
+  /hold T-ID    — 배포 보류 (branch 유지)
+  /run T-ID     — inbox 작업 승인 → 실행 대기열
+  /run next     — inbox 중 최우선 작업 승인
+"""
 
-[멀티 프로젝트]
-  /projects         — 등록된 프로젝트 목록
-  /project ID       — 프로젝트 전환  예: /project ios_capture
-  /current          — 현재 활성 프로젝트 확인
+HELP_ADMIN_TEXT = """\
+⚙️ 운영자 명령
 
-[Handoff]
-  /handoff T-ID     — 태스크 Handoff 파일 생성/업데이트
-
-[기록/통계/관리]
-  /archive T-ID — 태스크 archive에 보관
+  /doctor       — PM Bot 전체 상태 점검
+  /status       — 시스템 상태 요약
+  /projects     — 프로젝트 목록
+  /project ID   — 프로젝트 전환
+  /current      — 현재 활성 프로젝트
   /history      — 최근 완료/실패 이력
-  /stats        — 작업 통계 (전체/프로젝트별)
-  /stale        — 오래된 작업 감지 (HELD 7일+, RTS 3일+, ADOPTED 5일+)
-
-[설정]
-  /approve    — 현재 대기중인 작업 승인
-  /status     — 현재 시스템 상태 확인
-  /reload     — 태스크 큐 재스캔
-  /level VERBOSE|NORMAL|QUIET — 알림 레벨 변경
-  /help       — 이 도움말
-
-알림 레벨:
-  VERBOSE — 모든 알림
-  NORMAL  — 완료/실패/승인요청만 (기본값)
-  QUIET   — 실패만
+  /stats        — 누적 통계
+  /stale        — 방치 작업 감지
+  /archive T-ID — archive에 수동 보관
+  /level VERBOSE|NORMAL|QUIET — 알림 레벨
+  /reload       — 큐 재스캔
+  /approve      — 대기 작업 승인
 """
 
 
@@ -139,6 +134,7 @@ class TelegramBot:
         self._app.add_handler(CommandHandler("reload", self._handle_reload))
         self._app.add_handler(CommandHandler("level", self._handle_level))
         self._app.add_handler(CommandHandler("help", self._handle_help))
+        self._app.add_handler(CommandHandler("menu", self._handle_menu))
 
         # Phase 0 명령
         self._app.add_handler(CommandHandler("running", self._handle_running))
@@ -188,31 +184,15 @@ class TelegramBot:
         logger.info("Telegram Bot polling 시작.")
         async with self._app:
             # Telegram 명령 메뉴 등록 (/ 눌렀을 때 자동완성)
+            # Telegram 자동완성 메뉴 — 평소 핵심 커맨드만 노출
             await self._app.bot.set_my_commands([
-                BotCommand("enqueue",  "작업 등록 (inbox 대기)  /enqueue 제목\\n본문"),
-                BotCommand("run",      "inbox 작업 승인→실행  /run 태스크ID or next"),
-                BotCommand("help",     "도움말"),
-                BotCommand("doctor",   "PM Bot 상태 점검 (health check)"),
-                BotCommand("queue",    "전체 작업 대기열 요약 (pending 포함)"),
-                BotCommand("running",  "현재 실행 중인 태스크 확인"),
-                BotCommand("log",      "태스크 로그 출력  예: /log T-73"),
-                BotCommand("ship",     "배포 승인  예: /ship T-73"),
-                BotCommand("hold",     "배포 보류  예: /hold T-73"),
-                BotCommand("adopt",    "외부 작업 편입 (ADOPTED)  예: /adopt T-91"),
-                BotCommand("review",   "ADOPTED → Review Agent  예: /review T-91"),
-                BotCommand("resume",   "Handoff 기반 재개  예: /resume T-91"),
-                BotCommand("diff",     "Diff 요약  예: /diff T-73"),
-                BotCommand("projects", "프로젝트 목록"),
-                BotCommand("project",  "프로젝트 전환  예: /project ios_capture"),
-                BotCommand("current",  "현재 프로젝트 확인"),
-                BotCommand("handoff",  "Handoff 생성  예: /handoff T-91"),
-                BotCommand("status",   "시스템 상태"),
-                BotCommand("reload",   "태스크 큐 재스캔"),
-                BotCommand("level",    "알림 레벨 변경"),
-                BotCommand("archive",  "태스크 archive  예: /archive T-91"),
-                BotCommand("history",  "최근 완료/실패 이력"),
-                BotCommand("stats",    "작업 통계"),
-                BotCommand("stale",    "오래된 작업 감지"),
+                BotCommand("menu",    "📋 버튼 메뉴"),
+                BotCommand("enqueue", "작업 등록  /enqueue 제목 + 본문"),
+                BotCommand("queue",   "전체 현황 (pending + 실행 대기)"),
+                BotCommand("running", "실행 중인 태스크 확인"),
+                BotCommand("log",     "로그 확인  /log T-ID"),
+                BotCommand("ship",    "배포 승인  /ship T-ID"),
+                BotCommand("help",    "도움말  /help advanced  /help admin"),
             ])
             await self._app.start()
             await self._app.updater.start_polling()
@@ -426,7 +406,28 @@ class TelegramBot:
         await self._reply(update, f"알림 레벨 변경: {old_level} → {new_level}")
 
     async def _handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await self._reply(update, HELP_TEXT)
+        """/help [advanced|admin] — 3단계 도움말."""
+        args = context.args or []
+        sub = args[0].lower() if args else ""
+        if sub == "advanced":
+            await self._reply(update, HELP_ADVANCED_TEXT)
+        elif sub == "admin":
+            await self._reply(update, HELP_ADMIN_TEXT)
+        else:
+            await self._reply(update, HELP_TEXT)
+
+    async def _handle_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/menu — inline keyboard 기반 메뉴."""
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📝 작업 등록 안내",   callback_data="menu:enqueue_guide")],
+            [InlineKeyboardButton("📋 작업 현황 /queue", callback_data="menu:queue")],
+            [InlineKeyboardButton("⏳ 실행 중 /running", callback_data="menu:running")],
+            [InlineKeyboardButton("✅ Ship 대기 목록",   callback_data="menu:ship_list")],
+            [InlineKeyboardButton("🩺 운영 점검 /doctor",callback_data="menu:doctor")],
+        ])
+        message = update.message
+        if message:
+            await message.reply_text("PM Bot 메뉴", reply_markup=keyboard)
 
     # ── Phase 0 명령 핸들러 ───────────────────────────────────────────
 
@@ -793,16 +794,29 @@ class TelegramBot:
                 "READY_TO_SHIP": "✅",
                 "ADOPTED": "📥",
                 "HELD": "⏸",
+                "FAILED": "❌",
             }
+            # 상태별 next action 강화
+            def _next_action(st: str, tid: str) -> str:
+                s = st.split(" ")[0]
+                if s == "RUNNING":    return f"👉 /log {tid}"
+                if s == "REVIEWING":  return f"👉 /log {tid}  (리뷰 중)"
+                if s == "QUEUED":     return f"👉 대기 중..."
+                if s == "READY_TO_SHIP": return f"👉 /ship {tid}"
+                if s == "ADOPTED":    return f"👉 /review {tid}"
+                if s == "HELD":       return f"👉 /resume {tid}"
+                if s == "FAILED":     return f"👉 /handoff {tid}  또는  /resume {tid}"
+                return f"👉 /log {tid}"
+
             lines.append(f"🔄 실행 대기열 ({len(tasks)}개)")
             for t in tasks:
                 st = t.get("status", "?")
                 icon = status_icon.get(st.split(" ")[0], "🔴")
                 tid = t.get("task_id", "?")
                 branch = t.get("branch", "")
-                nxt = t.get("next", "")
                 branch_str = f"\n     branch: {branch}" if branch else ""
-                lines.append(f"  {icon} {tid} — {st}{branch_str}\n     다음: {nxt}")
+                nxt = _next_action(st, tid)
+                lines.append(f"  {icon} {tid} — {st}{branch_str}\n     {nxt}")
 
         await self._reply(update, "\n".join(lines))
 
@@ -1361,6 +1375,11 @@ class TelegramBot:
             await self._cb_reply(query, "알 수 없는 버튼입니다.")
             return
 
+        # /menu 콜백
+        if data.startswith("menu:"):
+            await self._handle_menu_callback(query, data[5:])
+            return
+
         # PM Bot V3: inbox 콜백은 "inbox:action:task_id" 형식
         if data.startswith("inbox:"):
             parts = data.split(":", 2)
@@ -1506,6 +1525,102 @@ class TelegramBot:
                 )
             except Exception:
                 pass
+
+    async def _handle_menu_callback(self, query: "CallbackQuery", action: str) -> None:
+        """/menu 버튼 콜백 처리."""
+        if self.orchestrator is None:
+            await self._cb_reply(query, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        if action == "enqueue_guide":
+            await self._cb_reply(
+                query,
+                "📝 작업 등록 방법\n\n"
+                "Telegram에 아래 형식으로 입력하세요:\n\n"
+                "/enqueue 작업 제목\n\n"
+                "## Goal\n작업 내용을 여기에 작성하세요.\n\n"
+                "등록 후 [▶ 진행해] 버튼으로 승인하면 Claude가 실행합니다."
+            )
+
+        elif action == "queue":
+            # /queue 핸들러 내용 재사용
+            try:
+                pending = self.orchestrator.get_inbox_summary()
+            except Exception:
+                pending = []
+            try:
+                tasks = self.orchestrator.get_queue_summary()
+            except Exception as exc:
+                await self._cb_reply(query, f"❌ 조회 실패: {exc}")
+                return
+            if not pending and not tasks:
+                await self._cb_reply(query, "📭 대기 중인 작업 없음\n\n/enqueue 로 작업을 등록하세요.")
+                return
+            lines: list[str] = []
+            if pending:
+                lines.append(f"📥 Pending {len(pending)}개")
+                for t in pending:
+                    lines.append(f"  • {t.get('title', t.get('task_id'))}  →  /run {t.get('task_id')}")
+            if tasks:
+                if lines:
+                    lines.append("")
+                _si = {"RUNNING":"⏳","REVIEWING":"🧪","QUEUED":"📋",
+                       "READY_TO_SHIP":"✅","ADOPTED":"📥","HELD":"⏸","FAILED":"❌"}
+                lines.append(f"🔄 실행 대기열 {len(tasks)}개")
+                for t in tasks:
+                    st = t.get("status","?")
+                    icon = _si.get(st.split()[0],"🔴")
+                    lines.append(f"  {icon} {t.get('task_id')} — {st}")
+            await self._cb_reply(query, "\n".join(lines))
+
+        elif action == "running":
+            try:
+                info = self.orchestrator.get_running_task()
+            except Exception as exc:
+                await self._cb_reply(query, f"❌ 조회 실패: {exc}")
+                return
+            if not info:
+                await self._cb_reply(query, "현재 실행 중인 태스크 없음")
+            else:
+                tid = info.get("task_id", "?")
+                phase = info.get("phase", "RUNNING")
+                await self._cb_reply(query, f"⏳ {tid} — {phase}\n\n/log {tid}")
+
+        elif action == "ship_list":
+            try:
+                tasks = self.orchestrator.get_queue_summary()
+            except Exception as exc:
+                await self._cb_reply(query, f"❌ 조회 실패: {exc}")
+                return
+            rts = [t for t in tasks if "READY_TO_SHIP" in t.get("status", "")]
+            if not rts:
+                await self._cb_reply(query, "✅ READY_TO_SHIP 대기 없음")
+            else:
+                lines = ["✅ Ship 대기 목록\n"]
+                for t in rts:
+                    tid = t.get("task_id", "?")
+                    lines.append(f"  • {tid}  →  /ship {tid}")
+                await self._cb_reply(query, "\n".join(lines))
+
+        elif action == "doctor":
+            try:
+                info = await self.orchestrator.get_doctor_info()
+            except Exception as exc:
+                await self._cb_reply(query, f"❌ 점검 실패: {exc}")
+                return
+            ok = "✅" if info.get("spec_exists") and info.get("task_queue_exists") else "⚠️"
+            running = info.get("running_task_id") or "없음"
+            rts = info.get("ready_to_ship_ids", [])
+            await self._cb_reply(
+                query,
+                f"{ok} PM Bot 상태\n\n"
+                f"실행 중: {running}\n"
+                f"Ship 대기: {', '.join(rts) if rts else '없음'}\n"
+                f"프로젝트: {info.get('spec_path', '?')}\n\n"
+                f"자세히: /doctor"
+            )
+        else:
+            await self._cb_reply(query, f"알 수 없는 메뉴 액션: {action}")
 
     async def _handle_inbox_callback(
         self, query: "CallbackQuery", action: str, task_id: str
