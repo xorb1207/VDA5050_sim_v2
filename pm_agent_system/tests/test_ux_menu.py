@@ -406,15 +406,15 @@ def test_admin_reload_runs():
 # ──────────────────────────────────────────────────────────────────────────────
 
 def test_project_switch_callback_success():
-    """menu:proj:<id> 콜백이 프로젝트를 전환하고 확인 메시지를 보낸다."""
+    """project:switch:<id> 콜백이 프로젝트를 전환하고 확인 메시지를 보낸다."""
     pm = _make_mock_project_manager(projects=["vda5050", "ios_capture"], current="vda5050")
     orch = _make_mock_orchestrator()
     orch.switch_project = MagicMock()
     bot = _make_bot(orchestrator=orch, project_manager=pm)
     bot._app.bot.send_message = AsyncMock()
-    query = _make_mock_query("menu:proj:ios_capture")
+    query = _make_mock_query("project:switch:ios_capture")
 
-    run(bot._handle_menu_callback(query, "proj:ios_capture"))
+    run(bot._handle_project_callback(query, "switch:ios_capture"))
 
     pm.switch.assert_called_once_with("ios_capture")
     send_calls = bot._app.bot.send_message.call_args_list
@@ -423,14 +423,14 @@ def test_project_switch_callback_success():
 
 
 def test_project_switch_not_found():
-    """menu:proj:<id> — 없는 프로젝트는 오류 메시지 반환."""
+    """project:switch:<id> — 없는 프로젝트는 오류 메시지 반환."""
     pm = _make_mock_project_manager(projects=["vda5050"])
     pm.switch.return_value = False
     bot = _make_bot(orchestrator=_make_mock_orchestrator(), project_manager=pm)
     bot._app.bot.send_message = AsyncMock()
-    query = _make_mock_query("menu:proj:nonexistent")
+    query = _make_mock_query("project:switch:nonexistent")
 
-    run(bot._handle_menu_callback(query, "proj:nonexistent"))
+    run(bot._handle_project_callback(query, "switch:nonexistent"))
 
     send_calls = bot._app.bot.send_message.call_args_list
     combined = " ".join(str(c) for c in send_calls)

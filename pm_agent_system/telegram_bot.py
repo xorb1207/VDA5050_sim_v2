@@ -66,6 +66,10 @@ HELP_ADVANCED_TEXT = """\
   /hold T-ID    — 배포 보류 (branch 유지)
   /run T-ID     — inbox 작업 승인 → 실행 대기열
   /run next     — inbox 중 최우선 작업 승인
+
+─────────────────────────
+  /current  — 현재 선택된 프로젝트 확인 (/enqueue 대상)
+  /running  — 현재 실행 중인 작업 확인 (선택 프로젝트와 다를 수 있음)
 """
 
 HELP_ADMIN_TEXT = """\
@@ -464,7 +468,17 @@ class TelegramBot:
             return
 
         if not info:
-            await self._reply(update, "현재 실행 중인 task가 없습니다.")
+            lines = [
+                "⏳ 현재 실행 중인 작업\n",
+                "실행 중: 없음",
+            ]
+            # 선택 프로젝트 힌트
+            if self.project_manager is not None:
+                current = getattr(self.project_manager, "current_project_id", None)
+                if current:
+                    lines.append(f"\n현재 선택 프로젝트: {current}")
+                    lines.append("(/enqueue 로 작업을 등록하세요)")
+            await self._reply(update, "\n".join(lines))
             return
 
         from datetime import datetime
@@ -472,7 +486,7 @@ class TelegramBot:
         phase = info.get("phase", "RUNNING")
         started = info.get("started_at")
         branch = info.get("branch", "")
-        log_dir = info.get("log_dir", "")
+        project_id = info.get("project_id", "")
 
         elapsed_str = ""
         started_str = ""
@@ -484,16 +498,33 @@ class TelegramBot:
         elif started:
             started_str = str(started)
 
-        lines = [f"⏳ 현재 실행 중\n"]
-        lines.append(f"Task: {task_id}")
-        lines.append(f"상태: {phase}")
+        # 실행 중 프로젝트 표시 (project_id 있을 때)
+        task_display = f"{project_id}:{task_id}" if project_id else task_id
+
+        lines = ["⏳ 현재 실행 중인 작업\n"]
+        lines.append(f"실행 중:\n{task_display}")
+        lines.append(f"\n상태: {phase}")
         if started_str:
             lines.append(f"시작: {started_str}")
         if elapsed_str:
             lines.append(f"경과: {elapsed_str}")
         if branch:
             lines.append(f"branch: {branch}")
-        lines.append(f"\n로그:\n- /log {task_id}")
+        lines.append(f"\n로그: /log {task_id}")
+
+        # 선택 프로젝트와 실행 프로젝트가 다를 수 있다는 안내
+        if self.project_manager is not None:
+            current = getattr(self.project_manager, "current_project_id", None)
+            if current and project_id and current != project_id:
+                lines.append(
+                    f"\n⚠️ 주의\n"
+                    f"현재 선택 프로젝트({current})와\n"
+                    f"실행 중인 프로젝트({project_id})가 다릅니다."
+                )
+            elif self.project_manager is not None:
+                lines.append(
+                    "\n💡 /current = 선택 프로젝트  /running = 실행 중 작업"
+                )
 
         await self._reply(update, "\n".join(lines))
 
@@ -1264,17 +1295,34 @@ class TelegramBot:
             )
 
     async def _handle_current(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """/current — 현재 활성 프로젝트 표시."""
+        """/current — 현재 선택된 프로젝트 확인 (/enqueue 등록 대상)."""
         if self.project_manager is None:
-            # 단일 프로젝트 모드 — orchestrator에서 repo_path 가져오기
+            # 단일 프로젝트 모드
             if self.orchestrator is not None and hasattr(self.orchestrator, "config"):
                 repo = getattr(self.orchestrator.config, "repo_path", "?")
-                await self._reply(update, f"📌 현재 프로젝트: (단일)\nrepo: {repo}")
+                lines = [
+                    "📂 현재 선택 프로젝트\n",
+                    "프로젝트: (단일 모드)",
+                    f"repo:\n{repo}",
+                    "\n이 프로젝트로 /enqueue 작업이 등록됩니다.",
+                ]
+                await self._reply(update, "\n".join(lines))
             else:
                 await self._reply(update, "현재 프로젝트 정보 없음")
             return
-        text = self.project_manager.format_current()
-        await self._reply(update, text)
+
+        current_id = getattr(self.project_manager, "current_project_id", None)
+        paths = getattr(self.project_manager, "current_paths", None)
+        repo_path = str(paths.repo_path) if paths else "?"
+
+        lines = [
+            "📂 현재 선택 프로젝트\n",
+            f"프로젝트:\n{current_id or '?'}",
+            f"\nrepo:\n{repo_path}",
+            "\n이 프로젝트로 /enqueue 작업이 등록됩니다.",
+            "\n전환: /project PROJECT_ID  또는  /menu → 📂 프로젝트",
+        ]
+        await self._reply(update, "\n".join(lines))
 
     # ── Phase 0.7: Handoff 명령 핸들러 ──────────────────────────────
 
@@ -1398,6 +1446,11 @@ class TelegramBot:
         # /menu 콜백
         if data.startswith("menu:"):
             await self._handle_menu_callback(query, data[5:])
+            return
+
+        # project: 콜백 (project:switch:PROJECT_ID)
+        if data.startswith("project:"):
+            await self._handle_project_callback(query, data[8:])
             return
 
         # PM Bot V3: inbox 콜백은 "inbox:action:task_id" 형식
@@ -1546,6 +1599,51 @@ class TelegramBot:
             except Exception:
                 pass
 
+    async def _handle_project_callback(self, query: "CallbackQuery", action: str) -> None:
+        """project: 콜백 처리 (project:switch:PROJECT_ID).
+
+        callback_data 형식: project:switch:<project_id>
+        """
+        if not action.startswith("switch:"):
+            await self._cb_reply(query, f"알 수 없는 project 콜백: {action}")
+            return
+
+        project_id = action[7:].strip()
+        if not project_id:
+            await self._cb_reply(query, "❌ 프로젝트 ID가 비어 있습니다.")
+            return
+
+        if self.project_manager is None:
+            await self._cb_reply(query, "❌ 멀티 프로젝트 기능이 비활성화되어 있습니다.\n(projects.yaml 확인)")
+            return
+
+        if not self.project_manager.switch(project_id):
+            available = ", ".join(self.project_manager.list_projects())
+            await self._cb_reply(
+                query,
+                f"❌ 프로젝트 '{project_id}'를 찾을 수 없습니다.\n"
+                f"등록된 프로젝트: {available}"
+            )
+            return
+
+        paths = self.project_manager.current_paths
+        repo_path = str(paths.repo_path) if paths else "?"
+
+        # Orchestrator에 전환 요청
+        if self.orchestrator is not None and hasattr(self.orchestrator, "switch_project") and paths:
+            self.orchestrator.switch_project(paths)
+
+        lines = [
+            "📂 프로젝트 전환 완료\n",
+            f"현재 선택 프로젝트:\n{project_id}",
+            f"\nrepo:\n{repo_path}",
+            "\n다음:",
+            "- /doctor",
+            "- /enqueue",
+            "- /queue",
+        ]
+        await self._cb_reply(query, "\n".join(lines))
+
     async def _menu_edit_or_send(
         self, query: "CallbackQuery", text: str, keyboard: InlineKeyboardMarkup | None = None
     ) -> None:
@@ -1641,28 +1739,33 @@ class TelegramBot:
 
         # ── 프로젝트 서브메뉴 ────────────────────────────────────────────
         elif action == "projects":
-            lines = ["📂 프로젝트\n"]
             buttons: list[list[InlineKeyboardButton]] = []
 
             if self.project_manager is not None:
                 current = getattr(self.project_manager, "current_project_id", None)
                 project_ids = self.project_manager.list_projects()
+                lines = [
+                    "📂 프로젝트\n",
+                    f"현재 선택 프로젝트:\n{current or '?'}",
+                    "\n프로젝트 목록:",
+                ]
                 for pid in project_ids:
-                    marker = " ✓" if pid == current else ""
+                    label = f"✅ {pid}" if pid == current else pid
                     buttons.append([
                         InlineKeyboardButton(
-                            f"{pid}{marker}",
-                            callback_data=f"menu:proj:{pid}",
+                            label,
+                            callback_data=f"project:switch:{pid}",
                         )
                     ])
-                lines.append(f"현재: {current or '?'}")
-                lines.append("아래 버튼으로 전환:")
             else:
+                repo = "?"
                 if self.orchestrator is not None and hasattr(self.orchestrator, "config"):
                     repo = getattr(self.orchestrator.config, "repo_path", "?")
-                    lines.append(f"단일 프로젝트 모드\nrepo: {repo}")
-                else:
-                    lines.append("프로젝트 정보 없음")
+                lines = [
+                    "📂 프로젝트\n",
+                    "단일 프로젝트 모드",
+                    f"repo: {repo}",
+                ]
 
             buttons.append([InlineKeyboardButton("← 뒤로", callback_data="menu:back")])
             keyboard = InlineKeyboardMarkup(buttons)
@@ -1850,31 +1953,6 @@ class TelegramBot:
 
             else:
                 await self._cb_reply(query, f"알 수 없는 운영 메뉴 액션: {cmd}")
-
-        # ── 프로젝트 전환 ─────────────────────────────────────────────────
-        elif action.startswith("proj:"):
-            project_id = action[5:]
-            if self.project_manager is None:
-                await self._cb_reply(query, "❌ 멀티 프로젝트 기능이 비활성화되어 있습니다.")
-                return
-            if not self.project_manager.switch(project_id):
-                available = ", ".join(self.project_manager.list_projects())
-                await self._cb_reply(
-                    query,
-                    f"❌ 프로젝트 '{project_id}'를 찾을 수 없습니다.\n"
-                    f"등록된 프로젝트: {available}"
-                )
-                return
-            paths = self.project_manager.current_paths
-            if self.orchestrator is not None and hasattr(self.orchestrator, "switch_project") and paths:
-                self.orchestrator.switch_project(paths)
-            await self._cb_reply(
-                query,
-                f"✅ 프로젝트 전환\n\n"
-                f"프로젝트: {project_id}\n"
-                f"repo: {paths.repo_path if paths else '?'}\n\n"
-                f"현재 task 완료 후 적용됩니다."
-            )
 
         else:
             await self._cb_reply(query, f"알 수 없는 메뉴 액션: {action}")
