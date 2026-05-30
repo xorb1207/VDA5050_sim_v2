@@ -752,6 +752,23 @@ def _count_weak_components(nodes: list[ImportedNode], edges: list[ImportedEdge])
 # ────────────────────────────────────────────────────────────────────
 # YAML 임포트 헬퍼
 # ────────────────────────────────────────────────────────────────────
+def _parse_rmf_param(value):
+    """RMF typed param 파싱. [type_code, actual_value] 또는 일반 값 처리.
+
+    RMF building.yaml 포맷은 typed params를 사용:
+      is_charger: [4, true]   # [type_code, value]
+      graph_idx: [2, 0]
+
+    일반 값도 허용 (우리 샘플 YAML 호환):
+      is_charger: true
+      graph_idx: 0
+    """
+    if isinstance(value, list) and len(value) == 2 and isinstance(value[0], int):
+        # Typed param: [type_code, actual_value]
+        return value[1]
+    return value
+
+
 def _import_from_yaml_level(
     level_data: dict,
 ) -> tuple[list[ImportedNode], list[ImportedEdge], int]:
@@ -759,6 +776,8 @@ def _import_from_yaml_level(
 
     vertices: [[x, y, "name", {is_charger, is_holding_point, ...}], ...]
     lanes: [[src_idx, dst_idx, {bidirectional, graph_idx, speed_limit, ...}], ...]
+
+    params는 typed ([type_code, value]) 또는 일반 값 모두 허용.
     """
     nodes: list[ImportedNode] = []
     edges: list[ImportedEdge] = []
@@ -775,16 +794,25 @@ def _import_from_yaml_level(
         name = None
         params: dict = {}
 
-        if len(vertex) > 2:
+        # RMF YAML 포맷: [x, y, elevation, "name", {params}] (5 elements)
+        # 또는: [x, y, "name", {params}] (4 elements)
+        # 또는: [x, y, {params}] (3 elements)
+        if len(vertex) >= 5:
+            # 5-element: [x, y, elevation, name, params]
+            # 3번째는 elevation (숫자), 4번째가 name
+            name = vertex[3] if isinstance(vertex[3], str) else None
+            if len(vertex) > 4 and isinstance(vertex[4], dict):
+                params = vertex[4]
+        elif len(vertex) > 2:
             third = vertex[2]
             if isinstance(third, str):
                 name = third
             elif isinstance(third, dict):
                 params = third
-                name = params.get("name")
+                name = _parse_rmf_param(params.get("name"))
 
-        if len(vertex) > 3 and isinstance(vertex[3], dict):
-            params.update(vertex[3])
+            if len(vertex) > 3 and isinstance(vertex[3], dict):
+                params.update(vertex[3])
 
         node_id = name or f"node_{i:04d}"
         node = ImportedNode(
@@ -792,11 +820,11 @@ def _import_from_yaml_level(
             x=x,
             y=y,
             name=node_id,
-            inferred_is_charger=bool(params.get("is_charger", False)),
-            inferred_is_holding=bool(params.get("is_holding_point", False)),
+            inferred_is_charger=bool(_parse_rmf_param(params.get("is_charger", False))),
+            inferred_is_holding=bool(_parse_rmf_param(params.get("is_holding_point", False))),
         )
         if "rmf_role" in params:
-            node.inferred_role = params["rmf_role"]
+            node.inferred_role = str(_parse_rmf_param(params["rmf_role"]))
         nodes.append(node)
         idx_to_id[i] = node_id
 
@@ -812,18 +840,24 @@ def _import_from_yaml_level(
 
         src_id = idx_to_id[src_idx]
         dst_id = idx_to_id[dst_idx]
-        bidir = bool(params.get("bidirectional", False))
+        bidir = bool(_parse_rmf_param(params.get("bidirectional", False)))
 
         graph_idx = None
         if "graph_idx" in params:
-            graph_idx = int(params["graph_idx"])
+            graph_idx = int(_parse_rmf_param(params["graph_idx"]))
+
+        v_max_raw = params.get("v_max")
+        v_max_val = None
+        if v_max_raw is not None:
+            v_max_parsed = _parse_rmf_param(v_max_raw)
+            v_max_val = float(v_max_parsed) if v_max_parsed is not None else None
 
         edge = ImportedEdge(
             edge_id=f"lane_{li:04d}",
             src=src_id,
             dst=dst_id,
             inferred_bidirectional=bidir,
-            v_max=float(params["v_max"]) if "v_max" in params and params["v_max"] is not None else None,
+            v_max=v_max_val,
             graph_idx=graph_idx,
         )
         edges.append(edge)
