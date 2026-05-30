@@ -41,19 +41,18 @@ logger = logging.getLogger(__name__)
 NOTIFICATION_LEVELS = ("VERBOSE", "NORMAL", "QUIET")
 
 HELP_TEXT = """\
-📋 평소 흐름 (5개면 충분)
+📋 핵심 명령 (5개)
 
+  /menu         — 버튼 메뉴 (시작점)
   /enqueue 제목
   본문...       — 작업 등록 (승인 후 실행)
   /queue        — 전체 현황 확인
-  /log T-ID     — 실행 중 로그 확인
-  /diff T-ID    — 변경 내용 확인
+  /running      — 실행 중인 태스크
   /ship T-ID    — 배포 승인
 
 ─────────────────────────
-  /help advanced  — 고급 명령
-  /help admin     — 운영자 명령
-  /menu           — 버튼 메뉴
+  /help advanced  — 고급 명령 (8개)
+  /help admin     — 운영자 명령 (12개)
 """
 
 HELP_ADVANCED_TEXT = """\
@@ -422,15 +421,30 @@ class TelegramBot:
         else:
             await self._reply(update, HELP_TEXT)
 
+    def _build_main_menu_keyboard(self) -> InlineKeyboardMarkup:
+        """메인 메뉴 InlineKeyboard 빌더 (재사용: /menu + back 버튼)."""
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📋 작업 현황",  callback_data="menu:queue"),
+                InlineKeyboardButton("⏳ 실행 중",    callback_data="menu:running"),
+            ],
+            [
+                InlineKeyboardButton("📂 프로젝트",   callback_data="menu:projects"),
+                InlineKeyboardButton("🩺 점검",       callback_data="menu:doctor"),
+            ],
+            [
+                InlineKeyboardButton("📄 로그",       callback_data="menu:log"),
+                InlineKeyboardButton("🚀 Ship 대기",  callback_data="menu:ship_list"),
+            ],
+            [
+                InlineKeyboardButton("🧩 고급 메뉴",  callback_data="menu:advanced"),
+                InlineKeyboardButton("⚙️ 운영 메뉴",  callback_data="menu:admin"),
+            ],
+        ])
+
     async def _handle_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """/menu — inline keyboard 기반 메뉴."""
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📝 작업 등록 안내",   callback_data="menu:enqueue_guide")],
-            [InlineKeyboardButton("📋 작업 현황 /queue", callback_data="menu:queue")],
-            [InlineKeyboardButton("⏳ 실행 중 /running", callback_data="menu:running")],
-            [InlineKeyboardButton("✅ Ship 대기 목록",   callback_data="menu:ship_list")],
-            [InlineKeyboardButton("🩺 운영 점검 /doctor",callback_data="menu:doctor")],
-        ])
+        keyboard = self._build_main_menu_keyboard()
         message = update.message
         if message:
             await message.reply_text("PM Bot 메뉴", reply_markup=keyboard)
@@ -1532,24 +1546,56 @@ class TelegramBot:
             except Exception:
                 pass
 
+    async def _menu_edit_or_send(
+        self, query: "CallbackQuery", text: str, keyboard: InlineKeyboardMarkup | None = None
+    ) -> None:
+        """메뉴 메시지를 in-place 편집. 실패 시 새 메시지로 전송."""
+        try:
+            if keyboard is not None:
+                await query.edit_message_text(text, reply_markup=keyboard)
+            else:
+                await query.edit_message_text(text)
+        except Exception:
+            # edit 불가(이미 같은 내용 등) — 새 메시지 전송
+            if keyboard is not None:
+                if query.message and query.message.chat_id:
+                    try:
+                        await self._app.bot.send_message(
+                            chat_id=query.message.chat_id,
+                            text=text,
+                            reply_markup=keyboard,
+                        )
+                        return
+                    except Exception:
+                        pass
+            await self._cb_reply(query, text)
+
     async def _handle_menu_callback(self, query: "CallbackQuery", action: str) -> None:
         """/menu 버튼 콜백 처리."""
-        if self.orchestrator is None:
-            await self._cb_reply(query, "❌ Orchestrator가 초기화되지 않았습니다.")
+
+        # ── 뒤로 (메인 메뉴로) ──────────────────────────────────────────
+        if action == "back":
+            await self._menu_edit_or_send(query, "PM Bot 메뉴", self._build_main_menu_keyboard())
             return
 
+        # ── 레거시: enqueue_guide (구버전 버튼 호환) ──────────────────────
         if action == "enqueue_guide":
             await self._cb_reply(
                 query,
                 "📝 작업 등록 방법\n\n"
-                "Telegram에 아래 형식으로 입력하세요:\n\n"
                 "/enqueue 작업 제목\n\n"
                 "## Goal\n작업 내용을 여기에 작성하세요.\n\n"
                 "등록 후 [▶ 진행해] 버튼으로 승인하면 Claude가 실행합니다."
             )
+            return
 
-        elif action == "queue":
-            # /queue 핸들러 내용 재사용
+        # ── Orchestrator 필요 구간 ─────────────────────────────────────
+        if self.orchestrator is None:
+            await self._cb_reply(query, "❌ Orchestrator가 초기화되지 않았습니다.")
+            return
+
+        # ── 작업 현황 ────────────────────────────────────────────────────
+        if action == "queue":
             try:
                 pending = self.orchestrator.get_inbox_summary()
             except Exception:
@@ -1570,15 +1616,16 @@ class TelegramBot:
             if tasks:
                 if lines:
                     lines.append("")
-                _si = {"RUNNING":"⏳","REVIEWING":"🧪","QUEUED":"📋",
-                       "READY_TO_SHIP":"✅","ADOPTED":"📥","HELD":"⏸","FAILED":"❌"}
+                _si = {"RUNNING": "⏳", "REVIEWING": "🧪", "QUEUED": "📋",
+                       "READY_TO_SHIP": "✅", "ADOPTED": "📥", "HELD": "⏸", "FAILED": "❌"}
                 lines.append(f"🔄 실행 대기열 {len(tasks)}개")
                 for t in tasks:
-                    st = t.get("status","?")
-                    icon = _si.get(st.split()[0],"🔴")
+                    st = t.get("status", "?")
+                    icon = _si.get(st.split()[0], "🔴")
                     lines.append(f"  {icon} {t.get('task_id')} — {st}")
             await self._cb_reply(query, "\n".join(lines))
 
+        # ── 실행 중 ──────────────────────────────────────────────────────
         elif action == "running":
             try:
                 info = self.orchestrator.get_running_task()
@@ -1592,6 +1639,59 @@ class TelegramBot:
                 phase = info.get("phase", "RUNNING")
                 await self._cb_reply(query, f"⏳ {tid} — {phase}\n\n/log {tid}")
 
+        # ── 프로젝트 서브메뉴 ────────────────────────────────────────────
+        elif action == "projects":
+            lines = ["📂 프로젝트\n"]
+            buttons: list[list[InlineKeyboardButton]] = []
+
+            if self.project_manager is not None:
+                current = getattr(self.project_manager, "current_project_id", None)
+                project_ids = self.project_manager.list_projects()
+                for pid in project_ids:
+                    marker = " ✓" if pid == current else ""
+                    buttons.append([
+                        InlineKeyboardButton(
+                            f"{pid}{marker}",
+                            callback_data=f"menu:proj:{pid}",
+                        )
+                    ])
+                lines.append(f"현재: {current or '?'}")
+                lines.append("아래 버튼으로 전환:")
+            else:
+                if self.orchestrator is not None and hasattr(self.orchestrator, "config"):
+                    repo = getattr(self.orchestrator.config, "repo_path", "?")
+                    lines.append(f"단일 프로젝트 모드\nrepo: {repo}")
+                else:
+                    lines.append("프로젝트 정보 없음")
+
+            buttons.append([InlineKeyboardButton("← 뒤로", callback_data="menu:back")])
+            keyboard = InlineKeyboardMarkup(buttons)
+            await self._menu_edit_or_send(query, "\n".join(lines), keyboard)
+
+        # ── 점검 ─────────────────────────────────────────────────────────
+        elif action == "doctor":
+            try:
+                info = await self.orchestrator.get_doctor_info()
+            except Exception as exc:
+                await self._cb_reply(query, f"❌ 점검 실패: {exc}")
+                return
+            ok = "✅" if info.get("spec_exists") and info.get("task_queue_exists") else "⚠️"
+            running = info.get("running_task_id") or "없음"
+            rts = info.get("ready_to_ship_ids", [])
+            await self._cb_reply(
+                query,
+                f"{ok} PM Bot 상태\n\n"
+                f"실행 중: {running}\n"
+                f"Ship 대기: {', '.join(rts) if rts else '없음'}\n"
+                f"프로젝트: {info.get('project_id', '?')}\n\n"
+                f"자세히: /doctor"
+            )
+
+        # ── 로그 안내 ────────────────────────────────────────────────────
+        elif action == "log":
+            await self._cb_reply(query, "사용법: /log T-ID\n예: /log T-91")
+
+        # ── Ship 대기 목록 ───────────────────────────────────────────────
         elif action == "ship_list":
             try:
                 tasks = self.orchestrator.get_queue_summary()
@@ -1608,23 +1708,174 @@ class TelegramBot:
                     lines.append(f"  • {tid}  →  /ship {tid}")
                 await self._cb_reply(query, "\n".join(lines))
 
-        elif action == "doctor":
-            try:
-                info = await self.orchestrator.get_doctor_info()
-            except Exception as exc:
-                await self._cb_reply(query, f"❌ 점검 실패: {exc}")
+        # ── 고급 메뉴 서브메뉴 ──────────────────────────────────────────
+        elif action == "advanced":
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("📥 Adopt",    callback_data="menu:adv:adopt"),
+                    InlineKeyboardButton("🧪 Review",   callback_data="menu:adv:review"),
+                ],
+                [
+                    InlineKeyboardButton("▶ Resume",    callback_data="menu:adv:resume"),
+                    InlineKeyboardButton("📎 Handoff",  callback_data="menu:adv:handoff"),
+                ],
+                [
+                    InlineKeyboardButton("🔍 Diff",     callback_data="menu:adv:diff"),
+                    InlineKeyboardButton("⏸ Hold",      callback_data="menu:adv:hold"),
+                ],
+                [InlineKeyboardButton("← 뒤로",        callback_data="menu:back")],
+            ])
+            await self._menu_edit_or_send(query, "🧩 고급 메뉴 — T-ID가 필요합니다.", keyboard)
+
+        # ── 운영 메뉴 서브메뉴 ──────────────────────────────────────────
+        elif action == "admin":
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("📚 History",  callback_data="menu:adm:history"),
+                    InlineKeyboardButton("📊 Stats",    callback_data="menu:adm:stats"),
+                ],
+                [
+                    InlineKeyboardButton("⚠️ Stale",    callback_data="menu:adm:stale"),
+                    InlineKeyboardButton("📦 Archive",  callback_data="menu:adm:archive"),
+                ],
+                [
+                    InlineKeyboardButton("🔔 Level",    callback_data="menu:adm:level"),
+                    InlineKeyboardButton("🔄 Reload",   callback_data="menu:adm:reload"),
+                ],
+                [InlineKeyboardButton("← 뒤로",        callback_data="menu:back")],
+            ])
+            await self._menu_edit_or_send(query, "⚙️ 운영 메뉴", keyboard)
+
+        # ── 고급 메뉴 액션 힌트 ─────────────────────────────────────────
+        elif action.startswith("adv:"):
+            cmd = action[4:]
+            _hints = {
+                "adopt":   "/adopt T-ID  — 직접 작업 내용 편입 (ADOPTED)\n예: /adopt T-91",
+                "review":  "/review T-ID  — ADOPTED → Review Agent → READY_TO_SHIP\n예: /review T-91",
+                "resume":  "/resume T-ID  — Handoff 기반 중단 작업 재개\n예: /resume T-91",
+                "handoff": "/handoff T-ID  — Handoff 파일 생성/갱신\n예: /handoff T-91",
+                "diff":    "/diff T-ID  — git diff 요약 보기\n예: /diff T-91",
+                "hold":    "/hold T-ID  — 배포 보류 (branch 유지)\n예: /hold T-91",
+            }
+            hint = _hints.get(cmd, f"/{cmd} T-ID")
+            await self._cb_reply(query, f"사용법:\n\n{hint}")
+
+        # ── 운영 메뉴 액션 ───────────────────────────────────────────────
+        elif action.startswith("adm:"):
+            cmd = action[4:]
+            if cmd == "history":
+                try:
+                    history = self.orchestrator.get_history(limit=10)
+                except Exception as exc:
+                    await self._cb_reply(query, f"❌ 이력 조회 실패: {exc}")
+                    return
+                if not history:
+                    await self._cb_reply(query, "📚 이력 없음\n\n자세히: /history")
+                    return
+                shipped = [h for h in history if h.get("status") == "SHIPPED"]
+                failed  = [h for h in history if h.get("status") == "FAILED"]
+                lines = ["📚 최근 이력\n"]
+                if shipped:
+                    lines.append(f"완료 ({len(shipped)}개):")
+                    for h in shipped[:5]:
+                        lines.append(f"  - {h.get('task_id')}  ({h.get('archived_at','')[:10]})")
+                if failed:
+                    lines.append(f"\n실패 ({len(failed)}개):")
+                    for h in failed[:3]:
+                        lines.append(f"  - {h.get('task_id')}  ({h.get('archived_at','')[:10]})")
+                lines.append("\n자세히: /history")
+                await self._cb_reply(query, "\n".join(lines))
+
+            elif cmd == "stats":
+                try:
+                    summary = self.orchestrator.get_stats_summary()
+                except Exception as exc:
+                    await self._cb_reply(query, f"❌ 통계 조회 실패: {exc}")
+                    return
+                g = summary.get("global", {})
+                lines = [
+                    "📊 작업 통계\n",
+                    f"SHIPPED: {g.get('shipped', 0)}",
+                    f"FAILED:  {g.get('failed', 0)}",
+                    f"HELD:    {g.get('held', 0)}",
+                    f"ADOPTED: {g.get('adopted', 0)}",
+                    f"\nreview 통과율: {summary.get('pass_rate', 0):.1f}%",
+                    "\n자세히: /stats",
+                ]
+                await self._cb_reply(query, "\n".join(lines))
+
+            elif cmd == "stale":
+                try:
+                    stale = self.orchestrator.get_stale_tasks()
+                except Exception as exc:
+                    await self._cb_reply(query, f"❌ stale 감지 실패: {exc}")
+                    return
+                if not stale:
+                    await self._cb_reply(query, "✅ 오래된 작업 없음\n\n자세히: /stale")
+                else:
+                    lines = [f"⚠️ 오래된 작업 ({len(stale)}개)\n"]
+                    for s in stale[:5]:
+                        lines.append(
+                            f"  {s.get('task_id')} — {s.get('status')} {s.get('days', 0):.0f}일"
+                        )
+                    lines.append("\n자세히: /stale")
+                    await self._cb_reply(query, "\n".join(lines))
+
+            elif cmd == "archive":
+                await self._cb_reply(query, "사용법: /archive T-ID\n예: /archive T-91")
+
+            elif cmd == "level":
+                await self._cb_reply(
+                    query,
+                    f"사용법: /level VERBOSE|NORMAL|QUIET\n"
+                    f"현재: {self.notification_level}"
+                )
+
+            elif cmd == "reload":
+                try:
+                    result = self.orchestrator.reload_task_queue()
+                    q  = result.get("queued", 0)
+                    sp = result.get("skipped_processed", 0)
+                    su = result.get("skipped_unsafe", 0)
+                    lines = ["🔄 task_queue 재스캔 완료\n", f"실행 등록: {q}개"]
+                    if sp:
+                        lines.append(f"처리 완료 skip: {sp}개")
+                    if su:
+                        lines.append(f"유효하지 않은 파일 skip: {su}개")
+                    if q == 0 and sp == 0 and su == 0:
+                        lines.append("대기 중인 새 작업 없음")
+                    await self._cb_reply(query, "\n".join(lines))
+                except Exception as exc:
+                    await self._cb_reply(query, f"❌ 재스캔 실패: {exc}")
+
+            else:
+                await self._cb_reply(query, f"알 수 없는 운영 메뉴 액션: {cmd}")
+
+        # ── 프로젝트 전환 ─────────────────────────────────────────────────
+        elif action.startswith("proj:"):
+            project_id = action[5:]
+            if self.project_manager is None:
+                await self._cb_reply(query, "❌ 멀티 프로젝트 기능이 비활성화되어 있습니다.")
                 return
-            ok = "✅" if info.get("spec_exists") and info.get("task_queue_exists") else "⚠️"
-            running = info.get("running_task_id") or "없음"
-            rts = info.get("ready_to_ship_ids", [])
+            if not self.project_manager.switch(project_id):
+                available = ", ".join(self.project_manager.list_projects())
+                await self._cb_reply(
+                    query,
+                    f"❌ 프로젝트 '{project_id}'를 찾을 수 없습니다.\n"
+                    f"등록된 프로젝트: {available}"
+                )
+                return
+            paths = self.project_manager.current_paths
+            if self.orchestrator is not None and hasattr(self.orchestrator, "switch_project") and paths:
+                self.orchestrator.switch_project(paths)
             await self._cb_reply(
                 query,
-                f"{ok} PM Bot 상태\n\n"
-                f"실행 중: {running}\n"
-                f"Ship 대기: {', '.join(rts) if rts else '없음'}\n"
-                f"프로젝트: {info.get('spec_path', '?')}\n\n"
-                f"자세히: /doctor"
+                f"✅ 프로젝트 전환\n\n"
+                f"프로젝트: {project_id}\n"
+                f"repo: {paths.repo_path if paths else '?'}\n\n"
+                f"현재 task 완료 후 적용됩니다."
             )
+
         else:
             await self._cb_reply(query, f"알 수 없는 메뉴 액션: {action}")
 
