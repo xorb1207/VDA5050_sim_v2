@@ -99,6 +99,67 @@ vda5050_sim_v2/
 
 ---
 
+## Traffic Schedule Semantics Contract
+
+시뮬레이터가 **보장하는** 교통 제어 의미:
+
+### 예약 4계층 모델
+
+1. **노드 점유 (Node Occupancy)**
+   - capacity=1 노드는 동시에 2대 AGV가 점유할 수 없음
+   - 시간 윈도우 충돌 시 예약 거부
+   - 검증: T68-1, T6~T8
+
+2. **엣지 예약 (Edge Reservation)**
+   - **Head-on 방지**: 단일 양방향 엣지에서 역방향 활성 예약과 시간 겹침 시 차단
+   - **Follow-on headway**: 같은 방향 진입 시 최소 headway(1.5s) 미달 시 차단
+   - 검증: T68-2 (head-on), T68-3 (follow-on), T35~T36
+
+3. **Itinerary 예약 (Atomic)**
+   - 전체 path의 node/edge time-window를 atomic하게 예약
+   - 하나라도 충돌 시 **전체 롤백** (부분 예약 없음)
+   - 검증: T68-5, T37, T38
+
+4. **Critical Section**
+   - 교차로 / shared corridor / station access / charger access / bay를 section_key로 묶음
+   - capacity 기반 동시 진입 제한 (대부분 capacity=1)
+   - 명시적 hold: `_agv_held_sections`로 시간 만료와 무관하게 점유 유지
+   - 검증: T68-4, T38~T41
+
+### Station/Charger Access 제어
+
+- **facility_node_id 메커니즘**: access lane 예약 시 facility node(ST_*/CH_*) 점유 여부 확인
+- 다른 AGV가 station을 점유 중이면 access lane 진입 차단
+- 검증: T68-6
+
+### Conflict Resolution 정책
+
+- Retry 1~3회: 0.1s 고정 대기
+- Retry 4~10회: bounded exponential backoff (최대 0.3s)
+- Retry 11+회: force_reroute (blocked_edge 회피 A* 재계획)
+- 타입별 reroute 임계치: A/C=5, D=8, E=8, B=15 (siding 우선 탐색)
+
+### 통계 카운터 (3종)
+
+- `_edge_headon_counts`: 진성 head-on 충돌 (역방향 차단)
+- `_edge_followon_counts`: 같은 방향 follow-on 안전거리 차단
+- `_edge_retry_counts`: 대기 중 재시도 (병목 강도, 폴링 카운터)
+- `retry_total`은 진성 실패가 아님 — 대기 후 성공 가능
+
+---
+
+시뮬레이터가 **보장하지 않는** 것:
+
+- **Open-RMF 전체 구현**: traffic schedule database, full negotiation protocol, fleet adapter runtime 동작
+- **Multi-floor semantics**: lift, door, traffic light 제어
+- **연속 기하 기반 완전 충돌 감지**: 노드/엣지 기반 discrete time-window 예약으로 근사
+- **Dynamic obstacle avoidance**: 실시간 센서 기반 회피는 미구현 (경로 재계획으로 대체)
+- **완전 데드락 프루프**: 데드락 감지/해소 휴리스틱 존재하나, 모든 경우 방지 보장 X
+
+**포지셔닝**: Open-RMF 포맷 호환 FAB AMR what-if 시뮬레이터. RMF 전체 구현체가 아님.
+
+---
+
 ## Topology Invariants (`validate_invariants()`)
 
 | Type | 보장 내용 |
@@ -195,4 +256,15 @@ T56      report.json schema builder
 T57      station/charger access geometry (3m offset / center charger 외곽 x)
 T58      bay internal waypoint
 T59      start pool seeded shuffle + N/C/S 분산
+T60      KPI distribution fields (wait/travel_times)
+T61      Per-edge v_max (F1b-core) — Edge.v_max, importer, AGV effective_speed
+T62~T67  (F1a Multi-graph / Fleet) — 생략 (별도 문서)
+T68      Traffic Schedule Semantics Contract (GAP-0)
+T68-1    Node exclusivity — capacity=1 동시 점유 차단
+T68-2    Edge head-on prevention — 역방향 활성 예약 차단
+T68-3    Same-direction follow-on headway — 최소 간격 차단
+T68-4    Critical section capacity — section capacity 제한
+T68-5    Itinerary atomic reservation — 전체 실패 시 부분 예약 없음
+T68-6    Station access facility_node conflict — facility 점유 시 access 차단
+T68-7    Traffic semantics integration — Type B 60s 통합 검증
 ```
