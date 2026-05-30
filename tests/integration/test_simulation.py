@@ -2387,6 +2387,259 @@ def test_speed_change_at_edge_transition_is_instant():
 
 
 # ─────────────────────────────────────────────
+# TEST T68: Traffic Schedule Semantics Contract
+# ─────────────────────────────────────────────
+
+async def _test_node_exclusivity():
+    """[T68-1] Node exclusivity — capacity=1 노드는 동시 점유 불가."""
+    print("\n[T68-1] Node exclusivity (동시 점유 차단)")
+    sched = TimeWindowScheduler()
+
+    # AGV_001이 nodeX를 0~10초 점유
+    ok1 = await sched.reserve("nodeX", "AGV_001", 0.0, 10.0)
+    assert_eq("첫 예약 성공", ok1, True)
+
+    # AGV_002가 겹치는 시간대(5~15초)에 같은 노드 예약 시도 → 거부되어야 함
+    ok2 = await sched.reserve("nodeX", "AGV_002", 5.0, 15.0)
+    assert_eq("시간 겹침 시 예약 거부", ok2, False)
+
+    # AGV_002가 점유 종료 후(10~20초)에 예약 → 성공해야 함
+    ok3 = await sched.reserve("nodeX", "AGV_002", 10.0, 20.0)
+    assert_eq("시간 겹치지 않으면 예약 성공", ok3, True)
+
+    # congestion count 증가 확인
+    score = sched.get_congestion_score("nodeX")
+    assert_true("congestion score > 0", score > 0.0)
+    print(f"    nodeX congestion_score: {score:.3f}")
+
+
+def test_node_exclusivity():
+    run(_test_node_exclusivity())
+
+
+async def _test_edge_headon_prevention():
+    """[T68-2] Edge head-on prevention — 역방향 활성 예약 시 차단."""
+    print("\n[T68-2] Edge head-on prevention (역방향 차단)")
+    sched = TimeWindowScheduler()
+
+    # AGV_001이 A→B 엣지를 0~10초 예약
+    ok1 = await sched.reserve_edge("A", "B", "AGV_001", 0.0, 10.0)
+    assert_eq("정방향 예약 성공", ok1, True)
+
+    # AGV_002가 역방향(B→A)을 5~15초에 예약 시도 → head-on 차단되어야 함
+    ok2 = await sched.reserve_edge("B", "A", "AGV_002", 5.0, 15.0)
+    assert_eq("역방향 예약 거부 (head-on)", ok2, False)
+
+    # head-on 카운터 증가 확인
+    summary = sched.get_headon_summary()
+    assert_true("headon_total > 0", summary["headon_total"] > 0)
+    print(f"    headon_total: {summary['headon_total']}")
+
+    # 시간 겹치지 않으면 역방향도 가능
+    ok3 = await sched.reserve_edge("B", "A", "AGV_002", 10.0, 20.0)
+    assert_eq("시간 겹치지 않으면 역방향 예약 성공", ok3, True)
+
+
+def test_edge_headon_prevention():
+    run(_test_edge_headon_prevention())
+
+
+async def _test_same_direction_followon():
+    """[T68-3] Same-direction follow-on headway 차단."""
+    print("\n[T68-3] Same-direction follow-on headway")
+    sched = TimeWindowScheduler()
+
+    # AGV_001이 A→B를 0~10초에 예약 (headway 2.0s)
+    ok1 = await sched.reserve_edge("A", "B", "AGV_001", 0.0, 10.0,
+                                    same_direction_headway_s=2.0)
+    assert_eq("선행 AGV 예약 성공", ok1, True)
+
+    # AGV_002가 같은 방향(A→B)을 1.0초에 시작 → headway 2.0s 미달로 차단
+    ok2 = await sched.reserve_edge("A", "B", "AGV_002", 1.0, 11.0,
+                                    same_direction_headway_s=2.0)
+    assert_eq("follow-on headway 미달 시 차단", ok2, False)
+
+    # AGV_002가 2.5초에 시작 → headway 충족으로 성공
+    ok3 = await sched.reserve_edge("A", "B", "AGV_002", 2.5, 12.5,
+                                    same_direction_headway_s=2.0)
+    assert_eq("follow-on headway 충족 시 성공", ok3, True)
+
+    summary = sched.get_headon_summary()
+    assert_true("followon_total > 0", summary["followon_total"] > 0)
+    print(f"    followon_total: {summary['followon_total']}")
+
+
+def test_same_direction_followon():
+    run(_test_same_direction_followon())
+
+
+async def _test_critical_section_capacity():
+    """[T68-4] Critical section capacity 제한."""
+    print("\n[T68-4] Critical section capacity")
+    sched = TimeWindowScheduler()
+
+    # capacity=1인 section_A에 AGV_001이 0~10초 예약
+    ok1 = await sched.reserve_edge("X", "Y", "AGV_001", 0.0, 10.0,
+                                    section_key="section_A", section_capacity=1)
+    assert_eq("첫 예약 성공", ok1, True)
+
+    # 같은 section에 AGV_002가 겹치는 시간대(5~15초) 예약 시도 → 차단
+    ok2 = await sched.reserve_edge("Y", "Z", "AGV_002", 5.0, 15.0,
+                                    section_key="section_A", section_capacity=1)
+    assert_eq("section capacity 초과 시 차단", ok2, False)
+
+    # capacity=2인 section_B에는 2대까지 동시 예약 가능
+    ok3 = await sched.reserve_edge("P", "Q", "AGV_003", 0.0, 10.0,
+                                    section_key="section_B", section_capacity=2)
+    ok4 = await sched.reserve_edge("Q", "R", "AGV_004", 5.0, 15.0,
+                                    section_key="section_B", section_capacity=2)
+    assert_eq("capacity=2 첫번째 예약", ok3, True)
+    assert_eq("capacity=2 두번째 예약", ok4, True)
+
+    # 세번째 AGV는 차단되어야 함
+    ok5 = await sched.reserve_edge("R", "S", "AGV_005", 6.0, 16.0,
+                                    section_key="section_B", section_capacity=2)
+    assert_eq("capacity=2 초과 시 차단", ok5, False)
+
+    summary = sched.get_headon_summary()
+    assert_true("section_conflict_total > 0", summary["section_conflict_total"] > 0)
+    print(f"    section_conflict_total: {summary['section_conflict_total']}")
+
+
+def test_critical_section_capacity():
+    run(_test_critical_section_capacity())
+
+
+async def _test_itinerary_atomic_reservation():
+    """[T68-5] Itinerary atomic reservation — 전체 실패 시 부분 예약 없음."""
+    print("\n[T68-5] Itinerary atomic reservation")
+    from src.domain.reservation.scheduler import ItinerarySegment
+
+    sched = TimeWindowScheduler()
+
+    # 먼저 다른 AGV가 nodeB를 5~15초 점유
+    await sched.reserve("nodeB", "AGV_OTHER", 5.0, 15.0)
+
+    # AGV_001이 nodeA(0~5초) → edge(5~10초) → nodeB(10~15초) 경로 예약 시도
+    # nodeB가 이미 점유되어 있으므로 전체 예약 실패해야 함
+    segments = [
+        ItinerarySegment(
+            segment_type="node", key="nodeA",
+            agv_id="AGV_001", start_time=0.0, end_time=5.0,
+        ),
+        ItinerarySegment(
+            segment_type="edge", key="nodeA__nodeB",
+            agv_id="AGV_001", start_time=5.0, end_time=10.0,
+            src_id="nodeA", dst_id="nodeB",
+        ),
+        ItinerarySegment(
+            segment_type="node", key="nodeB",
+            agv_id="AGV_001", start_time=10.0, end_time=15.0,
+        ),
+    ]
+
+    ok = await sched.reserve_itinerary(segments)
+    assert_eq("충돌 시 itinerary 전체 실패", ok, False)
+
+    # nodeA에 부분 예약이 남아있지 않은지 확인
+    # (다른 AGV가 nodeA 예약 시도하면 성공해야 함)
+    ok_nodeA = await sched.reserve("nodeA", "AGV_TEST", 0.0, 5.0)
+    assert_eq("실패한 itinerary의 부분 예약 없음", ok_nodeA, True)
+
+    summary = sched.get_headon_summary()
+    assert_true("itinerary_failure > 0", summary["itinerary_failure"] > 0)
+    print(f"    itinerary_success: {summary['itinerary_success']}, "
+          f"itinerary_failure: {summary['itinerary_failure']}")
+
+
+def test_itinerary_atomic_reservation():
+    run(_test_itinerary_atomic_reservation())
+
+
+async def _test_station_access_facility_node_conflict():
+    """[T68-6] Station access — facility_node_id를 통한 main corridor 진입 차단."""
+    print("\n[T68-6] Station access facility_node 충돌 감지")
+    sched = TimeWindowScheduler()
+
+    # ST_01이 facility node (station)
+    # AGV_001이 ST_01를 0~10초 점유
+    await sched.reserve("ST_01", "AGV_001", 0.0, 10.0)
+
+    # AGV_002가 access lane (SA_01 → ST_01)을 5~15초에 예약 시도
+    # facility_node_id=ST_01이 이미 점유되어 있으므로 차단되어야 함
+    ok = await sched.reserve_edge(
+        "SA_01", "ST_01", "AGV_002",
+        start_time=5.0, end_time=15.0,
+        facility_node_id="ST_01",
+    )
+    assert_eq("facility node 점유 중 access 차단", ok, False)
+
+    # 시간 겹치지 않으면 성공
+    ok2 = await sched.reserve_edge(
+        "SA_01", "ST_01", "AGV_002",
+        start_time=10.0, end_time=20.0,
+        facility_node_id="ST_01",
+    )
+    assert_eq("facility node 해제 후 access 성공", ok2, True)
+
+
+def test_station_access_facility_node_conflict():
+    run(_test_station_access_facility_node_conflict())
+
+
+async def _test_traffic_semantics_integration():
+    """[T68-7] Traffic semantics 통합 테스트 — Type B 짧은 시뮬."""
+    print("\n[T68-7] Traffic semantics 통합 (Type B 60s)")
+    from src.domain.map.topology_generator import MapTopologyGenerator
+
+    graph = MapTopologyGenerator().generate("B", siding_placement="mid")
+    bus = LocalMemoryBus()
+    sched = TimeWindowScheduler()
+    gen = TaskGenerator(graph, bus, task_interval_s=3.0)
+    engine = SimulationEngine(graph, sched, task_generator=gen)
+
+    # AGV 4대 배치 (holding points)
+    start_nodes = ["HP_N_01", "HP_C_02", "HP_S_03", "HP_N_04"]
+    for i, start in enumerate(start_nodes, 1):
+        agv = AGV(f"AGV_{i:03d}", bus, graph, sched)
+        agv.current_node_id = start
+        agv.physics.x = graph.nodes[start].x
+        agv.physics.y = graph.nodes[start].y
+        engine.register_agv(agv)
+
+    results = await engine.run(duration_s=60.0)
+
+    # 기본 의미 체크
+    assert_true("시뮬 완료", results["sim_time_s"] >= 59.0)
+    assert_true("이동 발생", results["total_travel_distance_m"] > 0)
+
+    # head-on/followon/section_conflict 필드 존재 확인
+    for key in ["headon_total", "followon_total", "section_conflict_total",
+                "retry_total", "itinerary_success", "itinerary_failure"]:
+        assert_true(f"{key} 필드 존재", key in results)
+
+    print(f"    sim_time: {results['sim_time_s']:.1f}s")
+    print(f"    tasks_completed: {results['tasks_completed']}")
+    print(f"    headon_total: {results['headon_total']}")
+    print(f"    followon_total: {results['followon_total']}")
+    print(f"    section_conflict_total: {results['section_conflict_total']}")
+    print(f"    itinerary_success: {results['itinerary_success']}")
+    print(f"    itinerary_failure: {results['itinerary_failure']}")
+
+    # Type B는 양방향이므로 head-on이 발생할 수 있음
+    # (단, 값이 합리적 범위 내인지만 확인)
+    if results["headon_total"] > 0:
+        print(f"    ✓ Type B head-on 발생 (양방향 특성)")
+
+    # 최소 1개 이상의 itinerary 예약이 성공했는지 확인
+    assert_true("itinerary_success >= 1", results["itinerary_success"] >= 1)
+
+
+def test_traffic_semantics_integration():
+    run(_test_traffic_semantics_integration())
+
+
+# ─────────────────────────────────────────────
 # 실행
 # ─────────────────────────────────────────────
 
@@ -2463,6 +2716,14 @@ if __name__ == "__main__":
         test_importer_v_max_passthrough_via_apply_edits,
         test_importer_v_max_added_edge_and_unset,
         test_speed_change_at_edge_transition_is_instant,
+        # Traffic Schedule Semantics Contract (T68)
+        test_node_exclusivity,
+        test_edge_headon_prevention,
+        test_same_direction_followon,
+        test_critical_section_capacity,
+        test_itinerary_atomic_reservation,
+        test_station_access_facility_node_conflict,
+        test_traffic_semantics_integration,
     ]
     passed = failed = 0
     for t in tests:

@@ -111,7 +111,7 @@ python scripts/merge_showcase_into_saturation.py <SAT_DIR> <SHOWCASE_DIR>
 ### 회귀 안전망
 
 ```bash
-python tests/integration/test_simulation.py        # T1~T59 + 추가 invariant
+python tests/integration/test_simulation.py        # T1~T68 (70개 테스트)
 ```
 
 산출물:
@@ -140,6 +140,13 @@ python tests/integration/test_simulation.py        # T1~T59 + 추가 invariant
   - 임포터: `type/is_charger/is_station/is_holding_point/capability` 명시 필드 인식
   - 검증 맵: `scripts/generate_synthetic_3fleet.py` → TYPE_A/B/C 3-fleet 합성 맵
   - 테스트: T66 20/20, 통합 63/63 PASS
+- [x] **GAP-0 Traffic Semantics Audit** — 2026-05-30 완료.
+  - 예약 4계층 (node/edge/itinerary/section) contract 검증 및 문서화
+  - T68-1~T68-7 추가 (node exclusivity, head-on, follow-on, critical section, itinerary atomic, facility node)
+  - Quickrun AGV 겹침 조사: 시각화 현상 (실제 버그 아님, edge interpolation/node stacking)
+  - ARCHITECTURE.md: "Traffic Schedule Semantics Contract" 섹션 — 보장/미보장 명확화
+  - 테스트: 70/70 PASS (기존 63 + 새 T68 7)
+  - RMF YAML import/export 진행 가능 확인 완료
 
 ### 다음 사이클 — 주력 (운영 도구)
 
