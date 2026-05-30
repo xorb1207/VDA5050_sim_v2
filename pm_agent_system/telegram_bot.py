@@ -1330,7 +1330,9 @@ class TelegramBot:
             tid   = f["task_id"]
             title = f.get("title", tid)
             src   = "📲" if f.get("source") == "telegram" else "💾"
-            lines.append(f"{i}. {src} {title}\n   파일: {f['filename']}\n   상태: pending\n")
+            retry_tag = " 🔁재시도" if f.get("retry") else ""
+            status_str = f"pending{retry_tag}"
+            lines.append(f"{i}. {src} {title}\n   파일: {f['filename']}\n   상태: {status_str}\n")
             keyboard_rows.append([
                 InlineKeyboardButton("▶ 진행해", callback_data=self._safe_cb("inbox:approve", tid)),
                 InlineKeyboardButton("👁 보기",   callback_data=self._safe_cb("inbox:show",    tid)),

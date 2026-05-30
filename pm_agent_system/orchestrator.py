@@ -1167,6 +1167,18 @@ class Orchestrator:
             return {"ok": False, "task_id": resolved_id, "title": info["title"],
                     "message": f"❌ frontmatter 업데이트 실패: {exc}"}
 
+        # ── 재시도 시 이전 .failed.md 정리 ─────────────────────────────────
+        for suffix in (".failed.md", ".cancelled.md"):
+            old = self.task_queue_dir / (inbox_file.stem + suffix)
+            if old.exists():
+                try:
+                    old.unlink()
+                    print(f"[orchestrator] 이전 실패 파일 제거: {old.name}")
+                except Exception:
+                    pass
+        # _processed_ids에서도 제거 (재실행 허용)
+        self._processed_ids.discard(resolved_id)
+
         # ── task_queue/ 로 원자적 이동 ───────────────────────────────────────
         dest = self.task_queue_dir / inbox_file.name
         write_atomic(dest, new_content)
@@ -1180,21 +1192,31 @@ class Orchestrator:
                 "message": f"▶ 실행 대기열 등록 완료: {inbox_file.name}"}
 
     def _is_already_queued(self, task_id: str) -> bool:
-        """task_id가 이미 실행 대기열 / 처리 완료 / active 상태인지 확인."""
-        if task_id in self._processed_ids:
-            return True
+        """task_id가 현재 실행 대기 중이거나 실행 중인지 확인.
+
+        실패(failed) / 완료(shipped) / 보류(held) 상태는 재시도 허용.
+        막는 경우: RUNNING / 대기(.md) / ACTIVE 상태.
+        """
+        # 현재 실행 중
         if self._running_task and self._running_task.get("task_id") == task_id:
             return True
-        for d in (
-            getattr(self, "_active_tasks", {}),
-            getattr(self, "_failed_tasks", {}),
-            getattr(self, "_shipped_tasks", {}),
-            getattr(self, "_held_tasks", {}),
-        ):
-            if task_id in d:
-                return True
-        # task_queue 파일 존재 여부
-        if (self.task_queue_dir / f"{task_id}.md").exists():
+        # 인메모리 active (대기 중이지만 아직 실행 전)
+        if task_id in getattr(self, "_active_tasks", {}):
+            return True
+        # task_queue에 .md (순수 대기 파일) 존재 — .failed.md/.done.md 제외
+        plain_md = self.task_queue_dir / f"{task_id}.md"
+        if plain_md.exists():
+            return True
+        return False
+
+    def _is_retryable(self, task_id: str) -> bool:
+        """실패/완료 이력이 있지만 재시도 가능한 task_id인지 확인."""
+        # .failed.md 가 task_queue에 있으면 재시도 가능
+        failed_md = self.task_queue_dir / f"{task_id}.failed.md"
+        if failed_md.exists():
+            return True
+        # _failed_tasks 인메모리
+        if task_id in getattr(self, "_failed_tasks", {}):
             return True
         return False
 
@@ -1246,10 +1268,14 @@ class Orchestrator:
             else:
                 seen_ids[tid] = md.name
 
-            # 이미 큐에 있는 task_id 감지
+            # 현재 실행/대기 중이면 차단, 실패 이력은 재시도 허용
             if info["is_valid"] and self._is_already_queued(tid):
                 info["is_valid"] = False
-                info["invalid_reason"] = "이미 실행 대기열 또는 완료됨"
+                info["invalid_reason"] = "현재 실행 중 또는 대기열에 있음"
+            elif info["is_valid"] and self._is_retryable(tid):
+                # 실패 이력 있음 — 재시도 가능으로 표시 (is_valid=True 유지)
+                info["retry"] = True
+                info["retry_note"] = "이전 실행 실패 — 재시도 가능"
 
             result.append(info)
 
