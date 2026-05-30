@@ -147,12 +147,18 @@ python tests/integration/test_simulation.py        # T1~T68 (70개 테스트)
   - ARCHITECTURE.md: "Traffic Schedule Semantics Contract" 섹션 — 보장/미보장 명확화
   - 테스트: 70/70 PASS (기존 63 + 새 T68 7)
   - RMF YAML import/export 진행 가능 확인 완료
+- [x] **GAP-D RMF YAML import/export** — 2026-05-31 완료.
+  - 발견: 모든 기능이 이미 구현되어 있었음 (import_map_yaml, export_to_rmf_yaml)
+  - 버그 수정: typed params 파싱, 5-element vertex 포맷 지원
+  - T69-1~T69-8 테스트 추가 (기본 파싱, graph_idx, fleets, 확장자 감지, roundtrip)
+  - scripts/export_to_yaml.py CLI 유틸리티 추가
+  - 테스트: 70/70 통합 + 8/8 GAP-D PASS
+  - 실제 fab_nav_graph.yaml import 검증 완료
 
 ### 다음 사이클 — 주력 (운영 도구)
 
-- [ ] **RMF building_map YAML import/export** ← **1순위**. 폐쇄망 데이터 호환. 견적 ~1일.
-- [ ] **Background image overlay** ← 2순위. 실 도면 PNG 위에 그리기. 견적 ~1일.
-- [ ] **Editor 속성 풀 편집** — vertex lock_radius, edge capacity/width 등.
+- [ ] **Background image overlay** ← **1순위**. 실 도면 PNG 위에 그리기. 견적 ~1일.
+- [ ] **Editor 속성 풀 편집** — vertex lock_radius, edge capacity/width 등. 견적 ~0.5일.
 
 ### Advanced (연구·검증 영역, 후순위)
 
