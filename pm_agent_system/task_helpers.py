@@ -189,6 +189,123 @@ def preflight_check(title: str, body: str) -> list[str]:
     return errors
 
 
+# ── inbox 파일 파싱 (local drop 지원) ─────────────────────────────────────
+
+# inbox에서 제외할 파일 패턴 (.tmp / backup / swap 등)
+_INBOX_SKIP_RE = re.compile(r"\.(tmp|bak|swp|orig|back)$|~$", re.IGNORECASE)
+
+
+def is_skip_inbox_file(path: Path) -> bool:
+    """inbox에서 무시해야 할 파일 (숨김 / tmp / backup)."""
+    name = path.name
+    if name.startswith("."):
+        return True
+    return bool(_INBOX_SKIP_RE.search(name))
+
+
+def extract_title_from_body(text: str, fallback: str = "") -> str:
+    """마크다운 본문에서 첫 번째 # heading 추출. 없으면 fallback 반환."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()
+    return fallback
+
+
+def slug_to_title(name: str) -> str:
+    """파일명 슬러그 → 사람이 읽을 수 있는 제목.
+
+    예: "2026-05-30_001_rmf-yaml-import.md" → "rmf yaml import"
+        "my-feature-task.md"               → "my feature task"
+    """
+    stem = Path(name).stem if name.endswith(".md") else name
+    # 날짜·숫자 접두어 제거 (예: 2026-05-30_001_ / 01_)
+    stem = re.sub(r"^\d{4}-\d{2}-\d{2}_\d+_?", "", stem)
+    stem = re.sub(r"^\d+_?", "", stem)
+    title = stem.replace("-", " ").replace("_", " ").strip()
+    return title or stem
+
+
+def parse_inbox_file(path: Path) -> dict[str, Any]:
+    """task_inbox 파일 파싱. frontmatter 없어도 OK.
+
+    Returns dict keys:
+        task_id, title, status, priority, source, created_at, filename,
+        path, has_frontmatter, is_valid, invalid_reason, body_preview
+    """
+    result: dict[str, Any] = {
+        "task_id":        path.stem,
+        "title":          slug_to_title(path.name),
+        "status":         "pending",
+        "priority":       "medium",
+        "source":         "local_drop",
+        "created_at":     "",
+        "filename":       path.name,
+        "path":           path,
+        "has_frontmatter": False,
+        "is_valid":       True,
+        "invalid_reason": None,
+        "body_preview":   "",
+    }
+
+    # 파일 읽기
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        result["is_valid"] = False
+        result["invalid_reason"] = f"파일 읽기 실패: {exc}"
+        return result
+
+    if not text.strip():
+        result["is_valid"] = False
+        result["invalid_reason"] = "빈 파일"
+        return result
+
+    if len(text.strip()) < MIN_BODY_CHARS:
+        result["is_valid"] = False
+        result["invalid_reason"] = (
+            f"내용이 너무 짧음 ({len(text.strip())}자 < {MIN_BODY_CHARS}자 최소)"
+        )
+
+    body = text
+
+    # frontmatter 파싱 시도
+    if text.startswith("---"):
+        end_idx = text.find("\n---", 3)
+        if end_idx != -1:
+            fm_text = text[3:end_idx].strip()
+            try:
+                fm = yaml.safe_load(fm_text) or {}
+                result["has_frontmatter"] = True
+                # id / task_id 두 키 모두 지원
+                tid = fm.get("id") or fm.get("task_id") or ""
+                if tid:
+                    result["task_id"] = str(tid)
+                result["title"]      = fm.get("title",        result["title"])
+                result["status"]     = fm.get("status",       "pending")
+                result["priority"]   = fm.get("priority",     "medium")
+                result["source"]     = (
+                    fm.get("created_from") or fm.get("source") or "local_drop"
+                )
+                result["created_at"] = str(fm.get("created_at", ""))
+                body = text[end_idx + 4:]
+            except yaml.YAMLError:
+                result["has_frontmatter"] = False
+                result["is_valid"] = False
+                result["invalid_reason"] = "YAML frontmatter 파싱 실패"
+
+    # title 보강: frontmatter에 없거나 local_drop이면 heading에서 추출
+    if not result["has_frontmatter"] or result["source"] == "local_drop":
+        heading = extract_title_from_body(body)
+        if heading:
+            result["title"] = heading
+
+    # body preview (앞 500자)
+    result["body_preview"] = body.strip()[:500]
+
+    return result
+
+
 # ── watcher 안전 검사 ──────────────────────────────────────────────────────
 
 # 이미 처리된 파일임을 나타내는 중간 확장자 패턴

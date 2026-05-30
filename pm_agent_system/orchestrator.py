@@ -1111,68 +1111,178 @@ class Orchestrator:
     def approve_inbox_task(self, task_id: str) -> dict:
         """inbox의 pending 태스크를 승인해 task_queue/ 로 이동.
 
+        local drop 파일 (frontmatter 없음)도 지원:
+        - title / task_id를 파싱해 frontmatter에 자동 추가
+        - is_valid 체크 포함 (빈 파일, 파싱 실패, 중복 등)
+
         Returns:
-            {"ok": bool, "task_id": str, "message": str}
+            {"ok": bool, "task_id": str, "message": str, "title": str}
         """
-        # task_id → filename 매핑 (exact match 먼저, prefix match fallback)
+        from task_helpers import parse_inbox_file, is_skip_inbox_file
+
+        # ── 파일 탐색 (exact → glob) ────────────────────────────────────────
         inbox_file = self.task_inbox_dir / f"{task_id}.md"
         if not inbox_file.exists():
-            # prefix 매칭 (짧은 id 입력 허용)
-            matches = list(self.task_inbox_dir.glob(f"*{task_id}*.md"))
+            matches = [
+                f for f in self.task_inbox_dir.glob(f"*{task_id}*.md")
+                if not is_skip_inbox_file(f)
+            ]
             if len(matches) == 1:
                 inbox_file = matches[0]
-                task_id = inbox_file.stem
             elif len(matches) > 1:
                 names = ", ".join(m.name for m in matches)
-                return {"ok": False, "task_id": task_id,
+                return {"ok": False, "task_id": task_id, "title": "",
                         "message": f"❌ 여러 파일이 매칭됩니다: {names}"}
             else:
-                return {"ok": False, "task_id": task_id,
+                return {"ok": False, "task_id": task_id, "title": "",
                         "message": f"❌ inbox에서 '{task_id}' 파일을 찾을 수 없습니다."}
 
-        # frontmatter 업데이트
+        # ── 파일 파싱 + 유효성 검사 ──────────────────────────────────────────
+        info = parse_inbox_file(inbox_file)
+        if not info["is_valid"]:
+            return {"ok": False, "task_id": task_id, "title": info["title"],
+                    "message": f"❌ 실행 불가: {info['invalid_reason']}"}
+
+        # ── 이미 큐에 있는지 확인 ────────────────────────────────────────────
+        resolved_id = info["task_id"]
+        if self._is_already_queued(resolved_id):
+            return {"ok": False, "task_id": resolved_id, "title": info["title"],
+                    "message": f"❌ '{resolved_id}'는 이미 실행 대기열 또는 완료됨"}
+
+        # ── frontmatter 보강 (local drop 포함) ───────────────────────────────
         from datetime import datetime as _dt
-        updates = {
-            "status": "queued",
-            "approved": True,
+        updates: dict = {
+            "id":          resolved_id,
+            "title":       info["title"],
+            "status":      "queued",
+            "approved":    True,
             "approved_at": _dt.now().astimezone().isoformat(),
         }
+        if not info["has_frontmatter"]:
+            updates["created_from"] = "local_drop"
+            updates["priority"]     = info["priority"]
         try:
             new_content = update_task_frontmatter(inbox_file, updates)
         except Exception as exc:
-            return {"ok": False, "task_id": task_id,
+            return {"ok": False, "task_id": resolved_id, "title": info["title"],
                     "message": f"❌ frontmatter 업데이트 실패: {exc}"}
 
-        # task_queue/ 에 원자적으로 이동
+        # ── task_queue/ 로 원자적 이동 ───────────────────────────────────────
         dest = self.task_queue_dir / inbox_file.name
         write_atomic(dest, new_content)
-
-        # inbox 파일 삭제
         try:
             inbox_file.unlink()
         except Exception:
             pass
 
         print(f"[orchestrator] 태스크 승인: {inbox_file.name} → task_queue/")
-        return {"ok": True, "task_id": task_id,
+        return {"ok": True, "task_id": resolved_id, "title": info["title"],
                 "message": f"▶ 실행 대기열 등록 완료: {inbox_file.name}"}
 
+    def _is_already_queued(self, task_id: str) -> bool:
+        """task_id가 이미 실행 대기열 / 처리 완료 / active 상태인지 확인."""
+        if task_id in self._processed_ids:
+            return True
+        if self._running_task and self._running_task.get("task_id") == task_id:
+            return True
+        for d in (
+            getattr(self, "_active_tasks", {}),
+            getattr(self, "_failed_tasks", {}),
+            getattr(self, "_shipped_tasks", {}),
+            getattr(self, "_held_tasks", {}),
+        ):
+            if task_id in d:
+                return True
+        # task_queue 파일 존재 여부
+        if (self.task_queue_dir / f"{task_id}.md").exists():
+            return True
+        return False
+
     def get_inbox_summary(self) -> list[dict]:
-        """task_inbox/ 의 pending 태스크 목록 반환."""
+        """task_inbox/ 의 pending 태스크 목록 반환 (레거시 / 하위 호환).
+
+        신규 코드는 get_inbox_files()를 사용 권장.
+        """
         result: list[dict] = []
         for md in sorted(self.task_inbox_dir.glob("*.md")):
             if not md.name.endswith(".md") or md.name.startswith("."):
                 continue
             fm = parse_task_frontmatter(md)
             result.append({
-                "task_id": fm.get("id", md.stem),
-                "title": fm.get("title", md.stem),
-                "status": fm.get("status", "pending"),
-                "priority": fm.get("priority", "medium"),
+                "task_id":   fm.get("id", md.stem),
+                "title":     fm.get("title", md.stem),
+                "status":    fm.get("status", "pending"),
+                "priority":  fm.get("priority", "medium"),
                 "created_at": fm.get("created_at", ""),
-                "filename": md.name,
+                "filename":  md.name,
             })
         return result
+
+    def get_inbox_files(self) -> list[dict]:
+        """task_inbox/ 전체 스캔 + 파싱 (local drop 포함).
+
+        기존 get_inbox_summary()와 달리:
+        - frontmatter 없는 파일도 포함
+        - is_valid / invalid_reason 필드 포함
+        - 중복 task_id 감지
+        - 이미 처리된 task_id 감지
+        """
+        from task_helpers import parse_inbox_file, is_skip_inbox_file
+
+        result: list[dict] = []
+        seen_ids: dict[str, str] = {}   # task_id → filename
+
+        for md in sorted(self.task_inbox_dir.glob("*.md")):
+            if is_skip_inbox_file(md):
+                continue
+
+            info = parse_inbox_file(md)
+            tid = info["task_id"]
+
+            # 중복 task_id 감지
+            if info["is_valid"] and tid in seen_ids:
+                info["is_valid"] = False
+                info["invalid_reason"] = f"중복 task_id (기존 파일: {seen_ids[tid]})"
+            else:
+                seen_ids[tid] = md.name
+
+            # 이미 큐에 있는 task_id 감지
+            if info["is_valid"] and self._is_already_queued(tid):
+                info["is_valid"] = False
+                info["invalid_reason"] = "이미 실행 대기열 또는 완료됨"
+
+            result.append(info)
+
+        return result
+
+    def get_inbox_task_detail(self, task_id: str) -> dict | None:
+        """inbox에서 특정 task_id의 상세 정보 반환. 없으면 None."""
+        from task_helpers import parse_inbox_file, is_skip_inbox_file
+
+        # exact match
+        exact = self.task_inbox_dir / f"{task_id}.md"
+        if exact.exists() and not is_skip_inbox_file(exact):
+            info = parse_inbox_file(exact)
+            try:
+                info["body_full"] = exact.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                info["body_full"] = info.get("body_preview", "")
+            return info
+
+        # glob fallback (task_id를 파일명에 포함하는 파일 탐색)
+        matches = [
+            f for f in sorted(self.task_inbox_dir.glob("*.md"))
+            if task_id in f.stem and not is_skip_inbox_file(f)
+        ]
+        if len(matches) == 1:
+            info = parse_inbox_file(matches[0])
+            try:
+                info["body_full"] = matches[0].read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                info["body_full"] = info.get("body_preview", "")
+            return info
+
+        return None
 
     def get_task_log(self, task_id: str, lines: int = _LOG_TAIL_LINES) -> str | None:
         """Phase 0: 태스크 combined 로그의 최근 N 줄 반환. 파일 없으면 None."""
