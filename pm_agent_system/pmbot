@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# pmbot — PM Bot 관리 스크립트
+#
+# 사용법:
+#   ./pmbot start      백그라운드 시작
+#   ./pmbot stop       종료
+#   ./pmbot restart    종료 후 재시작
+#   ./pmbot status     실행 중인지 확인
+#   ./pmbot log        최근 로그 50줄
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCK_FILE="/tmp/pm_agent_system.lock"
+LOG_FILE="/tmp/pmbot.log"
+PYTHON="${PYTHON:-python}"
+
+# ── 헬퍼 ──────────────────────────────────────────────────────────────────
+
+_pid() {
+    [[ -f "$LOCK_FILE" ]] && cat "$LOCK_FILE" 2>/dev/null || echo ""
+}
+
+_is_alive() {
+    local pid
+    pid=$(_pid)
+    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+}
+
+_stop() {
+    local pid
+    pid=$(_pid)
+    if [[ -z "$pid" ]]; then
+        echo "PM Bot이 실행 중이지 않습니다."
+        rm -f "$LOCK_FILE"
+        return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+        echo "락파일이 남아 있지만 프로세스($pid)가 없습니다. 락 제거."
+        rm -f "$LOCK_FILE"
+        return 0
+    fi
+    echo "PM Bot 종료 중 (PID $pid)..."
+    kill "$pid" 2>/dev/null || true
+    # 최대 8초 대기
+    local i=0
+    while kill -0 "$pid" 2>/dev/null && (( i < 8 )); do
+        sleep 1; (( i++ ))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "강제 종료 (SIGKILL)..."
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$LOCK_FILE"
+    echo "종료 완료."
+}
+
+_start() {
+    if _is_alive; then
+        echo "PM Bot이 이미 실행 중입니다 (PID $(_pid))."
+        echo "재시작하려면: ./pmbot restart"
+        return 1
+    fi
+    rm -f "$LOCK_FILE"
+    echo "PM Bot 시작 중..."
+    cd "$SCRIPT_DIR"
+    PYTHONUNBUFFERED=1 nohup "$PYTHON" main.py >> "$LOG_FILE" 2>&1 &
+    local new_pid=$!
+    echo "PID: $new_pid  로그: $LOG_FILE"
+    # 3초 후 살아있는지 확인
+    sleep 3
+    if kill -0 "$new_pid" 2>/dev/null; then
+        echo "✅ PM Bot 정상 시작됨 (PID $new_pid)"
+    else
+        echo "❌ 시작 실패. 로그 확인:"
+        tail -20 "$LOG_FILE"
+        return 1
+    fi
+}
+
+# ── 명령 ──────────────────────────────────────────────────────────────────
+
+CMD="${1:-status}"
+
+case "$CMD" in
+    start)
+        _start
+        ;;
+    stop)
+        _stop
+        ;;
+    restart)
+        _stop
+        echo ""
+        _start
+        ;;
+    status)
+        if _is_alive; then
+            echo "✅ PM Bot 실행 중 (PID $(_pid))"
+            echo "   로그: $LOG_FILE"
+            echo ""
+            tail -5 "$LOG_FILE" 2>/dev/null || true
+        else
+            echo "⛔ PM Bot 중지됨"
+            [[ -f "$LOCK_FILE" ]] && echo "   (오래된 락파일 제거)" && rm -f "$LOCK_FILE"
+        fi
+        ;;
+    log)
+        N="${2:-50}"
+        echo "=== PM Bot 로그 (최근 ${N}줄) ==="
+        tail -"$N" "$LOG_FILE" 2>/dev/null || echo "(로그 없음: $LOG_FILE)"
+        ;;
+    *)
+        echo "사용법: ./pmbot {start|stop|restart|status|log [N]}"
+        exit 1
+        ;;
+esac

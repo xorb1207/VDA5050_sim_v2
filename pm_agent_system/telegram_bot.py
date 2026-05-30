@@ -194,9 +194,8 @@ class TelegramBot:
 
         logger.info("Telegram Bot polling 시작.")
         async with self._app:
-            # Telegram 명령 메뉴 등록 (/ 눌렀을 때 자동완성)
-            # Telegram 자동완성 메뉴 — 평소 핵심 커맨드만 노출
-            await self._app.bot.set_my_commands([
+            # Telegram 명령 메뉴 등록 (/ 눌렀을 때 자동완성) — 네트워크 실패 시 재시도
+            _cmds = [
                 BotCommand("menu",    "📋 버튼 메뉴"),
                 BotCommand("inbox",   "📥 로컬 inbox 확인  /inbox [T-ID]"),
                 BotCommand("enqueue", "작업 등록  /enqueue 제목 + 본문"),
@@ -205,7 +204,19 @@ class TelegramBot:
                 BotCommand("log",     "로그 확인  /log T-ID"),
                 BotCommand("ship",    "배포 승인  /ship T-ID"),
                 BotCommand("help",    "도움말  /help advanced  /help admin"),
-            ])
+            ]
+            for _attempt in range(5):
+                try:
+                    await self._app.bot.set_my_commands(_cmds)
+                    logger.info(f"명령어 메뉴 등록 완료 ({len(_cmds)}개)")
+                    break
+                except Exception as _e:
+                    if _attempt < 4:
+                        _wait = 2 ** _attempt  # 1, 2, 4, 8s
+                        logger.warning(f"명령어 메뉴 등록 실패 ({_e}) — {_wait}s 후 재시도")
+                        await asyncio.sleep(_wait)
+                    else:
+                        logger.warning(f"명령어 메뉴 등록 최종 실패 ({_e}) — 봇은 계속 실행")
             await self._app.start()
             await self._app.updater.start_polling()
             try:
