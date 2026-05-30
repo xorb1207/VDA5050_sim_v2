@@ -34,6 +34,38 @@ python main.py --status  # 현재 상태만 출력 후 종료
 
 ---
 
+## 공식 작업 등록 방식 (3가지)
+
+> **운영 원칙** (고정): `task_inbox` = 작성/수정/검토 가능 · `task_queue` = 실행 전용
+
+| 방식 | 흐름 | 용도 |
+|------|------|------|
+| **① 외부 즉석 등록** | `/enqueue 제목\n본문` → inbox 대기 → `[▶ 진행해]` 승인 | 간단한 작업, Telegram에서 바로 등록 |
+| **② 로컬 스펙 등록** | `.pmbot/task_inbox/*.md` 작성 → `/inbox` 확인 → `[▶ 진행해]` | 긴 스펙 파일, 로컬에서 설계 후 원격 승인 |
+| **③ 직접 queue 투입** | `.pmbot/task_queue/*.md` 직접 생성 | ⚠️ 비추천 — 테스트/긴급용만 |
+
+### 로컬 스펙 등록 워크플로우 (②)
+
+```
+1. 로컬에서 작성:
+   .pmbot/task_inbox/my-feature.md  (frontmatter 없어도 OK)
+
+2. Telegram에서 확인:
+   /inbox            → 목록 확인
+   /inbox T-ID       → 상세 확인
+
+3. 승인:
+   [▶ 진행해] 버튼   → task_queue/ 이동 → 자동 실행
+   또는: /run T-ID
+
+4. 진행 추적:
+   /queue → /log T-ID → /diff T-ID → /ship T-ID
+```
+
+> **핵심**: Telegram에 긴 스펙을 붙여넣지 않고, 로컬 파일을 Telegram에서 승인만 합니다.
+
+---
+
 ## Telegram 명령 레퍼런스
 
 > **평소에는 5개만 쓴다.** 나머지는 필요할 때만.
@@ -43,12 +75,13 @@ python main.py --status  # 현재 상태만 출력 후 종료
 | 명령 | 설명 |
 |------|------|
 | `/menu` | 버튼 메뉴 (시작점) |
-| `/enqueue 제목\n본문` | 작업 등록 → inbox 대기 → 승인 후 실행 |
+| `/enqueue 제목\n본문` | 즉석 작업 등록 → inbox 대기 → 승인 후 실행 |
+| `/inbox` | 로컬 inbox 목록 확인 / 승인 |
 | `/queue` | 전체 현황 (pending + 실행 대기, next action 포함) |
 | `/log T-ID` | 실행 중 로그 확인 |
 | `/ship T-ID` | 배포 승인 |
 
-실사용 흐름: **`/enqueue` → `/queue` → `/log` → `/diff` → `/ship`**
+실사용 흐름: **`/enqueue` (또는 `/inbox`) → `/queue` → `/log` → `/diff` → `/ship`**
 
 ---
 
@@ -56,14 +89,15 @@ python main.py --status  # 현재 상태만 출력 후 종료
 
 | 명령 | 설명 |
 |------|------|
+| `/inbox T-ID` | 특정 inbox 작업 상세 확인 |
+| `/run T-ID` | inbox 작업 승인 → 실행 대기열 이동 |
+| `/run next` | inbox 최우선 작업 승인 |
 | `/diff T-ID` | git diff 요약 + 스니펫 |
 | `/handoff T-ID` | Handoff 파일 생성/갱신 |
 | `/adopt T-ID` | 직접 작업한 내용 편입 → ADOPTED |
 | `/review T-ID` | ADOPTED → Review Agent → READY_TO_SHIP |
 | `/resume T-ID` | Handoff 기반 중단 작업 재개 |
 | `/hold T-ID` | 배포 보류 (branch 유지) |
-| `/run T-ID` | inbox 작업 승인 → 실행 대기열 이동 |
-| `/run next` | inbox 최우선 작업 승인 |
 
 ---
 
@@ -293,7 +327,8 @@ pm_agent_system/
   project_manager.py 멀티 프로젝트 관리
   .env              환경 변수
   projects.yaml     프로젝트 목록
-  task_queue/       태스크 입력 디렉토리
+  task_inbox/       로컬 스펙 작성 디렉토리 (작성·수정 가능, 승인 전 단계)
+  task_queue/       실행 전용 디렉토리 (승인 후 이동, 직접 수정 금지)
   completed/        완료된 태스크 JSON
   logs/tasks/       태스크별 로그
   handoffs/         Handoff 파일
@@ -309,17 +344,28 @@ pm_agent_system/
 
 ---
 
-## task_queue 운영 규칙
+## task_inbox / task_queue 운영 규칙
 
 ```
-task_queue/ 는 실행 전용 디렉토리입니다.
+task_inbox/ = 작성·수정·검토 가능    task_queue/ = 실행 전용
 ```
+
+### task_inbox 규칙
+
+| 규칙 | 설명 |
+|------|------|
+| **자유롭게 작성·편집 가능** | 승인 전까지 언제든 수정 OK |
+| **frontmatter 선택 사항** | 없어도 자동 파싱 (heading → 제목, 파일명 → fallback) |
+| **승인 시 자동 이동** | `[▶ 진행해]` 또는 `/run T-ID` → task_queue/ 로 이동 |
+| **빈 파일 / 100자 미만** | 승인 거부됨 (너무 짧은 스펙 방지) |
+| **`.tmp` / `.bak` / 숨김 파일** | 자동 skip (편집기 임시 파일 오염 방지) |
+
+### task_queue 규칙
 
 | 규칙 | 설명 |
 |------|------|
 | **사람이 직접 수정/rename 금지** | 파일 상태는 Bot이 관리. 수동 편집 시 Bot 상태와 불일치 발생 |
-| **수정은 task_inbox 단계에서만** | `/enqueue` → inbox 대기 → `[▶ 진행해]` 승인 흐름 사용 |
-| **이미 queue에 들어간 작업 수정** | `/hold T-ID` 후 `/archive` → 새 `/enqueue` 권장 |
+| **이미 queue에 들어간 작업 수정** | `/hold T-ID` 후 `/archive` → 새 등록 권장 |
 | **`.done.md` / `.failed.md` / `.cancelled.md`** | 기록 파일. 실행 대상 아님. 봇이 자동 skip |
 | **빈 파일 / 100자 미만 파일** | 자동 skip (preflight 실패) |
 
