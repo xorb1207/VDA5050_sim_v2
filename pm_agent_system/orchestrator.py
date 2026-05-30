@@ -2120,13 +2120,22 @@ class Orchestrator:
         Returns: (stdout_text, exit_code)
         """
         cfg = self.config
+
+        # frontmatter(--- ... ---) 를 제거한 순수 본문만 CLI에 전달.
+        # "---" 로 시작하는 내용을 그대로 넘기면 claude CLI가 옵션 플래그로 해석해 crash.
+        cli_prompt = task_content
+        if cli_prompt.startswith("---"):
+            end = cli_prompt.find("\n---", 3)
+            if end != -1:
+                cli_prompt = cli_prompt[end + 4:].lstrip()
+
         cmd = [
             "claude",
             "--print",
             "--permission-mode", "acceptEdits",
             "--allowedTools", "Read,Write,Edit,Bash",
             "--model", cfg.cli_model,
-            task_content,
+            cli_prompt,
         ]
 
         stdout_log_path = self._log_dir / f"{task_id}.stdout.log"
