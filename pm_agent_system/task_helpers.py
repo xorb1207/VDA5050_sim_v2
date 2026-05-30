@@ -225,3 +225,57 @@ def is_safe_queue_file(path: Path, min_size: int = MIN_BODY_CHARS) -> bool:
     except FileNotFoundError:
         return False
     return size >= min_size
+
+
+# ── 처리 상태 rename 헬퍼 ──────────────────────────────────────────────────
+
+_VALID_STATUSES = frozenset({"done", "failed", "cancelled"})
+
+# .md 파일에서 상태 suffix를 추출하는 패턴: "foo.done.md" → "done"
+_STATUS_SUFFIX_RE = re.compile(
+    r"\.(" + "|".join(_VALID_STATUSES) + r")\.md$"
+)
+
+
+def mark_queue_file_status(path: Path, status: str) -> Path:
+    """task_queue 파일에 상태 suffix를 붙여 rename하고 새 경로를 반환.
+
+    Examples:
+        01_T-RC1.md          → 01_T-RC1.failed.md
+        resume_T-91.md       → resume_T-91.failed.md
+        01_T-91.failed.md    → 그대로 (이미 .failed.md)
+        01_T-91.done.md      → 01_T-91.failed.md  (status 교체)
+
+    Args:
+        path:   현재 파일 경로 (존재해야 함)
+        status: "done" | "failed" | "cancelled"
+
+    Returns:
+        rename 후 새 경로. rename 실패 시 원래 path 반환.
+    """
+    if status not in _VALID_STATUSES:
+        raise ValueError(f"status must be one of {_VALID_STATUSES}, got {status!r}")
+
+    name = path.name
+
+    # 이미 같은 status suffix면 그대로
+    if name.endswith(f".{status}.md"):
+        return path
+
+    # base 추출: 처리 상태 suffix를 제거한 순수 stem
+    # 우선 "foo.done.md" / "foo.cancelled.md" / "foo.failed.md" 패턴 처리
+    if _STATUS_SUFFIX_RE.search(name):
+        base = _STATUS_SUFFIX_RE.sub("", name)    # "foo.done.md" → "foo"
+    elif name.endswith(".md"):
+        base = name[:-3]                           # "01_T-RC1.md" → "01_T-RC1"
+    else:
+        base = name                                # fallback
+
+    new_name = f"{base}.{status}.md"
+    new_path = path.with_name(new_name)
+
+    try:
+        path.rename(new_path)
+        return new_path
+    except OSError:
+        return path

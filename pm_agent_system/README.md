@@ -309,6 +309,26 @@ pm_agent_system/
 
 ---
 
+## task_queue 운영 규칙
+
+```
+task_queue/ 는 실행 전용 디렉토리입니다.
+```
+
+| 규칙 | 설명 |
+|------|------|
+| **사람이 직접 수정/rename 금지** | 파일 상태는 Bot이 관리. 수동 편집 시 Bot 상태와 불일치 발생 |
+| **수정은 task_inbox 단계에서만** | `/enqueue` → inbox 대기 → `[▶ 진행해]` 승인 흐름 사용 |
+| **이미 queue에 들어간 작업 수정** | `/hold T-ID` 후 `/archive` → 새 `/enqueue` 권장 |
+| **`.done.md` / `.failed.md` / `.cancelled.md`** | 기록 파일. 실행 대상 아님. 봇이 자동 skip |
+| **빈 파일 / 100자 미만 파일** | 자동 skip (preflight 실패) |
+
+> **재실행 방지 동작:**
+> 봇이 재시작되거나 `/reload`를 실행하면, `.done/.failed/.cancelled` 파일은
+> `processed_ids`에 자동 등록되어 절대 재실행되지 않습니다.
+
+---
+
 ## RC1 이후 운영 루틴 (첫 1주일)
 
 새 기능 추가 없이 실제 외부 환경에서 3~5개 태스크를 돌리면서 UX 흐름을 검증합니다.

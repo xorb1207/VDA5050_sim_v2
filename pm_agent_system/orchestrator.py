@@ -30,6 +30,7 @@ from task_helpers import (
     make_task_id, build_pending_content, preflight_check,
     update_task_frontmatter, parse_task_frontmatter,
     write_atomic, is_safe_queue_file, is_processed_queue_file,
+    mark_queue_file_status,
 )
 
 
@@ -707,19 +708,75 @@ class Orchestrator:
         print(f"[orchestrator] 프로젝트 적용 완료: {paths.project_id} → {paths.task_queue_dir}")
 
     def _register_processed_queue_files(self) -> None:
-        """task_queue/ 에 남은 .done.md / .cancelled.md 파일의 task_id를 processed_ids에 등록.
+        """task_queue/ 에 남은 .done.md / .failed.md / .cancelled.md 파일의
+        task_id를 processed_ids에 등록.
 
         봇 재시작 시 이미 처리된 파일이 재실행되지 않도록 방지.
         """
+        _status_strip = (".failed", ".done", ".cancelled")
+
+        def _clean_tid(raw: str) -> str:
+            """_parse_task_id 결과에서 상태 suffix 제거. 'T-OLD.failed' → 'T-OLD'"""
+            for s in _status_strip:
+                if raw.endswith(s):
+                    return raw[: -len(s)]
+            return raw
+
         count = 0
         for f in self.task_queue_dir.glob("*.md"):
             if is_processed_queue_file(f):
-                tid = _parse_task_id(f)
+                tid = _clean_tid(_parse_task_id(f))
                 if tid not in self._processed_ids:
                     self._processed_ids.add(tid)
                     count += 1
         if count:
             print(f"[orchestrator] 재시작 안전: 처리 완료 파일 {count}개 → processed_ids 등록")
+
+    def reload_task_queue(self) -> dict:
+        """task_queue/ 를 재스캔해 실행 가능한 파일을 asyncio 큐에 등록.
+
+        watcher와 동일한 is_safe_queue_file() 필터를 사용하므로
+        .done/.failed/.cancelled 파일은 절대 실행 후보에 포함되지 않음.
+
+        Returns:
+            {"queued": int, "skipped_processed": int, "skipped_unsafe": int}
+        """
+        queued = 0
+        skipped_processed = 0
+        skipped_unsafe = 0
+
+        # 처리 완료 파일을 processed_ids에 먼저 등록 (재시작 안전 보강)
+        self._register_processed_queue_files()
+
+        for md in sorted(self.task_queue_dir.glob("*.md")):
+            # 1. 처리 완료 파일 (is_processed_queue_file) → skip
+            if is_processed_queue_file(md):
+                skipped_processed += 1
+                continue
+            # 2. 안전하지 않은 파일 (숨김/tmp/너무 짧음) → skip
+            if not is_safe_queue_file(md):
+                skipped_unsafe += 1
+                continue
+            # 3. 이미 실행 중이거나 processed → skip
+            tid = _parse_task_id(md)
+            if tid in self._processed_ids or tid in self._active_tasks:
+                skipped_processed += 1
+                continue
+            # 4. asyncio 큐에 직접 푸시 (start() 루프가 처리)
+            # watchdog 루프와 공유하는 큐가 없으므로 직접 _process_task 스케줄
+            # start() 루프에 접근할 수 없는 구조이므로 파일을 touch해 watchdog 트리거
+            try:
+                md.touch()
+                queued += 1
+                print(f"[orchestrator] reload: {md.name} → 실행 대기열 등록")
+            except OSError:
+                skipped_unsafe += 1
+
+        return {
+            "queued": queued,
+            "skipped_processed": skipped_processed,
+            "skipped_unsafe": skipped_unsafe,
+        }
 
     def get_status(self) -> dict:
         """현재 시스템 상태 딕셔너리 반환."""
@@ -2234,15 +2291,11 @@ class Orchestrator:
         }
 
         # 재시작 안전: 실패한 .md 파일을 .failed.md 로 rename → 재시작 시 재실행 방지
-        if task_path and task_path.exists() and task_path.suffix == ".md":
-            _failed_name = task_path.name.replace(".md", "") + ".failed.md"
-            _failed_path = task_path.with_name(_failed_name)
-            try:
-                task_path.rename(_failed_path)
-                # failed_tasks의 경로도 갱신
-                self._failed_tasks[task_id]["task_path"] = _failed_path
-            except OSError:
-                pass
+        # _on_fail()은 모든 실패 카테고리(CLI_ERROR / TEST_FAILED / SCOPE_VIOLATION /
+        # REVIEW_FAILED / REVIEW_TIMEOUT / GIT_FAILED / TIMEOUT / UNKNOWN)의 단일 종착점.
+        if task_path and task_path.exists():
+            _failed_path = mark_queue_file_status(task_path, "failed")
+            self._failed_tasks[task_id]["task_path"] = _failed_path
 
         # 구조적 실패 여부 판단 (retry 불가 유형)
         _NO_RETRY_RULES = frozenset({

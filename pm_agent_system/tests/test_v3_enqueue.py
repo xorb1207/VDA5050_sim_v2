@@ -21,7 +21,8 @@ from task_helpers import (
     slugify_title, make_task_id, write_atomic,
     parse_task_frontmatter, update_task_frontmatter,
     build_pending_content, preflight_check,
-    is_safe_queue_file, MIN_BODY_CHARS,
+    is_safe_queue_file, is_processed_queue_file,
+    mark_queue_file_status, MIN_BODY_CHARS,
 )
 
 PASS = "PASS"
@@ -228,6 +229,104 @@ def test_direct_queue_still_works(tmp_path: Path) -> None:
     check("직접투입: is_safe_queue_file PASS", is_safe_queue_file(queue_file))
 
 
+# ── 재실행 방지 테스트 ────────────────────────────────────────────────────
+
+def test_processed_suffixes_rejected(tmp_path: Path) -> None:
+    """is_safe_queue_file 이 처리 완료 파일을 모두 거부하는지 확인."""
+    content = "x" * MIN_BODY_CHARS
+
+    for suffix in (".done.md", ".failed.md", ".cancelled.md"):
+        f = tmp_path / f"01_T-test{suffix}"
+        f.write_text(content)
+        check(f"safe 거부: {suffix}", not is_safe_queue_file(f))
+        check(f"is_processed: {suffix}", is_processed_queue_file(f))
+
+
+def test_mark_queue_file_status(tmp_path: Path) -> None:
+    """mark_queue_file_status 가 파일명을 올바르게 rename 하는지 확인."""
+    content = "x" * MIN_BODY_CHARS
+
+    # 일반 .md → .failed.md
+    f1 = tmp_path / "01_T-RC1.md"
+    f1.write_text(content)
+    new1 = mark_queue_file_status(f1, "failed")
+    check("mark failed: 새 이름", new1.name == "01_T-RC1.failed.md")
+    check("mark failed: 새 파일 존재", new1.exists())
+    check("mark failed: 원본 사라짐", not f1.exists())
+
+    # resume_T-91.md → resume_T-91.failed.md
+    f2 = tmp_path / "resume_T-91.md"
+    f2.write_text(content)
+    new2 = mark_queue_file_status(f2, "failed")
+    check("mark failed resume: 이름", new2.name == "resume_T-91.failed.md")
+
+    # 이미 .failed.md → 그대로
+    f3 = tmp_path / "01_T-X.failed.md"
+    f3.write_text(content)
+    new3 = mark_queue_file_status(f3, "failed")
+    check("mark failed 중복: 그대로", new3.name == "01_T-X.failed.md")
+
+    # .done.md → .failed.md (status 교체)
+    f4 = tmp_path / "01_T-Y.done.md"
+    f4.write_text(content)
+    new4 = mark_queue_file_status(f4, "failed")
+    check("mark failed 교체: .done→.failed", new4.name == "01_T-Y.failed.md")
+
+    # done
+    f5 = tmp_path / "01_T-Z.md"
+    f5.write_text(content)
+    new5 = mark_queue_file_status(f5, "done")
+    check("mark done: 이름", new5.name == "01_T-Z.done.md")
+
+    # cancelled
+    f6 = tmp_path / "01_T-W.md"
+    f6.write_text(content)
+    new6 = mark_queue_file_status(f6, "cancelled")
+    check("mark cancelled: 이름", new6.name == "01_T-W.cancelled.md")
+
+
+def test_register_processed_prevents_rerun(tmp_path: Path) -> None:
+    """재시작 시 _register_processed_queue_files 가 .failed/.done/.cancelled 파일을
+    processed_ids에 등록해 재실행되지 않도록 하는지 확인."""
+    orch = _make_orchestrator(tmp_path)
+
+    # .failed.md / .done.md / .cancelled.md 파일 생성
+    content = "x" * MIN_BODY_CHARS
+    (orch.task_queue_dir / "01_T-OLD.failed.md").write_text(content)
+    (orch.task_queue_dir / "02_T-DONE.done.md").write_text(content)
+    (orch.task_queue_dir / "T-CAN.cancelled.md").write_text(content)
+
+    # 초기에는 processed_ids 비어 있음
+    orch._processed_ids.clear()
+
+    orch._register_processed_queue_files()
+
+    # _register_processed_queue_files 는 suffix 제거 후 등록
+    # 01_T-OLD.failed.md → T-OLD, 02_T-DONE.done.md → T-DONE, T-CAN.cancelled.md → T-CAN
+    check("register: T-OLD processed", "T-OLD" in orch._processed_ids)
+    check("register: T-DONE processed", "T-DONE" in orch._processed_ids)
+    check("register: T-CAN processed", "T-CAN" in orch._processed_ids)
+
+
+def test_reload_skips_processed_files(tmp_path: Path) -> None:
+    """reload_task_queue 가 .done/.failed/.cancelled 파일을 skip 하는지 확인."""
+    orch = _make_orchestrator(tmp_path)
+
+    content = "x" * MIN_BODY_CHARS
+    # 처리 완료 파일 (skip 대상)
+    (orch.task_queue_dir / "01_T-FAIL.failed.md").write_text(content)
+    (orch.task_queue_dir / "02_T-DONE.done.md").write_text(content)
+    (orch.task_queue_dir / "T-CAN.cancelled.md").write_text(content)
+    # 유효 파일 (실행 후보)
+    valid_content = "# Task\n\n## Goal\n" + "내용 " * 30
+    (orch.task_queue_dir / "03_T-NEW.md").write_text(valid_content)
+
+    result = orch.reload_task_queue()
+    check("reload: 처리 완료 skip", result["skipped_processed"] >= 3)
+    # T-NEW는 queued 또는 touch됨 (watchdog이 없어도 카운트는 됨)
+    check("reload: 유효 파일 등록 시도", result["queued"] >= 1)
+
+
 # ── 실행 ──────────────────────────────────────────────────────────────────
 
 def run_all() -> None:
@@ -249,6 +348,14 @@ def run_all() -> None:
         test_approve_nonexistent_task(tmp / "no_task")
         test_get_inbox_summary(tmp / "inbox_summary")
         test_direct_queue_still_works(tmp / "direct")
+
+        # ── 재실행 방지 테스트 ──
+        (tmp / "processed_suffix").mkdir(exist_ok=True)
+        test_processed_suffixes_rejected(tmp / "processed_suffix")
+        (tmp / "mark_status").mkdir(exist_ok=True)
+        test_mark_queue_file_status(tmp / "mark_status")
+        test_register_processed_prevents_rerun(tmp / "register_processed")
+        test_reload_skips_processed_files(tmp / "reload_skip")
 
     passed = sum(1 for _, s in _results if s == PASS)
     failed = sum(1 for _, s in _results if s == FAIL)

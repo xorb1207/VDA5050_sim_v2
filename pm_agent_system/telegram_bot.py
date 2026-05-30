@@ -367,18 +367,24 @@ class TelegramBot:
         await self._reply(update, text)
 
     async def _handle_reload(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/reload — task_queue 재스캔 (처리 완료 파일은 자동 skip)."""
         if self.orchestrator is None:
             await self._reply(update, "Orchestrator가 초기화되지 않았습니다.")
             return
         try:
-            if hasattr(self.orchestrator, "reload_task_queue"):
-                result = self.orchestrator.reload_task_queue()
-                await self._reply(update, f"태스크 큐 재스캔 완료.\n{result}")
-            elif hasattr(self.orchestrator, "scan_task_queue"):
-                result = self.orchestrator.scan_task_queue()
-                await self._reply(update, f"태스크 큐 재스캔 완료.\n{result}")
-            else:
-                await self._reply(update, "reload 기능을 지원하지 않는 Orchestrator입니다.")
+            result = self.orchestrator.reload_task_queue()
+            q = result.get("queued", 0)
+            sp = result.get("skipped_processed", 0)
+            su = result.get("skipped_unsafe", 0)
+            lines = ["🔄 task_queue 재스캔 완료\n"]
+            lines.append(f"실행 등록: {q}개")
+            if sp:
+                lines.append(f"처리 완료 skip: {sp}개  (.done/.failed/.cancelled)")
+            if su:
+                lines.append(f"유효하지 않은 파일 skip: {su}개  (빈 파일/숨김/tmp)")
+            if q == 0 and sp == 0 and su == 0:
+                lines.append("대기 중인 새 작업 없음")
+            await self._reply(update, "\n".join(lines))
         except Exception as exc:
             await self._reply(update, f"재스캔 실패: {exc}")
 
