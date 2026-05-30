@@ -191,11 +191,21 @@ def preflight_check(title: str, body: str) -> list[str]:
 
 # ── watcher 안전 검사 ──────────────────────────────────────────────────────
 
+# 이미 처리된 파일임을 나타내는 중간 확장자 패턴
+_PROCESSED_SUFFIXES = (".cancelled.md", ".done.md", ".failed.md", ".done", ".cancelled", ".failed")
+
+
+def is_processed_queue_file(path: Path) -> bool:
+    """이미 처리 완료/취소된 task_queue 파일 여부."""
+    name = path.name
+    return any(name.endswith(s) for s in _PROCESSED_SUFFIXES)
+
+
 def is_safe_queue_file(path: Path, min_size: int = MIN_BODY_CHARS) -> bool:
     """watchdog이 실행해도 안전한 .md 파일인지 확인.
 
     조건:
-    - suffix == ".md"
+    - suffix == ".md" (단 .cancelled.md / .done.md 제외)
     - 숨김 파일(.)로 시작하지 않음
     - .tmp 포함 아님
     - 파일 크기 >= min_size
@@ -206,6 +216,9 @@ def is_safe_queue_file(path: Path, min_size: int = MIN_BODY_CHARS) -> bool:
     if name.startswith("."):
         return False
     if ".tmp" in name:
+        return False
+    # 이미 처리된 파일 제외 (.cancelled.md, .done.md)
+    if is_processed_queue_file(path):
         return False
     try:
         size = path.stat().st_size

@@ -29,7 +29,7 @@ from stats_tracker import StatsTracker
 from task_helpers import (
     make_task_id, build_pending_content, preflight_check,
     update_task_frontmatter, parse_task_frontmatter,
-    write_atomic, is_safe_queue_file,
+    write_atomic, is_safe_queue_file, is_processed_queue_file,
 )
 
 
@@ -600,6 +600,9 @@ class Orchestrator:
                 if tid:
                     self._processed_ids.add(tid)
 
+        # 재시작 안전: task_queue/ 에 남은 .done.md / .cancelled.md → processed_ids 등록
+        self._register_processed_queue_files()
+
     # ── Public interface ─────────────────────────────────────────────────
 
     async def start(self) -> None:
@@ -700,7 +703,23 @@ class Orchestrator:
             if stem.endswith("_completed"):
                 self._processed_ids.add(stem[: -len("_completed")])
 
+        self._register_processed_queue_files()
         print(f"[orchestrator] 프로젝트 적용 완료: {paths.project_id} → {paths.task_queue_dir}")
+
+    def _register_processed_queue_files(self) -> None:
+        """task_queue/ 에 남은 .done.md / .cancelled.md 파일의 task_id를 processed_ids에 등록.
+
+        봇 재시작 시 이미 처리된 파일이 재실행되지 않도록 방지.
+        """
+        count = 0
+        for f in self.task_queue_dir.glob("*.md"):
+            if is_processed_queue_file(f):
+                tid = _parse_task_id(f)
+                if tid not in self._processed_ids:
+                    self._processed_ids.add(tid)
+                    count += 1
+        if count:
+            print(f"[orchestrator] 재시작 안전: 처리 완료 파일 {count}개 → processed_ids 등록")
 
     def get_status(self) -> dict:
         """현재 시스템 상태 딕셔너리 반환."""
@@ -2213,6 +2232,17 @@ class Orchestrator:
             "short_reason": reason,
             "failed_at": datetime.now().isoformat(),
         }
+
+        # 재시작 안전: 실패한 .md 파일을 .failed.md 로 rename → 재시작 시 재실행 방지
+        if task_path and task_path.exists() and task_path.suffix == ".md":
+            _failed_name = task_path.name.replace(".md", "") + ".failed.md"
+            _failed_path = task_path.with_name(_failed_name)
+            try:
+                task_path.rename(_failed_path)
+                # failed_tasks의 경로도 갱신
+                self._failed_tasks[task_id]["task_path"] = _failed_path
+            except OSError:
+                pass
 
         # 구조적 실패 여부 판단 (retry 불가 유형)
         _NO_RETRY_RULES = frozenset({
